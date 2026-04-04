@@ -49,3 +49,6 @@ generated_proto/
 *.tmp
 
 build/*
+src/lib/public/*
+*.lib
+src/lib/public/*.lib
