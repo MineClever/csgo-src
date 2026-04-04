@@ -35,6 +35,7 @@ valve_apply_base_settings(Hlmv)
 
 target_include_directories(Hlmv PRIVATE
     ${SRC_DIR}/common
+    ${UTILS_DIR}/common
     ${SRC_DIR}/public
     ${SRC_DIR}/public/tier0
     ${SRC_DIR}/public/tier1
