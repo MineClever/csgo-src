@@ -48,3 +48,4 @@ generated_proto/
 # shader files
 *.tmp
 
+build/*

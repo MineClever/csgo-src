@@ -1,0 +1,16 @@
+# utils — pass-through
+
+add_subdirectory(FileSystemOpenDialog)
+add_subdirectory(bzip2)
+add_subdirectory(hlmv)
+add_subdirectory(mxtk)
+add_subdirectory(newdat)
+add_subdirectory(shadercompile)
+add_subdirectory(shadercompile_launcher)
+add_subdirectory(vbsp)
+add_subdirectory(vbspinfo)
+add_subdirectory(vrad)
+add_subdirectory(vrad_launcher)
+add_subdirectory(vtex)
+add_subdirectory(vvis)
+add_subdirectory(vvis_launcher)
