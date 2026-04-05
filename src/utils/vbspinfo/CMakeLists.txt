@@ -35,6 +35,12 @@ target_compile_definitions(Vbspinfo PRIVATE
 )
 
 target_link_libraries(Vbspinfo PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    vstdlib
+    mathlib
     # 系统库
     advapi32.lib
     comdlg32.lib

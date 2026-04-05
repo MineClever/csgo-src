@@ -34,6 +34,17 @@ target_compile_definitions(Vmt PRIVATE
 )
 
 target_link_libraries(Vmt PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    Dmxloader
+    mathlib
+    vgui_controls
+    particles
     # 系统库
     Psapi.lib
     advapi32.lib

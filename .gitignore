@@ -38,7 +38,6 @@ Debug*/
 build/*
 src/.idea/
 src/lib/
-/src/lib/
 
 
 # OSX/Linux build products
@@ -55,3 +54,4 @@ _vpc_/
 src/vscript/languages/squirrel/vsquirrel/init_nut.h
 generated_proto/
 
+.claude/settings.local.json

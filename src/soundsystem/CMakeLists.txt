@@ -29,6 +29,14 @@ target_compile_definitions(Soundsystem PRIVATE
 )
 
 target_link_libraries(Soundsystem PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
+    mathlib
+    soundsystem_lowlevel
     # 系统库
     advapi32.lib
     comdlg32.lib

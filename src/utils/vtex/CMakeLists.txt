@@ -35,6 +35,16 @@ target_compile_definitions(Vtex_dll PRIVATE
 )
 
 target_link_libraries(Vtex_dll PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    mathlib
+    bitmap
+    vtf
     # 系统库
     advapi32.lib
     comdlg32.lib
@@ -75,6 +85,12 @@ target_compile_definitions(Vtex_launcher PRIVATE
 )
 
 target_link_libraries(Vtex_launcher PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    vstdlib
+    appframework
     # 系统库
     advapi32.lib
     comdlg32.lib

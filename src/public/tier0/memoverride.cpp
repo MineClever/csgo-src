@@ -506,7 +506,9 @@ void *_realloc_base( void *pMem, size_t nSize )
 	return ReallocUnattributed( pMem, nSize );
 }
 
-void *_recalloc_base( void *pMem, size_t nSize )
+// Renamed from _recalloc_base to avoid conflict with Windows SDK 10.0.26100+
+// where _recalloc_base is declared extern "C" with signature (void*, size_t, size_t).
+static void *_valve_recalloc_base( void *pMem, size_t nSize )
 {
 	void *pMemOut = ReallocUnattributed( pMem, nSize );
 	if (!pMem)
@@ -553,7 +555,7 @@ void * __cdecl _realloc_crt(void *ptr, size_t size)
 
 void * __cdecl _recalloc_crt(void *ptr, size_t count, size_t size)
 {
-	return _recalloc_base( ptr, size * count );
+	return _valve_recalloc_base( ptr, size * count );
 }
 
 ALLOC_CALL void * __cdecl _recalloc ( void * memblock, size_t count, size_t size )

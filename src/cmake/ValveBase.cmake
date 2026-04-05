@@ -129,6 +129,12 @@ function(valve_apply_base_settings TARGET)
         /SAFESEH:NO     # vcxproj: ImageHasSafeExceptionHandlers=false
         /NODEFAULTLIB:libc
         /NODEFAULTLIB:libcd
+        # memoverride.cpp intentionally redefines CRT allocation functions
+        # (_recalloc, _malloc, etc.) to redirect to Valve's custom allocator.
+        # With newer Windows SDK (10.0.26100+), libucrt.lib also defines these,
+        # causing LNK2005. /FORCE:MULTIPLE allows this and uses memoverride.obj
+        # since project objects are linked before default libraries.
+        /FORCE:MULTIPLE
         $<$<CONFIG:Release>:/OPT:REF>   # 移除未引用代码
         $<$<CONFIG:Release>:/OPT:ICF>   # 合并相同 COMDAT
     )

@@ -3,6 +3,13 @@
 # Generated from: hammer_dll.vcxproj
 # =============================================================================
 
+include(CheckIncludeFile)
+check_include_file("afxwin.h" HAVE_AFXWIN_H)
+if(NOT HAVE_AFXWIN_H)
+    message(STATUS "hammer_dll: skipping (MFC not found)")
+    return()
+endif()
+
 set(HAMMER_DLL_SOURCES
     ${SRC_DIR}/public/tier0/afxmem_override.cpp
     AnchorMgr.cpp

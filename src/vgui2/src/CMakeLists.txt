@@ -50,6 +50,15 @@ target_compile_definitions(vgui2 PRIVATE
 )
 
 target_link_libraries(vgui2 PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    bitmap
+    vgui_surfacelib
     # 系统库
     Imm32.lib
     Shlwapi.lib

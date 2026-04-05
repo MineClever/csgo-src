@@ -53,6 +53,7 @@
 
 #ifndef _PS3
 #include <memory.h>
+#include <memory>   // std::unique_ptr (replaces removed std::auto_ptr in C++17)
 #endif
 #include "tier0/minidump.h"
 #include "tier0/threadtools.h"

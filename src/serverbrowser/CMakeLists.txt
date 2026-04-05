@@ -43,6 +43,15 @@ target_compile_definitions(ServerBrowser PRIVATE
 )
 
 target_link_libraries(ServerBrowser PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    vgui_controls
+    prebuilt::steam_api
     # 系统库
     Advapi32.lib
     User32.lib

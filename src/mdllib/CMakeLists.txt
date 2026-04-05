@@ -23,6 +23,12 @@ target_compile_definitions(mdllib PRIVATE
 )
 
 target_link_libraries(mdllib PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
     # 系统库
     advapi32.lib
     comdlg32.lib

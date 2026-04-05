@@ -16,6 +16,41 @@
 #include "dbg.h"
 #include "tier1/strtools.h"
 
+// strtools.h poisons standard ctype functions (isdigit etc.) to enforce V_ variants.
+// The GM scripting language is third-party code that uses these directly.
+// Undo the poison macros so GM source compiles cleanly.
+#ifdef isdigit
+#undef isdigit
+#endif
+#ifdef isalpha
+#undef isalpha
+#endif
+#ifdef isalnum
+#undef isalnum
+#endif
+#ifdef isspace
+#undef isspace
+#endif
+#ifdef isprint
+#undef isprint
+#endif
+#ifdef isupper
+#undef isupper
+#endif
+#ifdef islower
+#undef islower
+#endif
+#ifdef tolower
+#undef tolower
+#endif
+#ifdef toupper
+#undef toupper
+#endif
+#ifdef iscntrl
+#undef iscntrl
+#endif
+#include <ctype.h>
+
 // pragmas
 
 #pragma inline_recursion( on )

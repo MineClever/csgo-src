@@ -28,6 +28,13 @@ target_compile_definitions(soundemittersystem PRIVATE
 )
 
 target_link_libraries(soundemittersystem PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
+    vstdlib
     # 系统库
     advapi32.lib
     comdlg32.lib

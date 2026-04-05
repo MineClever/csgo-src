@@ -363,6 +363,26 @@ target_compile_definitions(engine_ds PRIVATE
 )
 
 target_link_libraries(engine_ds PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
+    appframework
+    bitmap
+    Dmxloader
+    mathlib
+    matsys_controls
+    soundsystem_lowlevel
+    vgui_controls
+    vtf
+    videocfg
+    Bzip2
+    quickhull
+    prebuilt::libprotobuf
+    prebuilt::libjpeg
+    prebuilt::steamdatagramlib
     # 系统库
     Iphlpapi.lib
     Rpcrt4.lib

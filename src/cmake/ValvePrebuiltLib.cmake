@@ -77,6 +77,14 @@ function(valve_setup_prebuilt_libs)
     # ATI 纹理压缩
     _valve_import_lib(prebuilt::ati_compress_mt_vc8 "${LIB_PUBLIC}/ati_compress_mt_vc8.lib")
 
+    # --- dx9sdk 中的 DirectX 库 ---
+    _valve_import_lib(prebuilt::d3dx9   "${SRC_DIR}/dx9sdk/lib/d3dx9.lib")
+    _valve_import_lib(prebuilt::d3dx9d  "${SRC_DIR}/dx9sdk/lib/d3dx9d.lib")
+    _valve_import_lib(prebuilt::d3d9    "${SRC_DIR}/dx9sdk/lib/d3d9.lib")
+
+    # --- NvAPI (use thirdparty version which has DRS/D3D9 stubs) ---
+    _valve_import_lib(prebuilt::nvapi   "${SRC_DIR}/thirdparty/nvidia/nvapi/lib/nvapi.lib")
+
     # --- lib/common/ 中的第三方预构建库 ---
 
     _valve_import_lib(prebuilt::Steam   "${LIB_COMMON}/Steam.lib")
@@ -85,6 +93,7 @@ function(valve_setup_prebuilt_libs)
     _valve_import_lib(prebuilt::libjpeg "${LIB_COMMON}/libjpeg.lib")
     _valve_import_lib(prebuilt::libpng  "${LIB_COMMON}/libpng.lib")
     _valve_import_lib(prebuilt::mss32   "${LIB_COMMON}/mss32.lib")
+    _valve_import_lib(prebuilt::mxtoolkitwin32 "${LIB_COMMON}/mxtoolkitwin32.lib")
 
     # Havok 物理库
     _valve_import_lib(prebuilt::havana_constraints "${LIB_COMMON}/havana_constraints.lib")

@@ -299,6 +299,15 @@ inline bool V_isempty( const char* pszString ) { return !pszString || !pszString
 //
 // These functions could also be used for optimizations if locale
 // considerations make some of the CRT functions slow.
+
+// Must include <cctype> before redefining ctype names as poison macros.
+// MSVC's <cctype> uses 'using ::isalnum' etc. which would expand to
+// 'using ::use_V_isalnum_instead_of_isalnum' after the macros are set,
+// causing C2873/C2039 errors with VS2022 / newer Windows SDK.
+#ifdef __cplusplus
+#include <cctype>
+#endif
+
 #undef isdigit // In case this is implemented as a macro
 #define isdigit use_V_isdigit_instead_of_isdigit
 inline bool V_isalpha(char c) { return isalpha( (unsigned char)c ) != 0; }

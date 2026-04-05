@@ -30,6 +30,14 @@ target_compile_definitions(datacache PRIVATE
 )
 
 target_link_libraries(datacache PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    mathlib
     # 系统库
     advapi32.lib
     comdlg32.lib

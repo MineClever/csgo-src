@@ -42,6 +42,14 @@ target_compile_definitions(Shadercompile_dll PRIVATE
 )
 
 target_link_libraries(Shadercompile_dll PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    mathlib
     # 系统库
     advapi32.lib
     comdlg32.lib

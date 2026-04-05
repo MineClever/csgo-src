@@ -94,6 +94,24 @@ target_compile_definitions(GameUI PRIVATE
 )
 
 target_link_libraries(GameUI PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    bitmap
+    mathlib
+    matsys_controls
+    vgui_controls
+    vtf
+    vpklib
+    videocfg
+    prebuilt::libjpeg
+    prebuilt::libpng
+    prebuilt::libz
+    prebuilt::steam_api
     # 系统库
     Shlwapi.lib
     Ws2_32.lib

@@ -33,6 +33,17 @@ target_compile_definitions(studiorender PRIVATE
 )
 
 target_link_libraries(studiorender PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    bitmap
+    mathlib
+    vtf
+    shaderlib
     # 系统库
     advapi32.lib
     comdlg32.lib
