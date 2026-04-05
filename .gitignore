@@ -23,6 +23,9 @@ ipch
 *.vpc_crc
 *.sln
 *.res
+*.lib
+*.pdb
+
 .vs/
 Release*/
 Debug*/
@@ -30,6 +33,13 @@ Debug*/
 *.vpc.sentinel
 *.vpc_cache
 *.vcxproj.*
+
+*.tmp
+build/*
+src/.idea/
+src/lib/
+/src/lib/
+
 
 # OSX/Linux build products
 *.mak
@@ -45,10 +55,3 @@ _vpc_/
 src/vscript/languages/squirrel/vsquirrel/init_nut.h
 generated_proto/
 
-# shader files
-*.tmp
-
-build/*
-*.lib
-src/.idea/
-/src/lib/
