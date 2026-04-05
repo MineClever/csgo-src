@@ -112,6 +112,15 @@ add_library(vscript SHARED ${VSCRIPT_SOURCES})
 
 valve_apply_base_settings(vscript)
 
+target_include_directories(vscript PRIVATE
+    ${SRC_DIR}/vscript/languages/gm/src/gm
+    ${SRC_DIR}/vscript/languages/gm/src/binds
+    ${SRC_DIR}/vscript/languages/gm/src/platform/win32msvc
+    ${SRC_DIR}/vscript/languages/lua/lua-5.1.4/src
+    ${SRC_DIR}/vscript/languages/squirrel/include
+    ${SRC_DIR}/vscript/languages/squirrel/sqplus
+)
+
 target_compile_definitions(vscript PRIVATE
     _USRDLL
     DLLNAME=vscript
@@ -122,6 +131,12 @@ target_compile_definitions(vscript PRIVATE
 )
 
 target_link_libraries(vscript PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
     # 系统库
     advapi32.lib
     comdlg32.lib

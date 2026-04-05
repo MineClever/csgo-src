@@ -27,6 +27,15 @@ target_compile_definitions(Vlocalize PRIVATE
 )
 
 target_link_libraries(Vlocalize PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    appframework
+    vstdlib
+    tier3
+    vgui_controls
     # 系统库
     WS2_32.LIB
     advapi32.lib

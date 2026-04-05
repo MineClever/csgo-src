@@ -21,6 +21,12 @@ target_compile_definitions(Unitlib PRIVATE
 )
 
 target_link_libraries(Unitlib PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
     # 系统库
     odbc32.lib
     odbccp32.lib

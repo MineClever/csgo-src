@@ -16,6 +16,15 @@ target_compile_definitions(Hammer_launcher PRIVATE
 )
 
 target_link_libraries(Hammer_launcher PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    appframework
+    prebuilt::Steam
     # 系统库
     advapi32.lib
     comdlg32.lib
@@ -24,5 +33,8 @@ target_link_libraries(Hammer_launcher PRIVATE
     shell32.lib
     user32.lib
 )
+
+# DEFINE_WINDOWED_APPLICATION_OBJECT_GLOBALVAR uses WinMain - needs SUBSYSTEM:WINDOWS
+set_target_properties(Hammer_launcher PROPERTIES WIN32_EXECUTABLE TRUE)
 
 valve_publish_exe(Hammer_launcher "${GAME_DIR}")

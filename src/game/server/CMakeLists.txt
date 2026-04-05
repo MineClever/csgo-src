@@ -720,6 +720,19 @@ set_source_files_properties(
     PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 target_link_libraries(server_csgo PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
+    Dmxloader
+    mathlib
+    mathlib_extended
+    particles
+    vgui_controls
+    responserules_runtime
+    prebuilt::libprotobuf
     # 系统库
     advapi32.lib
     comdlg32.lib

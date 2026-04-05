@@ -730,6 +730,31 @@ set_source_files_properties(
     PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 target_link_libraries(client_csgo PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
+    bitmap
+    bonesetup
+    choreoobjects
+    Dmxloader
+    mathlib
+    mathlib_extended
+    matsys_controls
+    particles
+    Raytrace
+    vgui_controls
+    videocfg
+    vtf
+    vpklib
+    resourcefile
+    meshutils
+    prebuilt::libjpeg
+    prebuilt::libprotobuf
+    prebuilt::libz
+    prebuilt::steam_api
     # 系统库
     Imm32.lib
     Shlwapi.lib

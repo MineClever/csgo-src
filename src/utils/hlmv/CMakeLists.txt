@@ -49,6 +49,16 @@ target_compile_definitions(Hlmv PRIVATE
 )
 
 target_link_libraries(Hlmv PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    mathlib
+    vgui_controls
+    prebuilt::mxtoolkitwin32
     # 系统库
     advapi32.lib
     comctl32.lib

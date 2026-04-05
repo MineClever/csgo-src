@@ -1,4 +1,4 @@
-//========== Copyright © 2008, Valve Corporation, All rights reserved. ========
+//========== Copyright ï¿½ 2008, Valve Corporation, All rights reserved. ========
 //
 // Purpose:
 //
@@ -448,6 +448,102 @@ public:
 		}
 	}
 
+
+	// IScriptVM pure virtual stubs - GameMonkey partial implementation
+	HSCRIPT RegisterInstance( ScriptClassDesc_t *pDesc, void *pInstance )
+	{
+		return NULL;
+	}
+
+	void SetInstanceUniqeId( HSCRIPT hInstance, const char *pszId )
+	{
+	}
+
+	void RemoveInstance( HSCRIPT hInstance )
+	{
+	}
+
+	void *GetInstanceValue( HSCRIPT hInstance, ScriptClassDesc_t *pExpectedType )
+	{
+		return NULL;
+	}
+
+	bool GenerateUniqueKey( const char *pszRoot, char *pBuf, int nBufSize )
+	{
+		return false;
+	}
+
+	bool ValueExists( HSCRIPT hScope, const char *pszKey )
+	{
+		return false;
+	}
+
+	bool SetValue( HSCRIPT hScope, const char *pszKey, const char *pszValue )
+	{
+		return false;
+	}
+
+	bool SetValue( HSCRIPT hScope, const char *pszKey, const ScriptVariant_t &value )
+	{
+		return false;
+	}
+
+	void CreateTable( ScriptVariant_t &Table )
+	{
+	}
+
+	int GetNumTableEntries( HSCRIPT hScope )
+	{
+		return 0;
+	}
+
+	int GetKeyValue( HSCRIPT hScope, int nIterator, ScriptVariant_t *pKey, ScriptVariant_t *pValue )
+	{
+		return -1;
+	}
+
+	bool GetValue( HSCRIPT hScope, const char *pszKey, ScriptVariant_t *pValue )
+	{
+		return false;
+	}
+
+	void ReleaseValue( ScriptVariant_t &value )
+	{
+	}
+
+	bool ClearValue( HSCRIPT hScope, const char *pszKey )
+	{
+		return false;
+	}
+
+	void WriteState( CUtlBuffer *pBuffer )
+	{
+	}
+
+	void ReadState( CUtlBuffer *pBuffer )
+	{
+	}
+
+	void RemoveOrphanInstances()
+	{
+	}
+
+	void DumpState()
+	{
+	}
+
+	void SetOutputCallback( ScriptOutputFunc_t pFunc )
+	{
+	}
+
+	void SetErrorCallback( ScriptErrorFunc_t pFunc )
+	{
+	}
+
+	bool RaiseException( const char *pszExceptionText )
+	{
+		return false;
+	}
 
 private:
 	struct InstanceContext_t

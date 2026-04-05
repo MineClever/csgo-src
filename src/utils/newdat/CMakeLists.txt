@@ -25,6 +25,11 @@ target_compile_definitions(Newdat PRIVATE
 )
 
 target_link_libraries(Newdat PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    vstdlib
     # 系统库
     advapi32.lib
     comdlg32.lib

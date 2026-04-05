@@ -31,6 +31,11 @@ target_compile_definitions(vstdlib PRIVATE
 )
 
 target_link_libraries(vstdlib PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
     # 系统库
     advapi32.lib
     comdlg32.lib

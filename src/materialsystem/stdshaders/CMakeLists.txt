@@ -40,6 +40,12 @@ target_compile_definitions(stdshader_dbg PRIVATE
 )
 
 target_link_libraries(stdshader_dbg PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    mathlib
+    shaderlib
     # 系统库
     advapi32.lib
     comdlg32.lib
@@ -229,6 +235,12 @@ target_compile_definitions(stdshader_dx9 PRIVATE
 )
 
 target_link_libraries(stdshader_dx9 PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    mathlib
+    shaderlib
     # 系统库
     advapi32.lib
     comdlg32.lib

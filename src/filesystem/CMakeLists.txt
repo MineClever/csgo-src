@@ -33,6 +33,14 @@ target_compile_definitions(FileSystem_Stdio PRIVATE
 )
 
 target_link_libraries(FileSystem_Stdio PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    vpklib
+    Bzip2
     # 系统库
     advapi32.lib
     comdlg32.lib

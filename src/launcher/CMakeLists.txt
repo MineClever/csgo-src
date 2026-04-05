@@ -23,6 +23,14 @@ target_compile_definitions(launcher PRIVATE
 )
 
 target_link_libraries(launcher PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    appframework
     # 系统库
     advapi32.lib
     comdlg32.lib

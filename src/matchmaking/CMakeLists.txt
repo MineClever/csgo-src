@@ -40,6 +40,14 @@ target_compile_definitions(matchmaking_csgo PRIVATE
 )
 
 target_link_libraries(matchmaking_csgo PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    matchmakingbase
     # 系统库
     advapi32.lib
     comdlg32.lib
@@ -99,6 +107,14 @@ target_compile_definitions(matchmaking_ds_csgo PRIVATE
 )
 
 target_link_libraries(matchmaking_ds_csgo PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    matchmakingbase_ds
     # 系统库
     advapi32.lib
     comdlg32.lib

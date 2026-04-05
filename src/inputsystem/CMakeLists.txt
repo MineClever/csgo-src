@@ -29,6 +29,12 @@ target_compile_definitions(inputsystem PRIVATE
 )
 
 target_link_libraries(inputsystem PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    mathlib
     # 系统库
     Winmm.lib
     advapi32.lib

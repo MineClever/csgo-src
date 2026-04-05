@@ -48,6 +48,17 @@ target_compile_definitions(Dedicated PRIVATE
 )
 
 target_link_libraries(Dedicated PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    appframework
+    Dmxloader
+    mathlib
+    vpklib
     # 系统库
     advapi32.lib
     comdlg32.lib

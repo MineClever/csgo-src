@@ -35,8 +35,19 @@ target_compile_definitions(vguimatsurface PRIVATE
 )
 
 target_link_libraries(vguimatsurface PRIVATE
-    # CMake 构建目标
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    bitmap
+    mathlib
+    vgui_controls
     vgui_surfacelib
+    Dmxloader
+    prebuilt::nvtc
     # 系统库
     advapi32.lib
     comdlg32.lib

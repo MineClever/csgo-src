@@ -53,7 +53,22 @@ target_compile_definitions(shaderapidx9 PRIVATE
 )
 
 target_link_libraries(shaderapidx9 PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    vstdlib
+    tier3
+    bitmap
+    mathlib
+    vtf
+    videocfg
+    prebuilt::bzip2
+    prebuilt::nvapi
+    prebuilt::d3dx9
     # 系统库
+    d3d9.lib
     advapi32.lib
     comdlg32.lib
     gdi32.lib

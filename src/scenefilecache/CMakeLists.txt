@@ -26,6 +26,12 @@ target_compile_definitions(SceneFileCache PRIVATE
 )
 
 target_link_libraries(SceneFileCache PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
     # 系统库
     advapi32.lib
     comdlg32.lib

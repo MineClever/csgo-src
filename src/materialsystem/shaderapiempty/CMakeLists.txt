@@ -30,6 +30,13 @@ target_compile_definitions(shaderapiempty PRIVATE
 )
 
 target_link_libraries(shaderapiempty PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
+    mathlib
     # 系统库
     odbc32.lib
     odbccp32.lib

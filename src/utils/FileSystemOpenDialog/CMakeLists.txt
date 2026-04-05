@@ -1,7 +1,20 @@
 # =============================================================================
 # FileSystemOpenDialog
 # Generated from: FileSystemOpenDialog.vcxproj
+# Requires MFC (afxwin.h). MFC is an optional VS component - skip if not found.
 # =============================================================================
+
+# Check for MFC availability
+include(CheckIncludeFile)
+set(CMAKE_REQUIRED_FLAGS "/W0")
+check_include_file("afxwin.h" HAVE_AFXWIN_H)
+unset(CMAKE_REQUIRED_FLAGS)
+
+if(NOT HAVE_AFXWIN_H)
+    message(STATUS "FileSystemOpenDialog: skipping (MFC not found - install 'C++ MFC for latest v143 build tools')")
+    return()
+endif()
+
 
 set(FILESYSTEMOPENDIALOG_SOURCES
     ${SRC_DIR}/public/tier0/afxmem_override.cpp

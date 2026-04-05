@@ -58,13 +58,24 @@ target_compile_definitions(materialsystem PRIVATE
 )
 
 target_link_libraries(materialsystem PRIVATE
+    # Valve libs
+    tier0
+    tier1
+    interfaces
+    tier2
+    tier3
+    bitmap
+    mathlib
+    shaderlib
+    vtf
+    videocfg
+    prebuilt::d3dx9
+    prebuilt::d3dx9d
     # 系统库
     Ws2_32.lib
     advapi32.lib
     comdlg32.lib
     d3d9.lib
-    d3dx9.lib
-    d3dx9d.lib
     dxguid.lib
     gdi32.lib
     imm32.lib

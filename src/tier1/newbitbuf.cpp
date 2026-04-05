@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,6 +13,7 @@
 #include "tier1/strtools.h"
 #include "bitvec.h"
 #include "vstdlib/random.h"
+#include <cmath>    // fabsf - avoid abs(float) ambiguity with C++17
 
 // FIXME: Can't use this until we get multithreaded allocations in tier0 working for tools
 // This is used by VVIS and fails to link
@@ -159,7 +160,7 @@ void CBitWrite::WriteBytes( const void *pBuf, int nBytes )
 void CBitWrite::WriteBitCoord (const float f)
 {
 	int		signbit = (f <= -COORD_RESOLUTION);
-	int		intval = (int)abs(f);
+	int		intval = (int)fabsf(f);
 	int		fractval = abs((int)(f*COORD_DENOMINATOR)) & (COORD_DENOMINATOR-1);
 
 
@@ -194,7 +195,7 @@ void CBitWrite::WriteBitCoordMP (const float f, EBitCoordType coordType )
 	bool bLowPrecision = ( coordType == kCW_LowPrecision );  
 
 	int		signbit = (f <= -( bLowPrecision ? COORD_RESOLUTION_LOWPRECISION : COORD_RESOLUTION ));
-	int		intval = (int)abs(f);
+	int		intval = (int)fabsf(f);
 	int		fractval = bLowPrecision ? 
 		( abs((int)(f*COORD_DENOMINATOR_LOWPRECISION)) & (COORD_DENOMINATOR_LOWPRECISION-1) ) :
 		( abs((int)(f*COORD_DENOMINATOR)) & (COORD_DENOMINATOR-1) );
@@ -256,7 +257,7 @@ void CBitWrite::WriteBitCellCoord( const float f, int bits, EBitCoordType coordT
 	bool bIntegral = ( coordType == kCW_Integral );
 	bool bLowPrecision = ( coordType == kCW_LowPrecision );  
 
-	int		intval = (int)abs(f);
+	int		intval = (int)fabsf(f);
 	int		fractval = bLowPrecision ? 
 		( abs((int)(f*COORD_DENOMINATOR_LOWPRECISION)) & (COORD_DENOMINATOR_LOWPRECISION-1) ) :
 		( abs((int)(f*COORD_DENOMINATOR)) & (COORD_DENOMINATOR-1) );
