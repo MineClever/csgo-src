@@ -37,7 +37,7 @@ function(valve_setup_prebuilt_libs)
     # Steam
     _valve_import_lib(prebuilt::steam_api "${LIB_PUBLIC}/steam_api.lib")
 
-    # Protobuf（我们不自行构建 protobuf，使用预编译版本）
+    # Protobuf（优先复用源码构建目标；若未注册，则回退到预编译版本）
     _valve_import_lib(prebuilt::libprotobuf "${LIB_PUBLIC}/libprotobuf.lib")
 
     # zlib

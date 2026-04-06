@@ -8,6 +8,9 @@ include(ValveBase)
 include(ValvePostBuild)
 include(ValvePrebuiltLib)
 
+# 源码构建的第三方库需要先注册，再让预构建导入逻辑按名称复用它们
+add_subdirectory(thirdparty)
+
 # 注册预构建的第三方库
 valve_setup_prebuilt_libs()
 valve_setup_system_libs()
@@ -66,7 +69,6 @@ add_subdirectory(serverbrowser)
 add_subdirectory(soundemittersystem)
 add_subdirectory(soundsystem)
 add_subdirectory(studiorender)
-add_subdirectory(thirdparty)
 add_subdirectory(togl)
 add_subdirectory(tools)
 add_subdirectory(tracker)

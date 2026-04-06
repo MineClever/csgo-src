@@ -124,3 +124,5 @@ The game needs an existing CS:GO or Source SDK installation pointed at `game/`. 
 - Do not introduce 64-bit, GCC, or Clang assumptions into build changes
 - When modifying modules, verify dependency direction before changing `src/CMakeLists.txt`
 - Treat the shutdown crash and `sv_pure` behavior as known issues unless the task is explicitly about fixing them
+- Use [Plan.md](D:/_Code_Here/Git/csgo-src/Plan.md) as the repository-wide repair log and rolling project plan. It records confirmed issues that still need changes or fixes.
+- After every task, summarize newly discovered issues, resolved items, or priority changes and update `Plan.md` so the cross-task plan stays current.
