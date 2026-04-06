@@ -12,8 +12,11 @@ set TOOL_PATH=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx_sample_tool.exe
 set OUTPUT_DIR=%BUILD_DIR%\sample_regression\%CONFIG%
 
 echo ============================================================
-echo  Running Maya DMX sample regression (%CONFIG%)
+echo  Running Maya DMX serialization regression (%CONFIG%)
 echo ============================================================
+echo.
+echo This regression only verifies DMX text/binary serialization roundtrip.
+echo Maya export/import node-type stability is verified by RunMayaBatchRegression.bat.
 echo.
 
 if not exist "%TOOL_PATH%" (

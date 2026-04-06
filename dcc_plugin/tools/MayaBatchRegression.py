@@ -5,6 +5,32 @@ import sys
 import maya.standalone
 
 
+def snapshot_imported_node_types(root_paths):
+    import maya.api.OpenMaya as om
+
+    node_snapshots = {}
+    selection = om.MSelectionList()
+    for root_path in root_paths:
+        selection.add(root_path)
+
+    for index in range(selection.length()):
+        root_dag_path = selection.getDagPath(index)
+        root_prefix = root_dag_path.fullPathName()
+
+        iterator = om.MItDag()
+        iterator.reset(root_dag_path, om.MItDag.kDepthFirst, om.MFn.kInvalid)
+        while not iterator.isDone():
+            dag_path = iterator.getPath()
+            if dag_path.hasFn(om.MFn.kTransform):
+                full_path = dag_path.fullPathName()
+                relative_path = full_path[len(root_prefix):].lstrip("|")
+                node_key = "<root>" if not relative_path else relative_path
+                node_snapshots[node_key] = "joint" if dag_path.hasFn(om.MFn.kJoint) else "transform"
+            iterator.next()
+
+    return node_snapshots
+
+
 def snapshot_scene_meshes():
     import maya.api.OpenMaya as om
 
@@ -79,16 +105,75 @@ def compare_mesh_snapshots(reference_meshes, candidate_meshes, tolerance=1.0e-4)
                 raise RuntimeError(f"Mesh point mismatch for {mesh_name} at vertex {index}")
 
 
-def verify_roundtrip(cmds, plugin_path, exported_path, reference_meshes, marker_path):
+def compare_node_type_snapshots(reference_nodes, candidate_nodes):
+    def strip_single_wrapper(nodes):
+        wrapper_names = set()
+        stripped = {}
+        for node_name, node_type in nodes.items():
+            if node_name == "<root>":
+                stripped[node_name] = node_type
+                continue
+
+            parts = node_name.split("|")
+            wrapper_names.add(parts[0])
+            stripped_name = "|".join(parts[1:]) if len(parts) > 1 else ""
+            if stripped_name:
+                stripped[stripped_name] = node_type
+        if len(wrapper_names) != 1 or not stripped:
+            return None
+        return stripped
+
+    def compare_exact(lhs_nodes, rhs_nodes):
+        if set(lhs_nodes.keys()) != set(rhs_nodes.keys()):
+            missing = sorted(set(lhs_nodes.keys()) - set(rhs_nodes.keys()))
+            extra = sorted(set(rhs_nodes.keys()) - set(lhs_nodes.keys()))
+            raise RuntimeError(f"Node set mismatch. Missing={missing} Extra={extra}")
+
+        for node_name in sorted(lhs_nodes.keys()):
+            if lhs_nodes[node_name] != rhs_nodes[node_name]:
+                raise RuntimeError(
+                    f"Node type mismatch for {node_name}. "
+                    f"expected={lhs_nodes[node_name]} actual={rhs_nodes[node_name]}"
+                )
+
+    candidate_variants = [candidate_nodes]
+    stripped_candidate = strip_single_wrapper(candidate_nodes)
+    if stripped_candidate:
+        candidate_variants.append(stripped_candidate)
+
+    reference_variants = [reference_nodes]
+    stripped_reference = strip_single_wrapper(reference_nodes)
+    if stripped_reference:
+        reference_variants.append(stripped_reference)
+
+    last_error = None
+    for reference_variant in reference_variants:
+        for candidate_variant in candidate_variants:
+            try:
+                compare_exact(reference_variant, candidate_variant)
+                return
+            except RuntimeError as exc:
+                last_error = exc
+
+    raise last_error
+
+
+def verify_roundtrip(cmds, plugin_path, exported_path, reference_meshes, reference_node_types, mesh_marker_path, type_marker_path):
     cmds.file(new=True, force=True)
     if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
         cmds.loadPlugin(plugin_path)
 
+    before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
     cmds.file(exported_path, i=True, type="Valve DMX Import", ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
+    imported_roots = collect_imported_roots(cmds, before_assemblies)
     candidate_meshes = snapshot_scene_meshes()
+    candidate_node_types = snapshot_imported_node_types(imported_roots)
     compare_mesh_snapshots(reference_meshes, candidate_meshes)
+    compare_node_type_snapshots(reference_node_types, candidate_node_types)
 
-    with open(marker_path, "w", encoding="utf-8") as marker_file:
+    with open(mesh_marker_path, "w", encoding="utf-8") as marker_file:
+        marker_file.write("ok\n")
+    with open(type_marker_path, "w", encoding="utf-8") as marker_file:
         marker_file.write("ok\n")
 
 
@@ -112,6 +197,8 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
     exported_binary = os.path.join(output_dir, f"{case_output_name}.maya_export.dmxb")
     roundtrip_text_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_meshcheck.txt")
     roundtrip_binary_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_meshcheck.txt")
+    roundtrip_text_type_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_typecheck.txt")
+    roundtrip_binary_type_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_typecheck.txt")
 
     if not os.path.isfile(input_path):
         raise RuntimeError(f"Missing sample file: {input_path}")
@@ -129,14 +216,31 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
         cmds.select(clear=True)
 
     original_meshes = snapshot_scene_meshes()
+    original_node_types = snapshot_imported_node_types(imported_roots)
     cmds.file(rename=exported_text)
     cmds.file(force=True, exportSelected=True, type="Valve DMX Export")
 
     cmds.file(rename=exported_binary)
     cmds.file(force=True, options="binary=1", exportSelected=True, type="Valve DMX Export")
 
-    verify_roundtrip(cmds, plugin_path, exported_text, original_meshes, roundtrip_text_marker)
-    verify_roundtrip(cmds, plugin_path, exported_binary, original_meshes, roundtrip_binary_marker)
+    verify_roundtrip(
+        cmds,
+        plugin_path,
+        exported_text,
+        original_meshes,
+        original_node_types,
+        roundtrip_text_marker,
+        roundtrip_text_type_marker,
+    )
+    verify_roundtrip(
+        cmds,
+        plugin_path,
+        exported_binary,
+        original_meshes,
+        original_node_types,
+        roundtrip_binary_marker,
+        roundtrip_binary_type_marker,
+    )
 
 
 def main():

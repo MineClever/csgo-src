@@ -9,7 +9,6 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include <Windows.h>
@@ -104,7 +103,6 @@ struct ImportContext
     const simple_dmx::Document &document;
     const simple_dmx::Element *modelRoot = nullptr;
     std::vector<const simple_dmx::Element *> jointOrder;
-    std::unordered_set<const simple_dmx::Element *> jointSet;
     std::unordered_map<const simple_dmx::Element *, MDagPath> importedDagPaths;
     bool importSkin = true;
     bool importMaterials = true;
@@ -414,6 +412,52 @@ bool ParseFloat3(const std::string &text, float (&components)[3])
     return true;
 }
 
+std::string NormalizeAxisName(std::string axisName)
+{
+    std::transform(axisName.begin(), axisName.end(), axisName.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::toupper(ch));
+    });
+    return axisName;
+}
+
+bool ComputeRootAxisCorrection(const std::string &sourceUpAxis, MEulerRotation &outRotation, MString &outWarning)
+{
+    const std::string normalizedSourceUpAxis = NormalizeAxisName(sourceUpAxis);
+    if (normalizedSourceUpAxis.empty())
+    {
+        return false;
+    }
+
+    MStatus status;
+    const bool mayaYAxisUp = MGlobal::isYAxisUp(&status);
+    if (!status)
+    {
+        return false;
+    }
+
+    const bool mayaZAxisUp = MGlobal::isZAxisUp(&status);
+    if (!status)
+    {
+        return false;
+    }
+
+    if (normalizedSourceUpAxis == "Z" && mayaYAxisUp)
+    {
+        outRotation = MEulerRotation(-1.57079632679, 0.0, 0.0);
+        outWarning = "maya_dmx: imported Z-up model into a Y-up Maya scene with a -90deg X correction group.";
+        return true;
+    }
+
+    if (normalizedSourceUpAxis == "Y" && mayaZAxisUp)
+    {
+        outRotation = MEulerRotation(1.57079632679, 0.0, 0.0);
+        outWarning = "maya_dmx: imported Y-up model into a Z-up Maya scene with a +90deg X correction group.";
+        return true;
+    }
+
+    return false;
+}
+
 bool ParseMatrixString(const std::string &text, MMatrix &matrix)
 {
     const std::vector<double> values = ParseNumberList(text);
@@ -711,7 +755,6 @@ void CollectJointInfo(
         if (joint)
         {
             context.jointOrder.push_back(joint);
-            context.jointSet.insert(joint);
         }
     }
 }
@@ -2038,7 +2081,7 @@ MStatus ImportDagRecursive(
         return MS::kSuccess;
     }
 
-    const bool isJoint = dagElement->type == "DmeJoint" || context.jointSet.find(dagElement) != context.jointSet.end();
+    const bool isJoint = dagElement->type == "DmeJoint";
     const std::string nodeName = dagElement->name.empty() ? dagElement->type : dagElement->name;
 
     MStatus status;
@@ -2181,10 +2224,16 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
     rootTransformFn.setName(importRoot->name.empty() ? "dmx_import" : importRoot->name.c_str());
 
     const std::string upAxis = FindAttributeString(importRoot, "upAxis");
-    if (upAxis == "Z")
+    MEulerRotation rootAxisCorrection;
+    MString rootAxisWarning;
+    if (ComputeRootAxisCorrection(upAxis, rootAxisCorrection, rootAxisWarning))
     {
-        rootTransformFn.setRotation(MEulerRotation(-1.57079632679, 0.0, 0.0));
-        maya_dmx::ReportWarning("maya_dmx: imported Z-up model with a -90deg X correction group.");
+        status = rootTransformFn.setRotation(rootAxisCorrection);
+        if (!status)
+        {
+            return status;
+        }
+        maya_dmx::ReportWarning(rootAxisWarning);
     }
 
     status = ApplyTransform(document, importRoot, sceneRoot);

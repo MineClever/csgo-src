@@ -20,6 +20,8 @@ echo ============================================================
 echo  Running Maya batch DMX regression (%CONFIG%)
 echo ============================================================
 echo.
+echo This regression verifies mesh roundtrip and transform/joint type stability.
+echo.
 
 if not exist "%MAYA_PYTHON_EXE%" (
     echo ERROR: Maya Python executable was not found:
