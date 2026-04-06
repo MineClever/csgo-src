@@ -59,6 +59,16 @@ target_link_libraries(Hlmv PRIVATE
     mathlib
     vgui_controls
     prebuilt::mxtoolkitwin32
+    mdlobjects
+    vgui2
+    Movieobjects
+    resourcefile
+    Dmserializers
+    Datamodel
+    bonesetup
+    mathlib_extended
+    bitmap
+    appframework
     # 系统库
     advapi32.lib
     comctl32.lib
