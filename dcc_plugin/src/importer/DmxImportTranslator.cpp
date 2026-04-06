@@ -437,6 +437,10 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
 
     MFloatArray weights;
     weights.setLength(static_cast<unsigned int>(vertexCount) * influenceIndices.length());
+    for (unsigned int weightIndex = 0; weightIndex < weights.length(); ++weightIndex)
+    {
+        weights[weightIndex] = 0.0f;
+    }
     for (unsigned int vertexIndex = 0; vertexIndex < static_cast<unsigned int>(vertexCount); ++vertexIndex)
     {
         const size_t baseOffset = static_cast<size_t>(vertexIndex) * static_cast<size_t>(jointCount);
@@ -452,6 +456,21 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
 
             const unsigned int influenceSlot = influenceSlotIt->second;
             weights[vertexIndex * influenceIndices.length() + influenceSlot] = weightValue;
+        }
+
+        float totalWeight = 0.0f;
+        for (unsigned int influenceSlot = 0; influenceSlot < influenceIndices.length(); ++influenceSlot)
+        {
+            totalWeight += weights[vertexIndex * influenceIndices.length() + influenceSlot];
+        }
+
+        if (totalWeight > 1.0e-6f)
+        {
+            const float invTotalWeight = 1.0f / totalWeight;
+            for (unsigned int influenceSlot = 0; influenceSlot < influenceIndices.length(); ++influenceSlot)
+            {
+                weights[vertexIndex * influenceIndices.length() + influenceSlot] *= invTotalWeight;
+            }
         }
     }
 

@@ -259,6 +259,8 @@
   - `MayaBatchRegression.py` 的拓扑 diff 报错已补充首个差异位置与数组长度，后续继续追踪复杂资产 roundtrip 偏差时，不再只看到笼统的 `Mesh topology mismatch`，而能直接知道 `counts/connects` 在哪一段开始漂移。
   - 已把你新增的 [dcc_plugin/samples/MostComplexSampleSet](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/MostComplexSampleSet) 纳入回归入口；当前 `maya_dmx_sample_regression`、[dcc_plugin/RunSampleRegression.bat](D:/_Code_Here/Git/csgo-src/dcc_plugin/RunSampleRegression.bat) 与 [dcc_plugin/RunMayaBatchRegression.bat](D:/_Code_Here/Git/csgo-src/dcc_plugin/RunMayaBatchRegression.bat) 都已支持 `MostComplexSampleSet/chr_mesh` 这类带子目录的样本名，并把输出文件名规整为 `MostComplexSampleSet__chr_mesh.*`，避免回归输出目录继续生成多层嵌套路径。
   - 已单独用 `mayapy` 跑过 `MostComplexSampleSet/chr_mesh` 的 Maya 闭环，输出目录为 `build\\maya_dmx\\maya_batch_regression\\MostComplexSampleSet_single`。当前链路可完成 `导入 -> 文本导出 -> 二进制导出 -> 文本回读`，但 text roundtrip 仍在 mesh diff 阶段失败，现象为 `Mesh point mismatch for body_middle_tip2Shape at vertex 89`；这说明这组新样本同样落入“少数 skinned mesh 点位保真仍不足”的剩余问题域，而不是新的解析崩溃或拓扑装配崩溃。
+  - 已进一步修复 importer 的 skin weight 写回稳定性：`ApplySkinning` 现在会先把传给 `MFnSkinCluster::setWeights()` 的整块权重数组显式清零，再对每个顶点的 influence 行做归一化，避免未覆盖槽位残留垃圾值或总权重漂移。这一步直接修掉了 `MostComplexSampleSet/chr_mesh` 中 `body_middle_tip2Shape` 的输出 shape 炸点问题，也让 `complex_chr_mesh` 中 `Mesh002Shape` 的 roundtrip 点位偏差消失。
+  - 已重新用 `mayapy` 跑通全量 Maya 闭环回归，输出目录为 `build\\maya_dmx\\maya_batch_regression\\full_suite_after_normalize`；当前 `simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 六组样本均已通过 `导入 -> 导出 text/binary -> 再导入 -> mesh diff`。
 - 当前限制：
   - importer 虽然已支持文本 DMX 与最小二进制 DMX 子集，但仍只覆盖层级、局部变换、基础 mesh、主 UV、face-vertex normals、基础蒙皮权重、基础材质槽位和最小位置 delta；不导入完整材质网络、组合型面部控制器、额外 UV 通道，也不保证兼容仓库外所有 Valve 历史二进制 DMX 变体。
   - exporter 已能写出文本 DMX 与最小二进制 DMX 子集，并支持基础蒙皮权重、完整导出层级内的 `jointList`、基础材质槽位和最小位置 delta；但仍不支持组合型面部控制器、完整材质网络、额外 UV、bind pose 扩展信息和更完整的 deformer 元数据。
@@ -266,8 +268,7 @@
   - 当前 Maya 版插件还缺少 Blender Source Tools 那类“围绕导入导出器的完整生产工作流”，例如导出配置持久化、批量导出集、动画批处理、历史兼容选项面板；这些缺口不会影响最小 DMX 闭环，但会直接限制真实资产管线落地效率。
   - 当前 `mayaDmxWorkflow` 还只是数据管理骨架：它尚未驱动真正的批量导出执行、也未把预设参数接入 [dcc_plugin/src/exporter/DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 的 writer 逻辑；下一步需要先打通“预设 -> translator 选项串 -> 单次导出”，再扩展到“批量清单 -> 多次导出”。
   - 当前对 Maya UFE / 非 DAG 选择项的兼容仍以“规避宿主异常”为主，而不是完整理解 UFE 层级；如果后续需要支持 USD、代理节点或更多混合场景对象，仍需继续细化导出根过滤与类型识别规则。
-  - 当前虽然 Maya 内五份样例闭环都已通过，但 `complex_chr_mesh` 仍会在导入时触发 `Locked influences prevented enforcement of the max influences on some points.` 警告；这说明复杂资产上的 skinCluster 创建仍未完全摆脱 Maya 默认 influence 锁和 max influences 约束。后续处理这类问题时，优先评估更底层的 API 路径，并在 importer / exporter 后续扩展中尽可能少用 MEL 命令字符串，而不是继续在现有命令流上追加权重安全修饰。
-  - 当前新增的 roundtrip mesh diff 回归已证明：复杂资产的“丢面 / 空 mesh / 刚性单骨骼重复蒙皮”三类问题已经收窄，但 `complex_chr_mesh` 在 `Maya -> DMX -> Maya` 路径上仍存在剩余几何偏差；截至本次验证，单样例闭环已从早先的 `Object006Shape` 拓扑错误收敛为 `Mesh002Shape at vertex 1` 的点位不一致。这说明主要瓶颈已从 face set 装配错误转移到少数 skinned mesh 的 bind pose / 变形前后点位保真问题，后续优先排查 exporter 读取的是输出 shape 还是 bind/intermediate shape，以及 importer 重建 skin 后的基准姿态是否与导出假设一致。
+  - 当前 Maya 内六组样例的 roundtrip mesh diff 已全部通过，但复杂样例在首次导入和 roundtrip 回读阶段仍会触发多条 `Some weights could not be set to the specified value. The weight total would have exceeded 1.0.` 警告；这说明虽然当前权重写回已经足以保证几何结果稳定，但 Maya 对 `skinCluster` 的内部约束仍在对部分顶点进行二次裁剪。后续若要把宿主侧警告也压平，需要继续收紧 importer 的 influence 选择、max influences 策略或 bind/setup 细节，而不只是依赖 `setWeights` 的最终结果。
 
 ## 环境与工具链说明
 
