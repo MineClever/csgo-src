@@ -275,14 +275,36 @@ def collect_imported_roots(cmds, before_assemblies):
 
 
 def make_case_output_name(case_name):
-    return case_name.replace("\\", "__").replace("/", "__")
+    normalized_name = case_name.replace("\\", "/")
+    root, ext = os.path.splitext(normalized_name)
+    if ext.lower() in (".dmx", ".dmxb", ".dmxbin"):
+        normalized_name = root
+    return normalized_name.replace("\\", "__").replace("/", "__")
+
+
+def resolve_input_path(sample_dir, case_name):
+    normalized_name = case_name.replace("\\", "/")
+    root, ext = os.path.splitext(normalized_name)
+    candidate_paths = []
+    if ext.lower() in (".dmx", ".dmxb", ".dmxbin"):
+        candidate_paths.append(os.path.join(sample_dir, normalized_name))
+    else:
+        candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.dmx"))
+        candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.dmxb"))
+        candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.dmxbin"))
+
+    for candidate_path in candidate_paths:
+        if os.path.isfile(candidate_path):
+            return candidate_path
+
+    raise RuntimeError(f"Missing sample file: {candidate_paths[0]}")
 
 
 def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
     sys.stdout.write(f"[maya_dmx_case] {case_name}\n")
     sys.stdout.flush()
 
-    input_path = os.path.join(sample_dir, f"{case_name}.dmx")
+    input_path = resolve_input_path(sample_dir, case_name)
     case_output_name = make_case_output_name(case_name)
     exported_text = os.path.join(output_dir, f"{case_output_name}.maya_export.dmx")
     exported_binary = os.path.join(output_dir, f"{case_output_name}.maya_export.dmxb")
@@ -292,9 +314,6 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
     roundtrip_binary_type_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_typecheck.txt")
     roundtrip_text_skin_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_skincheck.txt")
     roundtrip_binary_skin_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_skincheck.txt")
-
-    if not os.path.isfile(input_path):
-        raise RuntimeError(f"Missing sample file: {input_path}")
 
     cmds.file(new=True, force=True)
     if not cmds.pluginInfo(plugin_path, query=True, loaded=True):

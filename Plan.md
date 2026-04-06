@@ -160,6 +160,7 @@
   - 当前样例回归已经稳定。`simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 六组样例已通过 `导入 -> 导出 text/binary -> 再导入 -> mesh diff` 闭环。
   - Maya roundtrip 回归已扩展到“类型稳定”检查。当前 [MayaBatchRegression.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaBatchRegression.py) 除了 mesh diff，还会对导入根下的 `transform/joint` DAG 节点类型做快照并在 text/binary roundtrip 后比对，确保 `DmeDag`/`DmeJoint` 不会在导出再导入时漂移。
   - Maya roundtrip 回归已继续扩展到 `skincheck`。当前 [MayaBatchRegression.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaBatchRegression.py) 会额外记录哪些 mesh 在原始导入后带有 `skinCluster`，并在 text/binary roundtrip 后确认这些 mesh 仍然保有 skin 绑定，用于捕获“几何不变但权重丢失”的问题。
+  - Maya 回归脚本已支持直接吃二进制样例名。当前 [MayaBatchRegression.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaBatchRegression.py) 除了默认解析 `case_name.dmx`，也支持直接传入 `.dmxb/.dmxbin` 样例名或在 `.dmx/.dmxb/.dmxbin` 之间自动探测输入文件，便于把二进制导入能力直接纳入 `mayapy` 回归。
   - 已实际用 `mayapy` 跑通六组样例的全量类型稳定回归，输出目录为 `build\\maya_dmx\\maya_batch_regression\\type_stability_check`；当前 mesh roundtrip 与 `transform/joint` 类型快照均通过，说明 `DmeDag` 被误读成 joint 的问题已在真实 Maya 宿主回归里收敛。
 
 - 当前能力边界：
