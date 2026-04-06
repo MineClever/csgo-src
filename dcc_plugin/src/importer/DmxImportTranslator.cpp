@@ -102,8 +102,8 @@ struct ImportContext
 {
     const simple_dmx::Document &document;
     const simple_dmx::Element *modelRoot = nullptr;
-    std::vector<const simple_dmx::Element *> jointOrder;
-    std::unordered_map<const simple_dmx::Element *, MDagPath> importedDagPaths;
+    std::vector<std::string> jointOrder;
+    std::unordered_map<std::string, MDagPath> importedDagPaths;
     bool importSkin = true;
     bool importMaterials = true;
     bool importDeltaStates = true;
@@ -458,6 +458,23 @@ bool ComputeRootAxisCorrection(const std::string &sourceUpAxis, MEulerRotation &
     return false;
 }
 
+std::string ElementKey(const simple_dmx::Element *element)
+{
+    if (!element)
+    {
+        return {};
+    }
+
+    if (!element->id.empty())
+    {
+        return element->id;
+    }
+
+    std::ostringstream stream;
+    stream << reinterpret_cast<uintptr_t>(element);
+    return stream.str();
+}
+
 bool ParseMatrixString(const std::string &text, MMatrix &matrix)
 {
     const std::vector<double> values = ParseNumberList(text);
@@ -754,7 +771,7 @@ void CollectJointInfo(
     {
         if (joint)
         {
-            context.jointOrder.push_back(joint);
+            context.jointOrder.push_back(ElementKey(joint));
         }
     }
 }
@@ -836,32 +853,11 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
         return maya_dmx::ReportWarning("maya_dmx: skipped skinning because joint weight layout did not match jointCount.");
     }
 
-    if (jointCount == 1)
-    {
-        bool rigidSingleJointBinding = true;
-        const int rigidJointIndex = jointIndices.empty() ? -1 : jointIndices[0];
-        for (size_t vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
-        {
-            const size_t baseOffset = vertexIndex;
-            if (jointIndices[baseOffset] != rigidJointIndex || std::abs(jointWeights[baseOffset] - 1.0f) > 1.0e-4f)
-            {
-                rigidSingleJointBinding = false;
-                break;
-            }
-        }
-
-        if (rigidSingleJointBinding)
-        {
-            AppendImportDebugLog("skinning: skipped rigid single-joint binding");
-            return MS::kSuccess;
-        }
-    }
-
     MStatus status;
     MDagPathArray activeInfluencePaths;
-    for (const simple_dmx::Element *jointElement : context.jointOrder)
+    for (const std::string &jointKey : context.jointOrder)
     {
-        auto it = context.importedDagPaths.find(jointElement);
+        auto it = context.importedDagPaths.find(jointKey);
         if (it == context.importedDagPaths.end())
         {
             continue;
@@ -2097,7 +2093,7 @@ MStatus ImportDagRecursive(
     {
         return status;
     }
-    context.importedDagPaths[dagElement] = nodePath;
+    context.importedDagPaths[ElementKey(dagElement)] = nodePath;
 
     status = ApplyTransform(context.document, dagElement, nodeObject);
     if (!status)

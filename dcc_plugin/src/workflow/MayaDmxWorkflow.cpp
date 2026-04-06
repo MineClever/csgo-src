@@ -375,6 +375,8 @@ MString SerializePreset(const ExportPreset &preset)
     serialized += preset.exportSkin ? "1" : "0";
     serialized += ";exportDeltaStates=";
     serialized += preset.exportDeltaStates ? "1" : "0";
+    serialized += ";exportMetadata=";
+    serialized += preset.exportMetadata ? "1" : "0";
     return serialized;
 }
 
@@ -430,6 +432,10 @@ bool DeserializePreset(const MString &text, ExportPreset &preset)
         {
             preset.exportDeltaStates = (value == "1" || value == "true");
         }
+        else if (key == "exportMetadata")
+        {
+            preset.exportMetadata = (value == "1" || value == "true");
+        }
     }
 
     return true;
@@ -446,6 +452,8 @@ MString BuildTranslatorOptions(const ExportPreset &preset)
     options += preset.exportSkin ? "1" : "0";
     options += ";exportDeltaStates=";
     options += preset.exportDeltaStates ? "1" : "0";
+    options += ";exportMetadata=";
+    options += preset.exportMetadata ? "1" : "0";
     if (preset.materialRoot.length() > 0)
     {
         options += ";materialRoot=";

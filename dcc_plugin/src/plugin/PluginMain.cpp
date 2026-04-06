@@ -11,7 +11,7 @@ constexpr const char *kWorkflowCommandName = "mayaDmxWorkflow";
 constexpr const char *kImportOptionsScriptName = "mayaDmxTranslatorImport";
 constexpr const char *kExportOptionsScriptName = "mayaDmxTranslatorExport";
 constexpr const char *kImportDefaultOptions = "importMaterials=1;importSkin=1;importDeltaStates=1";
-constexpr const char *kExportDefaultOptions = "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;materialRoot=";
+constexpr const char *kExportDefaultOptions = "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;exportMetadata=1;materialRoot=";
 
 MStatus RegisterTranslator(
     MFnPlugin &plugin,

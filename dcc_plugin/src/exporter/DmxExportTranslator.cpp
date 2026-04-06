@@ -79,8 +79,10 @@ struct ExportContext
 {
     std::vector<DmxElement *> jointElements;
     std::unordered_map<std::string, int> jointIndexByPath;
+    std::unordered_map<std::string, DmxElement *> dagElementByPath;
     bool exportSkin = true;
     bool exportDeltaStates = true;
+    bool exportMetadata = true;
     std::string materialRoot;
 };
 
@@ -89,6 +91,7 @@ struct ExportOptions
     bool binary = false;
     bool exportSkin = true;
     bool exportDeltaStates = true;
+    bool exportMetadata = true;
     std::string upAxis = "Y";
     std::string materialRoot;
 };
@@ -430,6 +433,7 @@ void AppendFaceSetElement(
     const std::vector<int> &polygonIndices,
     const std::vector<std::vector<int>> &polygonFaceIndices,
     const MeshMaterialData *materialData,
+    bool exportMetadata,
     std::vector<DmxElement *> &faceSetElements)
 {
     if (!faceSetName || polygonIndices.empty())
@@ -446,7 +450,7 @@ void AppendFaceSetElement(
     DmxElement *faceSetElement = builder.CreateElement("DmeFaceSet");
     faceSetElement->attributes.push_back(MakeScalarAttribute("name", "string", faceSetName));
     faceSetElement->attributes.push_back(MakeScalarArrayAttribute("faces", "int_array", std::move(faceValues)));
-    if (materialData && (!materialData->materialName.empty() || !materialData->shadingGroupName.empty()))
+    if (exportMetadata && materialData && (!materialData->materialName.empty() || !materialData->shadingGroupName.empty()))
     {
         DmxElement *materialElement = builder.CreateElement("DmeMaterial");
         materialElement->attributes.push_back(MakeScalarAttribute(
@@ -826,6 +830,7 @@ ExportOptions ParseExportOptions(const MFileObject &fileObject, const MString &o
     const std::unordered_map<std::string, std::string> optionMap = ParseOptionMap(options);
     exportOptions.exportSkin = ParseBoolOption(optionMap, "exportskin", true);
     exportOptions.exportDeltaStates = ParseBoolOption(optionMap, "exportdeltastates", true);
+    exportOptions.exportMetadata = ParseBoolOption(optionMap, "exportmetadata", true);
 
     auto upAxisIt = optionMap.find("upaxis");
     if (upAxisIt != optionMap.end() && !upAxisIt->second.empty())
@@ -1292,6 +1297,53 @@ std::string DagPathKey(const MDagPath &dagPath)
     return dagPath.fullPathName().asChar();
 }
 
+void RegisterDagElementsRecursive(DmxTextBuilder &builder, const MDagPath &dagPath, ExportContext &context)
+{
+    if (!dagPath.isValid())
+    {
+        return;
+    }
+
+    MStatus status;
+    MFnDagNode dagNode(dagPath, &status);
+    if (!status || dagNode.isIntermediateObject())
+    {
+        return;
+    }
+
+    if (!(dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint)))
+    {
+        return;
+    }
+
+    const std::string pathKey = DagPathKey(dagPath);
+    auto dagElementIt = context.dagElementByPath.find(pathKey);
+    if (dagElementIt == context.dagElementByPath.end())
+    {
+        const std::string elementType = dagPath.hasFn(MFn::kJoint) ? "DmeJoint" : "DmeDag";
+        DmxElement *dagElement = builder.CreateElement(elementType);
+        context.dagElementByPath[pathKey] = dagElement;
+        if (dagPath.hasFn(MFn::kJoint))
+        {
+            context.jointIndexByPath[pathKey] = static_cast<int>(context.jointElements.size());
+            context.jointElements.push_back(dagElement);
+        }
+    }
+
+    for (unsigned int childIndex = 0; childIndex < dagNode.childCount(); ++childIndex)
+    {
+        MObject childObject = dagNode.child(childIndex, &status);
+        if (!status || !(childObject.hasFn(MFn::kTransform) || childObject.hasFn(MFn::kJoint)))
+        {
+            continue;
+        }
+
+        MDagPath childPath = dagPath;
+        childPath.push(childObject);
+        RegisterDagElementsRecursive(builder, childPath, context);
+    }
+}
+
 std::vector<MDagPath> CollectExportRoots(MPxFileTranslator::FileAccessMode mode)
 {
     std::vector<MDagPath> roots;
@@ -1406,7 +1458,7 @@ DmxElement *BuildTransformElement(DmxTextBuilder &builder, const MDagPath &dagPa
     return transformElement;
 }
 
-void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement, const ExportContext &context)
+void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement, ExportContext &context)
 {
     MString skinClusterNodeName;
     const MString command = MString("findRelatedSkinCluster \"") + meshPath.fullPathName() + "\"";
@@ -1477,6 +1529,17 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
     {
         const std::string pathKey = DagPathKey(influencePaths[influenceIndex]);
         auto it = context.jointIndexByPath.find(pathKey);
+        if (it == context.jointIndexByPath.end())
+        {
+            auto dagIt = context.dagElementByPath.find(pathKey);
+            if (dagIt != context.dagElementByPath.end() && dagIt->second)
+            {
+                const int jointIndex = static_cast<int>(context.jointElements.size());
+                context.jointIndexByPath[pathKey] = jointIndex;
+                context.jointElements.push_back(dagIt->second);
+                it = context.jointIndexByPath.find(pathKey);
+            }
+        }
         if (it != context.jointIndexByPath.end())
         {
             influenceToJointIndex[influenceIndex] = it->second;
@@ -1588,6 +1651,11 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
         return;
     }
 
+    if (!context.exportMetadata)
+    {
+        return;
+    }
+
     vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaDeformerType", "string", "skinCluster"));
     vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaSkinClusterName", "string", skinClusterNodeFn.name().asChar()));
 
@@ -1688,7 +1756,7 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
     }
 }
 
-DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, const ExportContext &context)
+DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, ExportContext &context)
 {
     MStatus status;
     MFnMesh meshFn(meshPath, &status);
@@ -1867,7 +1935,7 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
         exportedUvSetNames.push_back(uvSetNames[uvSetIndex].asChar());
     }
 
-    if (!exportedUvSetNames.empty())
+    if (context.exportMetadata && !exportedUvSetNames.empty())
     {
         vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("mayaUvSetNames", "string_array", exportedUvSetNames));
     }
@@ -1876,7 +1944,7 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
     {
         vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangents", "vector4_array", storedTangents));
         vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangentsIndices", "int_array", storedTangentIndices));
-        if (!storedTangentUvSetName.empty())
+        if (context.exportMetadata && !storedTangentUvSetName.empty())
         {
             vertexDataElement->attributes.push_back(MakeScalarAttribute("mayaTangentUvSetName", "string", storedTangentUvSetName));
         }
@@ -1885,7 +1953,7 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
     {
         vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangents", "vector4_array", tangentChannel.values));
         vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangentsIndices", "int_array", tangentChannel.indices));
-        if (uvSetNames.length() > 0)
+        if (context.exportMetadata && uvSetNames.length() > 0)
         {
             vertexDataElement->attributes.push_back(MakeScalarAttribute("mayaTangentUvSetName", "string", uvSetNames[0].asChar()));
         }
@@ -2018,26 +2086,29 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
                 deltaElement->attributes.push_back(MakeScalarArrayAttribute("vertexFormat", "string_array", {"positions"}));
                 deltaElement->attributes.push_back(MakeScalarArrayAttribute("positions", "vector3_array", std::move(deltaPositions)));
                 deltaElement->attributes.push_back(MakeScalarArrayAttribute("positionsIndices", "int_array", std::move(deltaPositionIndices)));
-                deltaElement->attributes.push_back(MakeScalarAttribute("mayaDeformerType", "string", "blendShape"));
-                deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeNode", "string", blendShapeNodeFn.name().asChar()));
-                deltaElement->attributes.push_back(MakeScalarAttribute("mayaWeightIndex", "int", std::to_string(weightIndex)));
-                deltaElement->attributes.push_back(MakeScalarAttribute("mayaTargetName", "string", targetDagNode.name().asChar()));
-                MPlug envelopePlug = blendShapeNodeFn.findPlug("envelope", true, &status);
-                if (status)
+                if (context.exportMetadata)
                 {
-                    float envelope = 1.0f;
-                    if (envelopePlug.getValue(envelope) == MS::kSuccess)
+                    deltaElement->attributes.push_back(MakeScalarAttribute("mayaDeformerType", "string", "blendShape"));
+                    deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeNode", "string", blendShapeNodeFn.name().asChar()));
+                    deltaElement->attributes.push_back(MakeScalarAttribute("mayaWeightIndex", "int", std::to_string(weightIndex)));
+                    deltaElement->attributes.push_back(MakeScalarAttribute("mayaTargetName", "string", targetDagNode.name().asChar()));
+                    MPlug envelopePlug = blendShapeNodeFn.findPlug("envelope", true, &status);
+                    if (status)
                     {
-                        deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeEnvelope", "float", FormatFloat(envelope)));
+                        float envelope = 1.0f;
+                        if (envelopePlug.getValue(envelope) == MS::kSuccess)
+                        {
+                            deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeEnvelope", "float", FormatFloat(envelope)));
+                        }
                     }
-                }
-                MPlug originPlug = blendShapeNodeFn.findPlug("origin", true, &status);
-                if (status)
-                {
-                    short origin = 0;
-                    if (originPlug.getValue(origin) == MS::kSuccess)
+                    MPlug originPlug = blendShapeNodeFn.findPlug("origin", true, &status);
+                    if (status)
                     {
-                        deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeOrigin", "int", std::to_string(static_cast<int>(origin))));
+                        short origin = 0;
+                        if (originPlug.getValue(origin) == MS::kSuccess)
+                        {
+                            deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeOrigin", "int", std::to_string(static_cast<int>(origin))));
+                        }
                     }
                 }
                     deltaStateElements.push_back(deltaElement);
@@ -2087,13 +2158,13 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
 
             polygonIndices = FilterUncoveredPolygons(polygonIndices, coveredPolygons);
             const MeshMaterialData materialData = BuildMaterialData(connectedSets[setIndex], setFn.name().asChar());
-            AppendFaceSetElement(builder, setFn.name().asChar(), polygonIndices, polygonFaceIndices, &materialData, faceSetElements);
+            AppendFaceSetElement(builder, setFn.name().asChar(), polygonIndices, polygonFaceIndices, &materialData, context.exportMetadata, faceSetElements);
         }
 
         for (const SetMembership &membership : deferredWholeObjectSets)
         {
             std::vector<int> polygonIndices = FilterUncoveredPolygons(membership.polygonIndices, coveredPolygons);
-            AppendFaceSetElement(builder, membership.name.c_str(), polygonIndices, polygonFaceIndices, &membership.materialData, faceSetElements);
+            AppendFaceSetElement(builder, membership.name.c_str(), polygonIndices, polygonFaceIndices, &membership.materialData, context.exportMetadata, faceSetElements);
         }
     }
 
@@ -2113,7 +2184,7 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
         {
             uncoveredPolygons = BuildPolygonRange(static_cast<int>(polygonFaceIndices.size()));
         }
-        AppendFaceSetElement(builder, "default_faces", uncoveredPolygons, polygonFaceIndices, nullptr, faceSetElements);
+        AppendFaceSetElement(builder, "default_faces", uncoveredPolygons, polygonFaceIndices, nullptr, context.exportMetadata, faceSetElements);
     }
 
     DmxElement *meshElement = builder.CreateElement("DmeMesh");
@@ -2146,19 +2217,18 @@ DmxElement *BuildDagElement(DmxTextBuilder &builder, const MDagPath &dagPath, Ex
         return nullptr;
     }
 
-    const std::string elementType = dagPath.hasFn(MFn::kJoint) ? "DmeJoint" : "DmeDag";
-    DmxElement *dagElement = builder.CreateElement(elementType);
-    dagElement->attributes.push_back(MakeScalarAttribute("name", "string", dagNode.name().asChar()));
-
-    if (dagPath.hasFn(MFn::kJoint))
+    const std::string pathKey = DagPathKey(dagPath);
+    auto dagElementIt = context.dagElementByPath.find(pathKey);
+    if (dagElementIt == context.dagElementByPath.end() || !dagElementIt->second)
     {
-        const std::string pathKey = DagPathKey(dagPath);
-        if (context.jointIndexByPath.find(pathKey) == context.jointIndexByPath.end())
-        {
-            context.jointIndexByPath[pathKey] = static_cast<int>(context.jointElements.size());
-            context.jointElements.push_back(dagElement);
-        }
+        return nullptr;
     }
+
+    const std::string elementType = dagPath.hasFn(MFn::kJoint) ? "DmeJoint" : "DmeDag";
+    DmxElement *dagElement = dagElementIt->second;
+    dagElement->type = elementType;
+    dagElement->attributes.clear();
+    dagElement->attributes.push_back(MakeScalarAttribute("name", "string", dagNode.name().asChar()));
 
     if (DmxElement *transformElement = BuildTransformElement(builder, dagPath))
     {
@@ -2260,16 +2330,21 @@ MStatus DmxExportTranslator::writer(const MFileObject &fileObject, const MString
         ExportContext context;
         context.exportSkin = exportOptions.exportSkin;
         context.exportDeltaStates = exportOptions.exportDeltaStates;
+        context.exportMetadata = exportOptions.exportMetadata;
         context.materialRoot = exportOptions.materialRoot;
         DmxElement *modelElement = builder.CreateElement("DmeModel");
         modelElement->attributes.push_back(MakeScalarAttribute("name", "string", "maya_export"));
         modelElement->attributes.push_back(MakeScalarAttribute("upAxis", "string", exportOptions.upAxis));
-        if (!exportOptions.materialRoot.empty())
+        if (exportOptions.exportMetadata && !exportOptions.materialRoot.empty())
         {
             modelElement->attributes.push_back(MakeScalarAttribute("mayaMaterialRoot", "string", exportOptions.materialRoot));
         }
 
         std::vector<DmxElement *> rootChildren;
+        for (const MDagPath &rootPath : exportRoots)
+        {
+            RegisterDagElementsRecursive(builder, rootPath, context);
+        }
         for (const MDagPath &rootPath : exportRoots)
         {
             if (DmxElement *child = BuildDagElement(builder, rootPath, context))

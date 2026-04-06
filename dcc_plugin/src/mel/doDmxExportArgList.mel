@@ -4,7 +4,8 @@ global proc MayaDmxExport_syncOptionVars(string $version, string $args[])
     optionVar -stringValue MayaDmx_exportUpAxis $args[2];
     optionVar -intValue MayaDmx_exportSkin $args[3];
     optionVar -intValue MayaDmx_exportDeltaStates $args[4];
-    optionVar -stringValue MayaDmx_exportMaterialRoot $args[5];
+    optionVar -intValue MayaDmx_exportMetadata $args[5];
+    optionVar -stringValue MayaDmx_exportMaterialRoot $args[6];
 }
 
 global proc doDmxExportArgList(string $version, string $args[])
@@ -68,6 +69,7 @@ global proc doDmxExportArgList(string $version, string $args[])
     string $upAxis = `optionVar -q MayaDmx_exportUpAxis`;
     int $exportSkin = `optionVar -q MayaDmx_exportSkin`;
     int $exportDeltaStates = `optionVar -q MayaDmx_exportDeltaStates`;
+    int $exportMetadata = `optionVar -q MayaDmx_exportMetadata`;
     string $materialRoot = `optionVar -q MayaDmx_exportMaterialRoot`;
 
     if (!`exists mayaDmxWorkflow`) {
@@ -83,7 +85,8 @@ global proc doDmxExportArgList(string $version, string $args[])
         -encoding $encoding
         -upAxis $upAxis
         -exportSkin ($exportSkin == 1)
-        -exportDeltaStates ($exportDeltaStates == 1);
+        -exportDeltaStates ($exportDeltaStates == 1)
+        -exportMetadata ($exportMetadata == 1);
 
     mayaDmxWorkflow
         -exportPreset $presetName

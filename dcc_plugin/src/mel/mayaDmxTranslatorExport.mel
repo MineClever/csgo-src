@@ -27,6 +27,12 @@ global proc string MayaDmxTranslatorExport_buildFileTypeUI(string $parent)
         -label1 "Export Delta States"
         dmxExportDeltaStates;
 
+    checkBoxGrp
+        -numberOfCheckBoxes 1
+        -label "Metadata"
+        -label1 "Export Maya Metadata"
+        dmxExportMetadata;
+
     textFieldGrp
         -label "Material Root"
         dmxExportMaterialRoot;

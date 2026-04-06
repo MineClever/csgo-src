@@ -15,6 +15,7 @@ struct ExportPreset
     MString upAxis = "Y";
     bool exportSkin = true;
     bool exportDeltaStates = true;
+    bool exportMetadata = true;
 };
 
 struct BatchManifestEntry

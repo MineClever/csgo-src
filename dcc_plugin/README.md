@@ -40,7 +40,7 @@ dcc_plugin\RunMayaBatchRegression.bat
 Workflow command inside Maya:
 
 ```mel
-mayaDmxWorkflow -savePreset "default" -outputDirectory "D:/exports" -encoding "binary" -exportSkin true -exportDeltaStates true;
+mayaDmxWorkflow -savePreset "default" -outputDirectory "D:/exports" -encoding "binary" -exportSkin true -exportDeltaStates true -exportMetadata false;
 mayaDmxWorkflow -listPresets;
 mayaDmxWorkflow -loadPreset "default";
 mayaDmxWorkflow -saveBatch "characters" -batchEntry "|root_chr_a|characters/chr_a.dmx" -batchEntry "|root_chr_b|characters/chr_b.dmx";
@@ -98,7 +98,7 @@ The module also now ships a minimal Alembic-style MEL export UI layer. Source fi
 
 ## Current Import Scope
 
-The importer now supports a minimal text DMX subset:
+The importer now supports a minimal DMX subset:
 
 - top-level `DmeModel`, `DmeDag`, `DmeJoint`
 - inline or referenced `DmeTransform`
@@ -107,7 +107,7 @@ The importer now supports a minimal text DMX subset:
 
 Current limitations:
 
-- supports text DMX and a minimal binary DMX subset for the same attribute set
+- supports `.dmx`, `.dmxb`, and `.dmxbin`, with binary import covering the same minimal attribute subset as text
 - hierarchy / transform / basic polygon mesh import
 - supports primary UV set and face-vertex normals for text DMX
 - supports basic skin weights via `jointList + jointCount + jointWeights + jointIndices`
@@ -129,11 +129,13 @@ The exporter now writes a minimal text DMX scene:
 - preserves basic face-set names from Maya shading groups when exporting polygon assignments
 - exports minimal position-only blendShape targets as `DmeVertexDeltaData` entries under `deltaStates`
 - can emit binary DMX when exporting to `.dmxb` / `.dmxbin`, or when the translator options include `binary=1` or `encoding=binary`
+- supports `exportMetadata=0` to strip Maya-specific material, UV/tangent, and deformer metadata for smaller exports
 
 Current limitations:
 
 - text DMX remains the default export mode
 - binary DMX export currently writes only the minimal attribute subset used by this plugin
+- disabling metadata also disables exported face-set material metadata plus Maya-specific UV/tangent and deformer reconstruction hints
 - only basic material slot / shading group names are preserved; full Hypershade networks are not exported
 - delta export currently covers only position deltas from basic blendShape targets
 - no advanced combination operators, tangents, extra UV sets, or full Valve binary DMX coverage yet

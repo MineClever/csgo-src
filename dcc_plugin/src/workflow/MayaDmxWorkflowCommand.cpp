@@ -30,6 +30,8 @@ constexpr const char *kExportSkinFlag = "-es";
 constexpr const char *kExportSkinLongFlag = "-exportSkin";
 constexpr const char *kExportDeltaFlag = "-eds";
 constexpr const char *kExportDeltaLongFlag = "-exportDeltaStates";
+constexpr const char *kExportMetadataFlag = "-emd";
+constexpr const char *kExportMetadataLongFlag = "-exportMetadata";
 constexpr const char *kSaveBatchFlag = "-sb";
 constexpr const char *kSaveBatchLongFlag = "-saveBatch";
 constexpr const char *kLoadBatchFlag = "-lb";
@@ -83,6 +85,7 @@ MSyntax MayaDmxWorkflowCommand::CreateSyntax()
     syntax.addFlag(kUpAxisFlag, kUpAxisLongFlag, MSyntax::kString);
     syntax.addFlag(kExportSkinFlag, kExportSkinLongFlag, MSyntax::kBoolean);
     syntax.addFlag(kExportDeltaFlag, kExportDeltaLongFlag, MSyntax::kBoolean);
+    syntax.addFlag(kExportMetadataFlag, kExportMetadataLongFlag, MSyntax::kBoolean);
     syntax.addFlag(kSaveBatchFlag, kSaveBatchLongFlag, MSyntax::kString);
     syntax.addFlag(kLoadBatchFlag, kLoadBatchLongFlag, MSyntax::kString);
     syntax.addFlag(kDeleteBatchFlag, kDeleteBatchLongFlag, MSyntax::kString);
@@ -181,6 +184,10 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         if (arguments.isFlagSet(kExportDeltaFlag))
         {
             arguments.getFlagArgument(kExportDeltaFlag, 0, preset.exportDeltaStates);
+        }
+        if (arguments.isFlagSet(kExportMetadataFlag))
+        {
+            arguments.getFlagArgument(kExportMetadataFlag, 0, preset.exportMetadata);
         }
 
         MStatus status = maya_dmx::SavePreset(preset);
