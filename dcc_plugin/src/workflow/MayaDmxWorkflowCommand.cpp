@@ -40,6 +40,14 @@ constexpr const char *kListBatchesFlag = "-lbt";
 constexpr const char *kListBatchesLongFlag = "-listBatches";
 constexpr const char *kBatchEntryFlag = "-be";
 constexpr const char *kBatchEntryLongFlag = "-batchEntry";
+constexpr const char *kExportPresetFlag = "-ep";
+constexpr const char *kExportPresetLongFlag = "-exportPreset";
+constexpr const char *kExportPathFlag = "-fp";
+constexpr const char *kExportPathLongFlag = "-filePath";
+constexpr const char *kExportAllFlag = "-ea";
+constexpr const char *kExportAllLongFlag = "-exportAll";
+constexpr const char *kRunBatchFlag = "-rb";
+constexpr const char *kRunBatchLongFlag = "-runBatch";
 
 void AppendJoinedResult(const MStringArray &items, MString &result)
 {
@@ -80,6 +88,10 @@ MSyntax MayaDmxWorkflowCommand::CreateSyntax()
     syntax.addFlag(kDeleteBatchFlag, kDeleteBatchLongFlag, MSyntax::kString);
     syntax.addFlag(kListBatchesFlag, kListBatchesLongFlag);
     syntax.addFlag(kBatchEntryFlag, kBatchEntryLongFlag, MSyntax::kString);
+    syntax.addFlag(kExportPresetFlag, kExportPresetLongFlag, MSyntax::kString);
+    syntax.addFlag(kExportPathFlag, kExportPathLongFlag, MSyntax::kString);
+    syntax.addFlag(kExportAllFlag, kExportAllLongFlag, MSyntax::kBoolean);
+    syntax.addFlag(kRunBatchFlag, kRunBatchLongFlag, MSyntax::kString);
     syntax.makeFlagMultiUse(kBatchEntryFlag);
     return syntax;
 }
@@ -235,8 +247,81 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         return MS::kSuccess;
     }
 
+    if (arguments.isFlagSet(kRunBatchFlag))
+    {
+        MString batchName;
+        arguments.getFlagArgument(kRunBatchFlag, 0, batchName);
+        if (!arguments.isFlagSet(kExportPresetFlag))
+        {
+            return maya_dmx::ReportError("maya_dmx: -exportPreset is required with -runBatch.");
+        }
+
+        MString presetName;
+        arguments.getFlagArgument(kExportPresetFlag, 0, presetName);
+
+        maya_dmx::ExportPreset preset;
+        MStatus status = maya_dmx::LoadPreset(presetName, preset);
+        if (!status)
+        {
+            return status;
+        }
+
+        MStringArray entries;
+        status = maya_dmx::LoadBatchManifest(batchName, entries);
+        if (!status)
+        {
+            return status;
+        }
+
+        status = maya_dmx::ExecuteBatchExport(preset, entries);
+        if (!status)
+        {
+            return status;
+        }
+
+        MString result;
+        AppendJoinedResult(entries, result);
+        setResult(result);
+        return MS::kSuccess;
+    }
+
+    if (arguments.isFlagSet(kExportPresetFlag))
+    {
+        MString presetName;
+        arguments.getFlagArgument(kExportPresetFlag, 0, presetName);
+
+        MString outputPath;
+        if (!arguments.isFlagSet(kExportPathFlag))
+        {
+            return maya_dmx::ReportError("maya_dmx: -filePath is required with -exportPreset.");
+        }
+        arguments.getFlagArgument(kExportPathFlag, 0, outputPath);
+
+        bool exportAll = false;
+        if (arguments.isFlagSet(kExportAllFlag))
+        {
+            arguments.getFlagArgument(kExportAllFlag, 0, exportAll);
+        }
+
+        maya_dmx::ExportPreset preset;
+        MStatus status = maya_dmx::LoadPreset(presetName, preset);
+        if (!status)
+        {
+            return status;
+        }
+
+        status = maya_dmx::ExecuteExport(preset, outputPath, !exportAll);
+        if (!status)
+        {
+            return status;
+        }
+
+        setResult(outputPath);
+        return MS::kSuccess;
+    }
+
     return maya_dmx::ReportError(
-        MString("maya_dmx: no workflow action specified. Use ") + kCommandName + " with -savePreset, -loadPreset, -saveBatch, or related flags.");
+        MString("maya_dmx: no workflow action specified. Use ") + kCommandName + " with -savePreset, -exportPreset, -runBatch, -saveBatch, or related flags.");
 }
 
 bool MayaDmxWorkflowCommand::isUndoable() const

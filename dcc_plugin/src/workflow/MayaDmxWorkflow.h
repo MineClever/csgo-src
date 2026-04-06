@@ -17,8 +17,16 @@ struct ExportPreset
     bool exportDeltaStates = true;
 };
 
+struct BatchManifestEntry
+{
+    MString rootPath;
+    MString outputPath;
+};
+
 MString SerializePreset(const ExportPreset &preset);
 bool DeserializePreset(const MString &text, ExportPreset &preset);
+MString BuildTranslatorOptions(const ExportPreset &preset);
+bool ParseBatchManifestEntry(const MString &text, BatchManifestEntry &entry);
 
 MStatus SavePreset(const ExportPreset &preset);
 MStatus LoadPreset(const MString &name, ExportPreset &preset);
@@ -29,4 +37,6 @@ MStatus SaveBatchManifest(const MString &name, const MStringArray &entries);
 MStatus LoadBatchManifest(const MString &name, MStringArray &entries);
 MStatus DeleteBatchManifest(const MString &name);
 MStatus ListBatchManifestNames(MStringArray &names);
+MStatus ExecuteExport(const ExportPreset &preset, const MString &outputPath, bool exportSelection);
+MStatus ExecuteBatchExport(const ExportPreset &preset, const MStringArray &entries);
 }
