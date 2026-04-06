@@ -16,6 +16,7 @@
 
 #include <maya/MDagPath.h>
 #include <maya/MDagPathArray.h>
+#include <maya/MFnBlendShapeDeformer.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnIkJoint.h>
 #include <maya/MFnMesh.h>
@@ -28,8 +29,10 @@
 #include <maya/MItMeshPolygon.h>
 #include <maya/MDoubleArray.h>
 #include <maya/MIntArray.h>
+#include <maya/MItDependencyGraph.h>
 #include <maya/MObjectArray.h>
 #include <maya/MPointArray.h>
+#include <maya/MPlug.h>
 #include <maya/MSelectionList.h>
 #include <maya/MVector.h>
 
@@ -1126,6 +1129,131 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
 
     AppendSkinningData(meshPath, *vertexDataElement, context);
 
+    std::vector<DmxElement *> deltaStateElements;
+    MObject meshNodeObject = meshPath.node();
+    MItDependencyGraph dependencyIt(
+        meshNodeObject,
+        MFn::kBlendShape,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
+    if (status)
+    {
+        for (; !dependencyIt.isDone(); dependencyIt.next())
+        {
+            MObject blendShapeObject = dependencyIt.currentItem(&status);
+            if (!status || blendShapeObject.isNull())
+            {
+                continue;
+            }
+
+            MFnBlendShapeDeformer blendShapeFn(blendShapeObject, &status);
+            if (!status)
+            {
+                continue;
+            }
+
+            MIntArray weightIndices;
+            status = blendShapeFn.weightIndexList(weightIndices);
+            if (!status)
+            {
+                continue;
+            }
+
+            MFnDependencyNode blendShapeNodeFn(blendShapeObject, &status);
+            if (!status)
+            {
+                continue;
+            }
+
+            MPlug weightArrayPlug = blendShapeNodeFn.findPlug("weight", true, &status);
+            if (!status)
+            {
+                continue;
+            }
+
+            for (unsigned int weightSlot = 0; weightSlot < weightIndices.length(); ++weightSlot)
+            {
+                const unsigned int weightIndex = static_cast<unsigned int>(weightIndices[weightSlot]);
+                MObjectArray targets;
+                status = blendShapeFn.getTargets(meshNodeObject, static_cast<int>(weightIndex), targets);
+                if (!status || targets.length() == 0)
+                {
+                    continue;
+                }
+
+                MFnDagNode targetDagNode(targets[0], &status);
+                if (!status)
+                {
+                    continue;
+                }
+
+                MDagPath targetPath;
+                status = targetDagNode.getPath(targetPath);
+                if (!status)
+                {
+                    continue;
+                }
+
+                MFnMesh targetMeshFn(targetPath, &status);
+                if (!status)
+                {
+                    continue;
+                }
+
+                MPointArray targetPoints;
+                status = targetMeshFn.getPoints(targetPoints, MSpace::kObject);
+                if (!status || targetPoints.length() != meshPoints.length())
+                {
+                    continue;
+                }
+
+                std::vector<std::string> deltaPositions;
+                std::vector<std::string> deltaPositionIndices;
+                deltaPositions.reserve(targetPoints.length());
+                deltaPositionIndices.reserve(targetPoints.length());
+                for (unsigned int pointIndex = 0; pointIndex < targetPoints.length(); ++pointIndex)
+                {
+                    const double dx = targetPoints[pointIndex].x - meshPoints[pointIndex].x;
+                    const double dy = targetPoints[pointIndex].y - meshPoints[pointIndex].y;
+                    const double dz = targetPoints[pointIndex].z - meshPoints[pointIndex].z;
+                    if (std::abs(dx) < 1.0e-6 && std::abs(dy) < 1.0e-6 && std::abs(dz) < 1.0e-6)
+                    {
+                        continue;
+                    }
+
+                    deltaPositions.push_back(FormatVector3(dx, dy, dz));
+                    deltaPositionIndices.push_back(std::to_string(pointIndex));
+                }
+
+                if (deltaPositions.empty())
+                {
+                    continue;
+                }
+
+                std::string deltaName = targetDagNode.name().asChar();
+                MPlug weightPlug = weightArrayPlug.elementByLogicalIndex(weightIndex, &status);
+                if (status)
+                {
+                    const MString aliasName = weightPlug.partialName(
+                        false, false, false, false, false, true, &status);
+                    if (status && aliasName.length() > 0)
+                    {
+                        deltaName = aliasName.asChar();
+                    }
+                }
+
+                DmxElement *deltaElement = builder.CreateElement("DmeVertexDeltaData");
+                deltaElement->attributes.push_back(MakeScalarAttribute("name", "string", deltaName));
+                deltaElement->attributes.push_back(MakeScalarArrayAttribute("vertexFormat", "string_array", {"positions"}));
+                deltaElement->attributes.push_back(MakeScalarArrayAttribute("positions", "vector3_array", std::move(deltaPositions)));
+                deltaElement->attributes.push_back(MakeScalarArrayAttribute("positionsIndices", "int_array", std::move(deltaPositionIndices)));
+                deltaStateElements.push_back(deltaElement);
+            }
+        }
+    }
+
     std::vector<DmxElement *> faceSetElements;
     MObjectArray connectedSets;
     MObjectArray setComponents;
@@ -1206,6 +1334,10 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
     DmxElement *meshElement = builder.CreateElement("DmeMesh");
     meshElement->attributes.push_back(MakeScalarAttribute("name", "string", meshFn.name().asChar()));
     meshElement->attributes.push_back(MakeInlineElementAttribute("bindState", vertexDataElement));
+    if (!deltaStateElements.empty())
+    {
+        meshElement->attributes.push_back(MakeElementArrayAttribute("deltaStates", deltaStateElements));
+    }
     meshElement->attributes.push_back(MakeElementArrayAttribute("faceSets", faceSetElements));
     return meshElement;
 }

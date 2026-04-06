@@ -31,6 +31,12 @@ Sample regression:
 dcc_plugin\RunSampleRegression.bat
 ```
 
+Maya standalone regression:
+
+```bat
+dcc_plugin\RunMayaBatchRegression.bat
+```
+
 Or through CMake:
 
 ```powershell
@@ -55,6 +61,8 @@ dcc_plugin\InstallPluginModuleToMaya.bat
 
 This writes `%USERPROFILE%\Documents\maya\modules\maya_dmx.mod` and copies the plugin to `dcc_plugin\maya_module\plug-ins\windows\2022\`.
 
+`RunMayaBatchRegression.bat` defaults to `C:\Program Files\Autodesk\Maya2022\bin\mayapy.exe`. If Maya is installed elsewhere, set `MAYA_PYTHON_EXE_OVERRIDE` before running it.
+
 ## Current Import Scope
 
 The importer now supports a minimal text DMX subset:
@@ -71,8 +79,9 @@ Current limitations:
 - supports primary UV set and face-vertex normals for text DMX
 - supports basic skin weights via `jointList + jointCount + jointWeights + jointIndices`
 - restores basic face-set material slots as Maya shading groups
+- supports minimal position-only `deltaStates` import by creating Maya blendShape targets
 - binary DMX import currently covers only the attribute types emitted by this plugin
-- no full material networks, blend shapes, tangents, extra UV channels, or full Valve binary DMX coverage yet
+- no full material networks, advanced combination operators, tangents, extra UV channels, or full Valve binary DMX coverage yet
 
 ## Current Export Scope
 
@@ -85,6 +94,7 @@ The exporter now writes a minimal text DMX scene:
 - exports active selection roots when using Maya "Export Selection", otherwise exports top-level DAG roots
 - writes `jointList` from the full exported joint hierarchy so skin indices line up with exported influences
 - preserves basic face-set names from Maya shading groups when exporting polygon assignments
+- exports minimal position-only blendShape targets as `DmeVertexDeltaData` entries under `deltaStates`
 - can emit binary DMX when exporting to `.dmxb` / `.dmxbin`, or when the translator options include `binary=1` or `encoding=binary`
 
 Current limitations:
@@ -92,13 +102,16 @@ Current limitations:
 - text DMX remains the default export mode
 - binary DMX export currently writes only the minimal attribute subset used by this plugin
 - only basic material slot / shading group names are preserved; full Hypershade networks are not exported
-- no blend shapes, tangents, extra UV sets, or full Valve binary DMX coverage yet
+- delta export currently covers only position deltas from basic blendShape targets
+- no advanced combination operators, tangents, extra UV sets, or full Valve binary DMX coverage yet
 - skin export currently writes basic vertex weights only and does not export bind pose extras or advanced deformer metadata
 
 Sample file for manual Maya import:
 
 - `dcc_plugin/samples/simple_hierarchy.dmx`
 - `dcc_plugin/samples/simple_hierarchy.dmxb`
+- `dcc_plugin/samples/simple_blendshape.dmx`
+- `dcc_plugin/samples/simple_blendshape.dmxb`
 - `dcc_plugin/samples/simple_mesh.dmx`
 - `dcc_plugin/samples/simple_mesh.dmxb`
 - `dcc_plugin/samples/simple_skinned_mesh.dmx`
@@ -111,7 +124,7 @@ Sample file for manual Maya import:
 - `cmake/` - Maya SDK detection and plugin target helpers
 - `maya_module/` - local module payload staged for Maya installation
 - `samples/` - small text/binary DMX files for manual plugin testing
-- `tools/` - small command-line helpers for sample conversion and regression prep
+- `tools/` - small command-line helpers for sample conversion and regression prep, including Maya standalone regression
 - `src/common/` - shared utilities and diagnostics
 - `src/importer/` - DMX importer translator
 - `src/exporter/` - DMX exporter translator

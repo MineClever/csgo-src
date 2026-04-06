@@ -26,6 +26,7 @@
 #include <maya/MQuaternion.h>
 #include <maya/MSelectionList.h>
 #include <maya/MString.h>
+#include <maya/MStringArray.h>
 #include <maya/MTransformationMatrix.h>
 #include <maya/MVectorArray.h>
 #include <maya/MVector.h>
@@ -500,6 +501,189 @@ MStatus AssignFaceSetMaterials(
     return MS::kSuccess;
 }
 
+MObject FindPrimaryMeshChild(const MObject &transformObject)
+{
+    MStatus status;
+    MFnDagNode dagNode(transformObject, &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (unsigned int childIndex = 0; childIndex < dagNode.childCount(); ++childIndex)
+    {
+        MObject childObject = dagNode.child(childIndex, &status);
+        if (!status || !childObject.hasFn(MFn::kMesh))
+        {
+            continue;
+        }
+
+        MFnDagNode meshDagNode(childObject, &status);
+        if (status && !meshDagNode.isIntermediateObject())
+        {
+            return childObject;
+        }
+    }
+
+    return MObject::kNullObj;
+}
+
+MStatus ApplyDeltaStates(
+    const simple_dmx::Document &document,
+    const simple_dmx::Element *meshElement,
+    const MObject &meshObject,
+    const MObject &meshParentObject,
+    const MPointArray &basePoints)
+{
+    const std::vector<const simple_dmx::Element *> deltaStates = FindAttributeElementArray(document, meshElement, "deltaStates");
+    if (deltaStates.empty())
+    {
+        return MS::kSuccess;
+    }
+
+    MDagPath baseParentPath;
+    MStatus status = MDagPath::getAPathTo(meshParentObject, baseParentPath);
+    if (!status)
+    {
+        return status;
+    }
+
+    MStringArray targetTransforms;
+    std::vector<std::string> targetNames;
+    for (const simple_dmx::Element *deltaState : deltaStates)
+    {
+        if (!deltaState)
+        {
+            continue;
+        }
+
+        const std::vector<std::string> deltaPositionStrings = FindAttributeStringArray(deltaState, "positions");
+        const std::vector<std::string> deltaPositionIndexStrings = FindAttributeStringArray(deltaState, "positionsIndices");
+        if (deltaPositionStrings.empty() || deltaPositionIndexStrings.empty())
+        {
+            continue;
+        }
+
+        MStringArray duplicateResult;
+        MString duplicateCommand("duplicate -rr \"");
+        duplicateCommand += baseParentPath.fullPathName();
+        duplicateCommand += "\"";
+        status = MGlobal::executeCommand(duplicateCommand, duplicateResult, false, false);
+        if (!status || duplicateResult.length() == 0)
+        {
+            return status;
+        }
+
+        MSelectionList selectionList;
+        selectionList.add(duplicateResult[0]);
+        MObject duplicateTransformObject;
+        status = selectionList.getDependNode(0, duplicateTransformObject);
+        if (!status)
+        {
+            return status;
+        }
+
+        const MObject duplicateMeshObject = FindPrimaryMeshChild(duplicateTransformObject);
+        if (duplicateMeshObject.isNull())
+        {
+            return maya_dmx::ReportWarning(MString("maya_dmx: delta target duplicate had no mesh shape: ") + duplicateResult[0]);
+        }
+
+        MFnMesh targetMeshFn(duplicateMeshObject, &status);
+        if (!status)
+        {
+            return status;
+        }
+
+        MPointArray deltaPoints = basePoints;
+        const size_t deltaCount = std::min(deltaPositionStrings.size(), deltaPositionIndexStrings.size());
+        for (size_t i = 0; i < deltaCount; ++i)
+        {
+            const std::vector<double> deltaValues = ParseNumberList(deltaPositionStrings[i]);
+            const std::vector<double> indexValues = ParseNumberList(deltaPositionIndexStrings[i]);
+            if (deltaValues.size() < 3 || indexValues.empty())
+            {
+                continue;
+            }
+
+            const int pointIndex = static_cast<int>(indexValues[0]);
+            if (pointIndex < 0 || pointIndex >= static_cast<int>(deltaPoints.length()))
+            {
+                continue;
+            }
+
+            deltaPoints[pointIndex].x += deltaValues[0];
+            deltaPoints[pointIndex].y += deltaValues[1];
+            deltaPoints[pointIndex].z += deltaValues[2];
+        }
+
+        status = targetMeshFn.setPoints(deltaPoints, MSpace::kObject);
+        if (!status)
+        {
+            return status;
+        }
+
+        targetTransforms.append(duplicateResult[0]);
+        targetNames.push_back(deltaState->name.empty() ? std::string("delta") : SanitizeNodeName(deltaState->name));
+    }
+
+    if (targetTransforms.length() == 0)
+    {
+        return MS::kSuccess;
+    }
+
+    MString blendShapeNodeName;
+    MString createBlendShapeCommand("blendShape -frontOfChain -name \"");
+    createBlendShapeCommand += SanitizeNodeName(meshElement->name.empty() ? std::string("dmx_blendShape") : meshElement->name + "_blendShape").c_str();
+    createBlendShapeCommand += "\" \"";
+    createBlendShapeCommand += targetTransforms[0];
+    createBlendShapeCommand += "\" \"";
+    createBlendShapeCommand += baseParentPath.fullPathName();
+    createBlendShapeCommand += "\"";
+    status = MGlobal::executeCommand(createBlendShapeCommand, blendShapeNodeName, false, false);
+    if (!status)
+    {
+        return status;
+    }
+
+    for (unsigned int targetIndex = 1; targetIndex < targetTransforms.length(); ++targetIndex)
+    {
+        MString addTargetCommand("blendShape -e -t \"");
+        addTargetCommand += baseParentPath.fullPathName();
+        addTargetCommand += "\" ";
+        addTargetCommand += static_cast<int>(targetIndex);
+        addTargetCommand += " \"";
+        addTargetCommand += targetTransforms[targetIndex];
+        addTargetCommand += "\" 1.0 \"";
+        addTargetCommand += blendShapeNodeName;
+        addTargetCommand += "\"";
+        status = MGlobal::executeCommand(addTargetCommand, false, false);
+        if (!status)
+        {
+            return status;
+        }
+    }
+
+    for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
+    {
+        MString aliasCommand("aliasAttr \"");
+        aliasCommand += targetNames[targetIndex].c_str();
+        aliasCommand += "\" \"";
+        aliasCommand += blendShapeNodeName;
+        aliasCommand += ".w[";
+        aliasCommand += static_cast<int>(targetIndex);
+        aliasCommand += "]\"";
+        MGlobal::executeCommand(aliasCommand, false, false);
+
+        MString deleteCommand("delete \"");
+        deleteCommand += targetTransforms[targetIndex];
+        deleteCommand += "\"";
+        MGlobal::executeCommand(deleteCommand, false, false);
+    }
+
+    return MS::kSuccess;
+}
+
 MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element *dagElement, MObject parent)
 {
     const simple_dmx::Document &document = context.document;
@@ -759,6 +943,12 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
     }
 
     status = AssignFaceSetMaterials(meshFn, faceSetAssignments);
+    if (!status)
+    {
+        return status;
+    }
+
+    status = ApplyDeltaStates(document, meshElement, meshObject, parent, points);
     if (!status)
     {
         return status;

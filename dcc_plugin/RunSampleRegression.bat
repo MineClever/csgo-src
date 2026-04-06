@@ -30,6 +30,9 @@ if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 call :RunCase simple_hierarchy
 if errorlevel 1 goto :fail
 
+call :RunCase simple_blendshape
+if errorlevel 1 goto :fail
+
 call :RunCase simple_mesh
 if errorlevel 1 goto :fail
 

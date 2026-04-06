@@ -10,6 +10,7 @@ set_target_properties(maya_dmx_sample_tool PROPERTIES
 )
 
 set(MAYA_DMX_SAMPLE_NAMES
+    simple_blendshape
     simple_hierarchy
     simple_mesh
     simple_skinned_mesh

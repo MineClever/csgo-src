@@ -1,0 +1,124 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmeModel"
+{
+    "id" "elementid" "id_model_blendshape"
+    "name" "string" "simple_blendshape"
+    "upAxis" "string" "Y"
+    "children" "element_array"
+    [
+        "DmeDag"
+        {
+            "id" "elementid" "id_mesh_dag"
+            "name" "string" "blendshapeMesh"
+            "transform" "DmeTransform"
+            {
+                "id" "elementid" "id_mesh_transform"
+                "position" "vector3" "0 0 0"
+                "orientation" "quaternion" "0 0 0 1"
+            }
+            "shape" "DmeMesh"
+            {
+                "id" "elementid" "id_mesh_shape"
+                "name" "string" "blendshapeMeshShape"
+                "bindState" "DmeVertexData"
+                {
+                    "id" "elementid" "id_bind_state"
+                    "name" "string" "bind"
+                    "flipVCoordinates" "bool" "0"
+                    "vertexFormat" "string_array"
+                    [
+                        "positions",
+                        "normals",
+                        "textureCoordinates"
+                    ]
+                    "positions" "vector3_array"
+                    [
+                        "0 0 0",
+                        "1 0 0",
+                        "1 1 0",
+                        "0 1 0"
+                    ]
+                    "positionsIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2",
+                        "0",
+                        "2",
+                        "3"
+                    ]
+                    "normals" "vector3_array"
+                    [
+                        "0 0 1"
+                    ]
+                    "normalsIndices" "int_array"
+                    [
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0"
+                    ]
+                    "textureCoordinates" "vector2_array"
+                    [
+                        "0 0",
+                        "1 0",
+                        "1 1",
+                        "0 1"
+                    ]
+                    "textureCoordinatesIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2",
+                        "0",
+                        "2",
+                        "3"
+                    ]
+                }
+                "deltaStates" "element_array"
+                [
+                    "DmeVertexDeltaData"
+                    {
+                        "id" "elementid" "id_delta_smile"
+                        "name" "string" "smile"
+                        "vertexFormat" "string_array"
+                        [
+                            "positions"
+                        ]
+                        "positions" "vector3_array"
+                        [
+                            "0 0.35 0",
+                            "0 0.2 0"
+                        ]
+                        "positionsIndices" "int_array"
+                        [
+                            "2",
+                            "3"
+                        ]
+                    }
+                ]
+                "faceSets" "element_array"
+                [
+                    "DmeFaceSet"
+                    {
+                        "id" "elementid" "id_face_set"
+                        "name" "string" "lambert1SG"
+                        "faces" "int_array"
+                        [
+                            "0",
+                            "1",
+                            "2",
+                            "-1",
+                            "3",
+                            "4",
+                            "5",
+                            "-1"
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}
