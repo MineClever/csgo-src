@@ -5,12 +5,12 @@
 
 set(CLIENT_CSGO_SOURCES
     mp3player.cpp
-    ${SRC_DIR}/game/client/generated_proto/base_gcmessages.pb.cc  # NO_PCH
-    ${SRC_DIR}/game/client/generated_proto/cstrike15_gcmessages.pb.cc  # NO_PCH
-    ${SRC_DIR}/game/client/generated_proto/engine_gcmessages.pb.cc  # NO_PCH
-    ${SRC_DIR}/game/client/generated_proto/cstrike15_usermessages.pb.cc  # NO_PCH
-    ${SRC_DIR}/game/client/generated_proto/netmessages.pb.cc  # NO_PCH
-    ${SRC_DIR}/game/client/generated_proto/network_connection.pb.cc  # NO_PCH
+    ${SRC_DIR}/game/shared/base_gcmessages.pb.cc  # NO_PCH
+    ${SRC_DIR}/game/shared/cstrike15/cstrike15/cstrike15_gcmessages.pb.cc  # NO_PCH
+    ${SRC_DIR}/common/engine_gcmessages.pb.cc  # NO_PCH
+    ${SRC_DIR}/game/shared/cstrike15/cstrike15/cstrike15_usermessages.pb.cc  # NO_PCH
+    ${SRC_DIR}/common/netmessages.pb.cc  # NO_PCH
+    ${SRC_DIR}/common/network_connection.pb.cc  # NO_PCH
     ${SRC_DIR}/common/protobuf_helpers.cpp  # NO_PCH
     ${SRC_DIR}/game/shared/achievement_saverestore.cpp
     ${SRC_DIR}/game/shared/achievementmgr.cpp
@@ -629,12 +629,13 @@ target_include_directories(client_csgo PRIVATE
     ${SRC_DIR}/public
     ${SRC_DIR}/public/tier0
     ${SRC_DIR}/public/tier1
-    ${SRC_DIR}/game/client/generated_proto
     ${SRC_DIR}/thirdparty/protobuf-2.5.0/src
     ${SRC_DIR}/game/shared
+    ${SRC_DIR}/game/shared/cstrike15/cstrike15
     ${SRC_DIR}/game/client/game_controls
     ${CMAKE_CURRENT_BINARY_DIR}/
     ${SRC_DIR}/thirdparty/SixenseSDK/include
+    ${SRC_DIR}/gcsdk
     ${SRC_DIR}/gcsdk/steamextra
     ${SRC_DIR}/game/shared/econ
     ${SRC_DIR}/game/client/econ
@@ -673,12 +674,12 @@ target_precompile_headers(client_csgo PRIVATE
 
 # 这些文件不使用预编译头
 set_source_files_properties(
-    ${SRC_DIR}/game/client/generated_proto/base_gcmessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/cstrike15_gcmessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/engine_gcmessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/cstrike15_usermessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/netmessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/network_connection.pb.cc
+    ${SRC_DIR}/game/shared/base_gcmessages.pb.cc
+    ${SRC_DIR}/game/shared/cstrike15/cstrike15/cstrike15_gcmessages.pb.cc
+    ${SRC_DIR}/common/engine_gcmessages.pb.cc
+    ${SRC_DIR}/game/shared/cstrike15/cstrike15/cstrike15_usermessages.pb.cc
+    ${SRC_DIR}/common/netmessages.pb.cc
+    ${SRC_DIR}/common/network_connection.pb.cc
     ${SRC_DIR}/common/protobuf_helpers.cpp
     ${SRC_DIR}/utils/common/bsplib.cpp
     ${SRC_DIR}/public/client_class.cpp
@@ -769,18 +770,18 @@ target_link_libraries(client_csgo PRIVATE
     user32.lib
     winmm.lib
     # 其他（路径引用）
-    "../../lib/win32/2015/debug/cryptlib.lib"
-    "../../lib/win32/2015/release/cryptlib.lib"
+    debug "${SRC_DIR}/lib/win32/2015/debug/cryptlib.lib"
+    optimized "${SRC_DIR}/lib/win32/2015/release/cryptlib.lib"
 )
 
 # protobuf 生成文件：标记为 GENERATED（由 protoc 生成，不检查是否存在）
 set_source_files_properties(
-    ${SRC_DIR}/game/client/generated_proto/base_gcmessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/cstrike15_gcmessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/engine_gcmessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/cstrike15_usermessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/netmessages.pb.cc
-    ${SRC_DIR}/game/client/generated_proto/network_connection.pb.cc
+    ${SRC_DIR}/game/shared/base_gcmessages.pb.cc
+    ${SRC_DIR}/game/shared/cstrike15/cstrike15/cstrike15_gcmessages.pb.cc
+    ${SRC_DIR}/common/engine_gcmessages.pb.cc
+    ${SRC_DIR}/game/shared/cstrike15/cstrike15/cstrike15_usermessages.pb.cc
+    ${SRC_DIR}/common/netmessages.pb.cc
+    ${SRC_DIR}/common/network_connection.pb.cc
     PROPERTIES GENERATED TRUE)
 
 # 如需重新生成 .proto 文件，可运行：

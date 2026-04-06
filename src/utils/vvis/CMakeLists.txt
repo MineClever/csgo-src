@@ -9,6 +9,8 @@ set(VVIS_DLL_SOURCES
     ${SRC_DIR}/public/collisionutils.cpp
     ${SRC_DIR}/common/debug_dll_check.cpp
     ${SRC_DIR}/public/filesystem_helpers.cpp
+    ${SRC_DIR}/public/filesystem_init.cpp
+    ${SRC_DIR}/utils/common/filesystem_tools.cpp
     flow.cpp
     ${SRC_DIR}/public/loadcmdline.cpp
     ${SRC_DIR}/public/lumpfiles.cpp
@@ -36,6 +38,7 @@ target_include_directories(Vvis_dll PRIVATE
     ${SRC_DIR}/public
     ${SRC_DIR}/public/tier0
     ${SRC_DIR}/public/tier1
+    ${SRC_DIR}/utils/common
     ${SRC_DIR}/utils/vmpi
     ${SRC_DIR}/utils/vmpi/mysql/include
 )
@@ -57,6 +60,7 @@ target_link_libraries(Vvis_dll PRIVATE
     vstdlib
     tier3
     mathlib
+    prebuilt::vmpi
     # 系统库
     advapi32.lib
     comdlg32.lib

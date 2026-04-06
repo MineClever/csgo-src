@@ -34,6 +34,7 @@ target_link_libraries(Soundsystem PRIVATE
     tier1
     interfaces
     tier2
+    vstdlib
     tier3
     mathlib
     soundsystem_lowlevel

@@ -69,6 +69,7 @@ target_include_directories(Vbsp PRIVATE
     ${SRC_DIR}/public
     ${SRC_DIR}/public/tier0
     ${SRC_DIR}/public/tier1
+    ${SRC_DIR}/utils/common
     ${SRC_DIR}/utils/vmpi
 )
 
@@ -87,6 +88,9 @@ target_link_libraries(Vbsp PRIVATE
     vstdlib
     tier3
     mathlib
+    vtf
+    bitmap
+    Fgdlib
     # 系统库
     advapi32.lib
     comdlg32.lib

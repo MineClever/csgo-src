@@ -58,6 +58,8 @@ target_link_libraries(Dedicated PRIVATE
     appframework
     Dmxloader
     mathlib
+    vgui_controls
+    prebuilt::steam_api
     vpklib
     # 系统库
     advapi32.lib

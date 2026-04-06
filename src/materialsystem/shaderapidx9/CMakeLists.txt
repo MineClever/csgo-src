@@ -66,6 +66,7 @@ target_link_libraries(shaderapidx9 PRIVATE
     videocfg
     prebuilt::bzip2
     prebuilt::nvapi
+    prebuilt::nvtc
     prebuilt::d3dx9
     # 系统库
     d3d9.lib

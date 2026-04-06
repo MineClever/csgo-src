@@ -50,6 +50,7 @@ target_link_libraries(ServerBrowser PRIVATE
     tier2
     vstdlib
     tier3
+    mathlib
     vgui_controls
     prebuilt::steam_api
     # 系统库

@@ -31,6 +31,7 @@ target_link_libraries(launcher PRIVATE
     vstdlib
     tier3
     appframework
+    prebuilt::steam_api
     # 系统库
     advapi32.lib
     comdlg32.lib
@@ -43,8 +44,8 @@ target_link_libraries(launcher PRIVATE
     user32.lib
     winmm.lib
     wsock32.lib
-    # 其他（路径引用）
-    "../dx9sdk/lib/dinput8.lib"
+    # DirectX
+    prebuilt::dinput8
 )
 
 valve_set_dll_importlib_output(launcher)

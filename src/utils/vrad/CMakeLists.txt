@@ -47,6 +47,8 @@ set(VRAD_DLL_SOURCES
     ${SRC_DIR}/utils/common/tools_minidump.cpp
     ${SRC_DIR}/public/collisionutils.cpp
     ${SRC_DIR}/public/filesystem_helpers.cpp
+    ${SRC_DIR}/public/filesystem_init.cpp
+    ${SRC_DIR}/utils/common/filesystem_tools.cpp
     ${SRC_DIR}/public/scratchpad3d.cpp
     ${SRC_DIR}/public/ScratchPadUtils.cpp
 )
@@ -60,6 +62,7 @@ target_include_directories(Vrad_dll PRIVATE
     ${SRC_DIR}/public
     ${SRC_DIR}/public/tier0
     ${SRC_DIR}/public/tier1
+    ${SRC_DIR}/utils/common
     ${SRC_DIR}/utils/vmpi
     ${SRC_DIR}/utils/vmpi/mysql/mysqlpp/include
     ${SRC_DIR}/utils/vmpi/mysql/include
@@ -83,6 +86,10 @@ target_link_libraries(Vrad_dll PRIVATE
     vstdlib
     tier3
     mathlib
+    vtf
+    bitmap
+    Raytrace
+    prebuilt::vmpi
     # 系统库
     advapi32.lib
     comdlg32.lib

@@ -35,6 +35,7 @@ target_link_libraries(Vlocalize PRIVATE
     appframework
     vstdlib
     tier3
+    mathlib
     vgui_controls
     # 系统库
     WS2_32.LIB
@@ -47,5 +48,7 @@ target_link_libraries(Vlocalize PRIVATE
     shell32.lib
     user32.lib
 )
+
+target_link_options(Vlocalize PRIVATE /SUBSYSTEM:WINDOWS)
 
 valve_publish_exe(Vlocalize "${GAME_DIR}")

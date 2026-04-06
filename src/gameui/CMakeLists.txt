@@ -108,6 +108,7 @@ target_link_libraries(GameUI PRIVATE
     vtf
     vpklib
     videocfg
+    prebuilt::nvtc
     prebuilt::libjpeg
     prebuilt::libpng
     prebuilt::libz

@@ -138,9 +138,9 @@ set(ENGINE_DS_SOURCES
     ${SRC_DIR}/engine/view.cpp
     ${SRC_DIR}/engine/bsplog.cpp
     ${SRC_DIR}/engine/serializedentity.cpp
-    ${SRC_DIR}/engine_ds/generated_proto/engine_gcmessages.pb.cc
-    ${SRC_DIR}/engine_ds/generated_proto/netmessages.pb.cc
-    ${SRC_DIR}/engine_ds/generated_proto/network_connection.pb.cc
+    ${SRC_DIR}/common/engine_gcmessages.pb.cc
+    ${SRC_DIR}/common/netmessages.pb.cc
+    ${SRC_DIR}/common/network_connection.pb.cc
     ${SRC_DIR}/common/protobuf_helpers.cpp
     ${SRC_DIR}/engine/baseclient.cpp
     ${SRC_DIR}/engine/server_pch.cpp
@@ -332,7 +332,7 @@ add_library(engine_ds SHARED ${ENGINE_DS_SOURCES})
 valve_apply_base_settings(engine_ds)
 
 target_include_directories(engine_ds PRIVATE
-    ${SRC_DIR}/engine_ds/generated_proto
+    ${SRC_DIR}/common
     ${SRC_DIR}/thirdparty/protobuf-2.5.0/src
     ${SRC_DIR}/external/crypto++-5.61
     ${SRC_DIR}/engine
@@ -406,9 +406,9 @@ target_link_libraries(engine_ds PRIVATE
 
 # protobuf 生成文件：标记为 GENERATED（由 protoc 生成，不检查是否存在）
 set_source_files_properties(
-    ${SRC_DIR}/engine_ds/generated_proto/engine_gcmessages.pb.cc
-    ${SRC_DIR}/engine_ds/generated_proto/netmessages.pb.cc
-    ${SRC_DIR}/engine_ds/generated_proto/network_connection.pb.cc
+    ${SRC_DIR}/common/engine_gcmessages.pb.cc
+    ${SRC_DIR}/common/netmessages.pb.cc
+    ${SRC_DIR}/common/network_connection.pb.cc
     PROPERTIES GENERATED TRUE)
 
 # 如需重新生成 .proto 文件，可运行：

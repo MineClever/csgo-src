@@ -23,6 +23,7 @@ target_include_directories(Vtex_dll PRIVATE
     ${SRC_DIR}/public
     ${SRC_DIR}/public/tier0
     ${SRC_DIR}/public/tier1
+    ${SRC_DIR}/utils/common
 )
 
 target_compile_definitions(Vtex_dll PRIVATE
@@ -45,6 +46,10 @@ target_link_libraries(Vtex_dll PRIVATE
     mathlib
     bitmap
     vtf
+    Datamodel
+    Materialobjects
+    Dmserializers
+    resourcefile
     # 系统库
     advapi32.lib
     comdlg32.lib
@@ -89,8 +94,10 @@ target_link_libraries(Vtex_launcher PRIVATE
     tier0
     tier1
     interfaces
+    tier2
     vstdlib
     appframework
+    mathlib
     # 系统库
     advapi32.lib
     comdlg32.lib

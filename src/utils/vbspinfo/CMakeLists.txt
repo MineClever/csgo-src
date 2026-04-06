@@ -27,6 +27,7 @@ target_include_directories(Vbspinfo PRIVATE
     ${SRC_DIR}/public
     ${SRC_DIR}/public/tier0
     ${SRC_DIR}/public/tier1
+    ${SRC_DIR}/utils/common
 )
 
 target_compile_definitions(Vbspinfo PRIVATE
@@ -39,6 +40,7 @@ target_link_libraries(Vbspinfo PRIVATE
     tier0
     tier1
     interfaces
+    tier2
     vstdlib
     mathlib
     # 系统库

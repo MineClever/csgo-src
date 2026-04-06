@@ -81,6 +81,7 @@ function(valve_setup_prebuilt_libs)
     _valve_import_lib(prebuilt::d3dx9   "${SRC_DIR}/dx9sdk/lib/d3dx9.lib")
     _valve_import_lib(prebuilt::d3dx9d  "${SRC_DIR}/dx9sdk/lib/d3dx9d.lib")
     _valve_import_lib(prebuilt::d3d9    "${SRC_DIR}/dx9sdk/lib/d3d9.lib")
+    _valve_import_lib(prebuilt::dinput8 "${SRC_DIR}/dx9sdk/lib/dinput8.lib")
 
     # --- NvAPI (use thirdparty version which has DRS/D3D9 stubs) ---
     _valve_import_lib(prebuilt::nvapi   "${SRC_DIR}/thirdparty/nvidia/nvapi/lib/nvapi.lib")

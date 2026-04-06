@@ -45,8 +45,16 @@ target_link_libraries(Commedit PRIVATE
     vstdlib
     tier3
     Dmxloader
+    Datamodel
+    Movieobjects
+    Dmserializers
+    Dme_controls
+    bonesetup
     mathlib
     vgui_controls
+    matsys_controls
+    Toolutils
+    prebuilt::dmeutils
     # 系统库
     Psapi.lib
     advapi32.lib

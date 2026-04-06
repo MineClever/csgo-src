@@ -63,6 +63,7 @@ target_link_libraries(materialsystem PRIVATE
     tier1
     interfaces
     tier2
+    vstdlib
     tier3
     bitmap
     mathlib

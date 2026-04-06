@@ -34,7 +34,9 @@ target_link_libraries(inputsystem PRIVATE
     tier1
     interfaces
     tier2
+    vstdlib
     mathlib
+    prebuilt::steam_api
     # 系统库
     Winmm.lib
     advapi32.lib

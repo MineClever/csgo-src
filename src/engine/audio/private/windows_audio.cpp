@@ -4,10 +4,9 @@
 // NOTE: This code only applies to VISTA and greater
 
 #include <windows.h>
-// ks.h / ksmedia.h must be included before mmdeviceapi.h to define
-// KSJACK_DESCRIPTION3, referenced by devicetopology.h (Windows SDK 10.0.26100+)
-#include <ks.h>
-#include <ksmedia.h>
+// Do NOT include dx9sdk ks.h/ksmedia.h here. The CMake build ensures Windows SDK
+// shared/ headers come before dx9sdk/include so devicetopology.h (included via
+// endpointvolume.h) picks up the correct ksmedia.h with KSJACK_DESCRIPTION3.
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
 #include <endpointvolume.h>

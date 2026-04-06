@@ -135,6 +135,8 @@ target_link_libraries(vscript PRIVATE
     tier0
     tier1
     interfaces
+    vstdlib
+    mathlib
     tier2
     tier3
     # 系统库

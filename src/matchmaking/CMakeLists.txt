@@ -48,6 +48,8 @@ target_link_libraries(matchmaking_csgo PRIVATE
     vstdlib
     tier3
     matchmakingbase
+    mathlib
+    prebuilt::steam_api
     # 系统库
     advapi32.lib
     comdlg32.lib
@@ -115,6 +117,7 @@ target_link_libraries(matchmaking_ds_csgo PRIVATE
     vstdlib
     tier3
     matchmakingbase_ds
+    mathlib
     # 系统库
     advapi32.lib
     comdlg32.lib
@@ -149,6 +152,7 @@ set(MATCHMAKINGBASE_SOURCES
     steam_lobbyapi.cpp
     x360_xlsp_cmd.cpp
     ds_searcher.cpp
+    ${SRC_DIR}/common/steamid.cpp
     match_searcher.cpp
     mm_netmgr.cpp
     mm_session_offline_custom.cpp
@@ -214,6 +218,7 @@ set(MATCHMAKINGBASE_DS_SOURCES
     steam_lobbyapi.cpp
     x360_xlsp_cmd.cpp
     mm_netmgr.cpp
+    ${SRC_DIR}/common/steamid.cpp
     ${SRC_DIR}/common/debug_lib_check.cpp
     ${SRC_DIR}/public/filesystem_helpers.cpp
     main.cpp

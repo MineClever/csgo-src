@@ -35,6 +35,10 @@ target_compile_definitions(bitmap PRIVATE
     LIBNAME=bitmap
 )
 
+target_link_libraries(bitmap PUBLIC
+    prebuilt::nvtc
+)
+
 valve_set_static_lib_output(bitmap)
 
 # =============================================================================

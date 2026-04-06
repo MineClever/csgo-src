@@ -44,6 +44,7 @@ target_link_libraries(stdshader_dbg PRIVATE
     tier0
     tier1
     interfaces
+    vstdlib
     mathlib
     shaderlib
     # 系统库
@@ -239,6 +240,7 @@ target_link_libraries(stdshader_dx9 PRIVATE
     tier0
     tier1
     interfaces
+    vstdlib
     mathlib
     shaderlib
     # 系统库

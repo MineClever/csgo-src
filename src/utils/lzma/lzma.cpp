@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #endif
 #include "tier0/memdbgon.h"
+#include "../../common/lzma/lzma.h"
 #include "../../public/tier1/lzmaDecoder.h"
 #include "C/7zTypes.h"
 #include "C/LzmaEnc.h"
@@ -193,7 +194,8 @@ LzmaEncode( const Byte *inBuffer,
 //-----------------------------------------------------------------------------
 unsigned char *LZMA_Compress( unsigned char *pInput,
                               unsigned int  inputSize,
-                              unsigned int  *pOutputSize )
+                              unsigned int  *pOutputSize,
+                              unsigned int  dictionarySize )
 {
 	*pOutputSize = 0;
 
@@ -241,7 +243,7 @@ unsigned char *LZMA_OpportunisticCompress( unsigned char *pInput,
                               unsigned int  inputSize,
                               unsigned int  *pOutputSize )
 {
-	unsigned char *pRet = LZMA_Compress( pInput, inputSize, pOutputSize );
+	unsigned char *pRet = LZMA_Compress( pInput, inputSize, pOutputSize, LZMA_DEFAULT_DICTIONARY );
 	if ( *pOutputSize <= inputSize )
 	{
 		// compression got worse or stayed the same

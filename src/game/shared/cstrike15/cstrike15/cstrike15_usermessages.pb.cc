@@ -1657,7 +1657,7 @@ void protobuf_AddDesc_cstrike15_2fcstrike15_5fusermessages_2eproto() {
 
   ::google::protobuf::protobuf_AddDesc_google_2fprotobuf_2fdescriptor_2eproto();
   ::protobuf_AddDesc_netmessages_2eproto();
-  ::protobuf_AddDesc_cstrike15_5fgcmessages_2eproto();
+  ::protobuf_AddDesc_cstrike15_2fcstrike15_5fgcmessages_2eproto();
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n&cstrike15/cstrike15_usermessages.proto"
     "\032 google/protobuf/descriptor.proto\032\021netm"

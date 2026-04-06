@@ -10,6 +10,16 @@ set(SHADERCOMPILE_DLL_SOURCES
     d3dxfxc.cpp
     ${SRC_DIR}/common/debug_dll_check.cpp
     ${SRC_DIR}/public/filesystem_helpers.cpp
+    ${SRC_DIR}/public/filesystem_init.cpp
+    ${SRC_DIR}/utils/common/filesystem_tools.cpp
+    ${SRC_DIR}/utils/lzma/lzma.cpp
+    ${SRC_DIR}/utils/lzma/C/Alloc.c
+    ${SRC_DIR}/utils/lzma/C/LzFind.c
+    ${SRC_DIR}/utils/lzma/C/LzFindMt.c
+    ${SRC_DIR}/utils/lzma/C/LzmaDec.c
+    ${SRC_DIR}/utils/lzma/C/LzmaEnc.c
+    ${SRC_DIR}/utils/lzma/C/LzmaLib.c
+    ${SRC_DIR}/utils/lzma/C/Threads.c
     ${SRC_DIR}/public/tier0/memoverride.cpp
     ${SRC_DIR}/utils/common/pacifier.cpp
     shadercompile.cpp
@@ -29,6 +39,7 @@ target_include_directories(Shadercompile_dll PRIVATE
     ${SRC_DIR}/public
     ${SRC_DIR}/public/tier0
     ${SRC_DIR}/public/tier1
+    ${SRC_DIR}/utils/common
     ${SRC_DIR}/utils/vmpi
     ${SRC_DIR}/dx9sdk/include
 )
@@ -50,6 +61,7 @@ target_link_libraries(Shadercompile_dll PRIVATE
     vstdlib
     tier3
     mathlib
+    prebuilt::vmpi
     # 系统库
     advapi32.lib
     comdlg32.lib
