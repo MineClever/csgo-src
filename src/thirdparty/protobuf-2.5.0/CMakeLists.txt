@@ -52,6 +52,7 @@ target_include_directories(valve_libprotobuf PUBLIC
 target_compile_definitions(valve_libprotobuf PRIVATE
     _LIB
     LIBPROTOBUF_EXPORTS
+    _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
 )
 
 target_compile_options(valve_libprotobuf PRIVATE

@@ -126,3 +126,4 @@ The game needs an existing CS:GO or Source SDK installation pointed at `game/`. 
 - Treat the shutdown crash and `sv_pure` behavior as known issues unless the task is explicitly about fixing them
 - Use [Plan.md](D:/_Code_Here/Git/csgo-src/Plan.md) as the repository-wide repair log and rolling project plan. It records confirmed issues that still need changes or fixes.
 - After every task, summarize newly discovered issues, resolved items, or priority changes and update `Plan.md` so the cross-task plan stays current.
+- `Plan.md` 必须使用中文编写，后续新增、修改、整理计划项时保持中文表述一致。
