@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2006, Valve Corporation, All rights reserved. ============//
+//========= Copyright ?1996-2006, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: VPC
 //
@@ -290,6 +290,11 @@ bool CProjectGenerator_Win32::WriteTool( const char *pToolName, const CProjectTo
 
 bool CProjectGenerator_Win32::WriteProperty( const PropertyState_t *pPropertyState, const char *pOutputName, const char *pOutputValue )
 {
+	if ( pPropertyState && pPropertyState->m_pToolProperty->m_bIgnoreForOutput )
+	{
+		return true;
+	}
+
 	if ( !pPropertyState )
 	{
 		m_XMLWriter.Write( CFmtStrMax( "%s=\"%s\"", pOutputName, pOutputValue ) );

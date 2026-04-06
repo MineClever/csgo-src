@@ -6,56 +6,86 @@ param(
     [string]$Output = ""
 )
 
+$ErrorActionPreference = "Stop"
+
+$Root = [System.IO.Path]::GetFullPath($Root)
 if (-not $Output) {
     $Output = Join-Path $Root "cmake_patch.zip"
+} else {
+    $Output = [System.IO.Path]::GetFullPath($Output)
 }
 
-if (Test-Path $Output) { Remove-Item $Output -Force }
+if (Test-Path -LiteralPath $Output) {
+    Remove-Item -LiteralPath $Output -Force
+}
 
-$files = @(
+$files = [System.Collections.Generic.List[string]]::new()
+@(
     "CMakeLists.txt",
     "CmakeCreateSolution.bat",
     "CmakeBuildSolution.bat",
+    "CmakeCreateVPCSolution.bat",
+    "CmakeBuildVPCSolution.bat",
     "CmakeFilePackToZip.bat",
     "CmakeFilePack.ps1",
     "src\CreateSolution.bat",
     "src\UpgradeToVS2022.ps1",
     "src\tools\extract_sources.py"
-)
-
-# src\cmake\ 下所有文件
-Get-ChildItem -Path (Join-Path $Root "src\cmake") -File | ForEach-Object {
-    $files += "src\cmake\$($_.Name)"
+) | ForEach-Object {
+    $files.Add($_)
 }
 
-# src\ 下所有 CMakeLists.txt（递归）
-Get-ChildItem -Path (Join-Path $Root "src") -Filter "CMakeLists.txt" -Recurse | ForEach-Object {
-    $files += $_.FullName.Substring($Root.Length).TrimStart('\')
+$cmakeDir = Join-Path $Root "src\cmake"
+if (Test-Path -LiteralPath $cmakeDir) {
+    Get-ChildItem -LiteralPath $cmakeDir -Recurse -File | ForEach-Object {
+        $relativePath = $_.FullName.Substring($Root.Length).TrimStart([char[]]@('\', '/'))
+        $files.Add($relativePath)
+    }
 }
+
+$srcDir = Join-Path $Root "src"
+if (Test-Path -LiteralPath $srcDir) {
+    Get-ChildItem -LiteralPath $srcDir -Filter "CMakeLists.txt" -Recurse -File | ForEach-Object {
+        $relativePath = $_.FullName.Substring($Root.Length).TrimStart([char[]]@('\', '/'))
+        $files.Add($relativePath)
+    }
+}
+
+$uniqueFiles = $files | Sort-Object -Unique
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = [System.IO.Compression.ZipFile]::Open($Output, 'Create')
+$zip = [System.IO.Compression.ZipFile]::Open($Output, "Create")
 
 $written = 0
 $missing = 0
-foreach ($rel in $files) {
-    $full = Join-Path $Root $rel
-    if (Test-Path $full) {
+
+try {
+    foreach ($rel in $uniqueFiles) {
+        $full = Join-Path $Root $rel
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+            Write-Warning "MISSING: $rel"
+            $missing++
+            continue
+        }
+
         $entryName = $rel.Replace('\', '/')
-        $entry  = $zip.CreateEntry($entryName)
-        $stream = $entry.Open()
-        $bytes  = [System.IO.File]::ReadAllBytes($full)
-        $stream.Write($bytes, 0, $bytes.Length)
-        $stream.Close()
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $zip,
+            $full,
+            $entryName,
+            [System.IO.Compression.CompressionLevel]::Optimal
+        ) | Out-Null
+
         Write-Host "  + $entryName"
         $written++
-    } else {
-        Write-Warning "MISSING: $rel"
-        $missing++
     }
 }
-$zip.Dispose()
+finally {
+    $zip.Dispose()
+}
 
 Write-Host ""
 Write-Host "Packed $written file(s) -> $Output"
-if ($missing -gt 0) { Write-Warning "$missing file(s) missing." }
+if ($missing -gt 0) {
+    Write-Warning "$missing file(s) missing."
+}

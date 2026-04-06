@@ -416,3 +416,5 @@ set_source_files_properties(
 valve_set_dll_importlib_output(engine)
 
 valve_publish_dll(engine "${GAME_BIN_DIR}")
+
+add_subdirectory(voice_codecs)

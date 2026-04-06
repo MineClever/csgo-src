@@ -34,16 +34,32 @@ function(valve_publish_exe TARGET DEST_DIR)
     )
 endfunction()
 
+function(valve_publish_target_runtime TARGET DEST_DIR)
+    add_custom_command(TARGET ${TARGET} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${DEST_DIR}"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:${TARGET}>"
+            "${DEST_DIR}/$<TARGET_FILE_NAME:${TARGET}>"
+        COMMENT "Publishing ${TARGET} runtime -> ${DEST_DIR}"
+        VERBATIM
+    )
+endfunction()
+
 # -----------------------------------------------------------------------------
 # 函数：valve_set_static_lib_output(TARGET)
 # 将静态库 .lib 直接输出到 lib/public/（所有配置统一目录）
 # 等价于 vcxproj OutputFile = ..\lib\public\xxx.lib
 # -----------------------------------------------------------------------------
 function(valve_set_static_lib_output TARGET)
+    if(DEFINED VALVE_BUILT_LIB_PUBLIC)
+        set(_valve_archive_output_dir "${VALVE_BUILT_LIB_PUBLIC}")
+    else()
+        set(_valve_archive_output_dir "${LIB_PUBLIC}")
+    endif()
     set_target_properties(${TARGET} PROPERTIES
-        ARCHIVE_OUTPUT_DIRECTORY         "${LIB_PUBLIC}"
-        ARCHIVE_OUTPUT_DIRECTORY_DEBUG   "${LIB_PUBLIC}"
-        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${LIB_PUBLIC}"
+        ARCHIVE_OUTPUT_DIRECTORY         "${_valve_archive_output_dir}"
+        ARCHIVE_OUTPUT_DIRECTORY_DEBUG   "${_valve_archive_output_dir}"
+        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${_valve_archive_output_dir}"
     )
 endfunction()
 
@@ -53,9 +69,14 @@ endfunction()
 # DLL 本身由 valve_publish_dll 负责复制到 game/bin/
 # -----------------------------------------------------------------------------
 function(valve_set_dll_importlib_output TARGET)
+    if(DEFINED VALVE_BUILT_LIB_PUBLIC)
+        set(_valve_archive_output_dir "${VALVE_BUILT_LIB_PUBLIC}")
+    else()
+        set(_valve_archive_output_dir "${LIB_PUBLIC}")
+    endif()
     set_target_properties(${TARGET} PROPERTIES
-        ARCHIVE_OUTPUT_DIRECTORY         "${LIB_PUBLIC}"
-        ARCHIVE_OUTPUT_DIRECTORY_DEBUG   "${LIB_PUBLIC}"
-        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${LIB_PUBLIC}"
+        ARCHIVE_OUTPUT_DIRECTORY         "${_valve_archive_output_dir}"
+        ARCHIVE_OUTPUT_DIRECTORY_DEBUG   "${_valve_archive_output_dir}"
+        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${_valve_archive_output_dir}"
     )
 endfunction()

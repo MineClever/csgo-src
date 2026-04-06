@@ -60,11 +60,15 @@ InitReturnVal_t CFbxSystem::Init()
 //-----------------------------------------------------------------------------
 void CFbxSystem::Shutdown()
 {
+#if defined( VALVE_FBX_BACKEND_OPENFBX )
+	m_pFbxManager = NULL;
+#else
 	if ( m_pFbxManager )
 	{
 		m_pFbxManager->Destroy();
 		m_pFbxManager = NULL;
 	}
+#endif
 }
 
 
@@ -73,6 +77,9 @@ void CFbxSystem::Shutdown()
 //-----------------------------------------------------------------------------
 FbxManager *CFbxSystem::GetFbxManager()
 {
+#if defined( VALVE_FBX_BACKEND_OPENFBX )
+	return NULL;
+#else
 	if ( m_pFbxManager )
 		return m_pFbxManager;
 
@@ -102,4 +109,5 @@ FbxManager *CFbxSystem::GetFbxManager()
 	}
 
 	return m_pFbxManager;
+#endif
 }

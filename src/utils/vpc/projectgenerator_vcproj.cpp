@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2006, Valve Corporation, All rights reserved. ============//
+//========= Copyright ?1996-2006, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: VPC
 //
@@ -1471,6 +1471,11 @@ bool CVCProjGenerator::StartPropertySection( configKeyword_e eKeyword, bool *pbS
 			g_pVPC->VPCError( "Could not get %s tool interface from configuration", g_pVPC->KeywordToName( eKeyword ) );
 		}
 		bHandled = true;
+		break;
+
+	case KEYWORD_INTELLISENSE:
+		// VS2010+ definitions may include an auxiliary Intellisense section.
+		// The legacy generator doesn't emit it, but it must parse past it safely.
 		break;
 
 	default:

@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2006, Valve Corporation, All rights reserved. ============//
+//========= Copyright ?1996-2006, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: VPC
 //
@@ -27,6 +27,7 @@ static KeywordName_t s_KeywordNameTable[] =
 	{"$CustomBuildStep",		KEYWORD_CUSTOMBUILDSTEP},
 	{"$Xbox360ImageConversion",	KEYWORD_XBOXIMAGE},
 	{"$ConsoleDeployment",		KEYWORD_XBOXDEPLOYMENT},
+	{"$Intellisense",			KEYWORD_INTELLISENSE},
 };
 
 const char *CVPC::KeywordToName( configKeyword_e keyword )

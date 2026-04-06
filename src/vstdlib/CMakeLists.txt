@@ -21,6 +21,19 @@ set(VSTDLIB_SOURCES
 
 add_library(vstdlib SHARED ${VSTDLIB_SOURCES})
 
+if(VALVE_TARGET_ARCH STREQUAL "x64")
+    set(VSTDLIB_GETSTACKPTR64_OBJ "${CMAKE_CURRENT_BINARY_DIR}/getstackptr64.obj")
+    add_custom_command(
+        OUTPUT "${VSTDLIB_GETSTACKPTR64_OBJ}"
+        COMMAND "${CMAKE_ASM_MASM_COMPILER}" /nologo /c /Fo"${VSTDLIB_GETSTACKPTR64_OBJ}" "${CMAKE_CURRENT_SOURCE_DIR}/getstackptr64.masm"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/getstackptr64.masm"
+        VERBATIM
+        COMMENT "Compiling getstackptr64.masm"
+    )
+    set_source_files_properties("${VSTDLIB_GETSTACKPTR64_OBJ}" PROPERTIES GENERATED TRUE EXTERNAL_OBJECT TRUE)
+    target_sources(vstdlib PRIVATE "${VSTDLIB_GETSTACKPTR64_OBJ}")
+endif()
+
 valve_apply_base_settings(vstdlib)
 
 target_compile_definitions(vstdlib PRIVATE

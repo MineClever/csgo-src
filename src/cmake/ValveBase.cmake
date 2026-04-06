@@ -11,7 +11,6 @@ set(VALVE_GLOBAL_DEFINES
     WIN32
     _WIN32
     COMPILER_MSVC
-    COMPILER_MSVC32
     "_DLL_EXT=.dll"
     CSTRIKE15
     AVI_VIDEO
@@ -25,6 +24,15 @@ set(VALVE_GLOBAL_DEFINES
     _ALLOW_MSC_VER_MISMATCH
     VPC
 )
+
+if(VALVE_TARGET_ARCH STREQUAL "x64")
+    list(APPEND VALVE_GLOBAL_DEFINES
+        _WIN64
+        COMPILER_MSVC64
+    )
+else()
+    list(APPEND VALVE_GLOBAL_DEFINES COMPILER_MSVC32)
+endif()
 
 # Debug 特有
 set(VALVE_DEFINES_DEBUG
@@ -73,6 +81,7 @@ set(VALVE_DISABLED_WARNINGS
 # -----------------------------------------------------------------------------
 set(VALVE_COMPILE_OPTIONS
     /MP             # 多处理器编译
+    /FS             # 允许并行 cl.exe 安全写入同一 PDB，避免 C1041
     /W3             # 警告级别 3
     /arch:SSE2      # SSE2 指令集
     /fp:fast        # 快速浮点模型
@@ -124,9 +133,10 @@ function(valve_apply_base_settings TARGET)
     )
 
     target_link_options(${TARGET} PRIVATE
-        /MACHINE:X86
+        $<$<STREQUAL:${VALVE_TARGET_ARCH},x64>:/MACHINE:X64>
+        $<$<NOT:$<STREQUAL:${VALVE_TARGET_ARCH},x64>>:/MACHINE:X86>
         /ignore:4221    # 忽略"无公共符号"链接器警告
-        /SAFESEH:NO     # vcxproj: ImageHasSafeExceptionHandlers=false
+        $<$<NOT:$<STREQUAL:${VALVE_TARGET_ARCH},x64>>:/SAFESEH:NO>     # vcxproj: ImageHasSafeExceptionHandlers=false
         /NODEFAULTLIB:libc
         /NODEFAULTLIB:libcd
         # memoverride.cpp intentionally redefines CRT allocation functions

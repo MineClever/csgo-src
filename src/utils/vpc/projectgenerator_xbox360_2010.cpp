@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2006, Valve Corporation, All rights reserved. ============//
+//========= Copyright ?1996-2006, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: VPC
 //
@@ -520,6 +520,11 @@ bool CProjectGenerator_Xbox360_2010::WriteTool( const char *pToolName, const CPr
 
 bool CProjectGenerator_Xbox360_2010::WriteProperty( const PropertyState_t *pPropertyState, bool bEmitConfiguration, const char *pConfigName, const char *pOutputName, const char *pOutputValue )
 {
+	if ( pPropertyState && pPropertyState->m_pToolProperty->m_bIgnoreForOutput )
+	{
+		return true;
+	}
+
 	if ( !pPropertyState )
 	{
 		m_XMLWriter.WriteLineNode( pOutputName, "", pOutputValue );

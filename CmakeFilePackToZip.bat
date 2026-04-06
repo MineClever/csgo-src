@@ -20,4 +20,5 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-pause
+echo Pack completed successfully.
+exit /b 0

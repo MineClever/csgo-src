@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # vscript
 # Generated from: vscript.vcxproj
 # =============================================================================
@@ -151,3 +151,5 @@ target_link_libraries(vscript PRIVATE
 valve_set_dll_importlib_output(vscript)
 
 valve_publish_dll(vscript "${GAME_BIN_DIR}")
+
+add_subdirectory(languages)

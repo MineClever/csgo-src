@@ -9,7 +9,7 @@
 
 
 // FBX includes
-#include <fbxsdk.h>
+#include "fbxsystem/fbxsdk_compat.h"
 
 // Valve includes
 #include "appframework/iappsystem.h"

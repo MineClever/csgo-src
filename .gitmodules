@@ -1,0 +1,6 @@
+[submodule "thirdparty/speex-upstream"]
+	path = thirdparty/speex-upstream
+	url = https://github.com/xiph/speex.git
+[submodule "thirdparty/OpenFBX"]
+	path = thirdparty/OpenFBX
+	url = https://github.com/nem0/OpenFBX.git

@@ -168,13 +168,15 @@ static void RemapMaterials( const CUtlVector< CUtlString > &materialSearchPathLi
 
 				const char *szSuffixes[] = { "_color." };
 
-				FbxString sTmpResourceName = pDmeMaterial->GetMaterialName();
+				char szTmpResourceName[MAX_PATH] = {};
+				V_strncpy( szTmpResourceName, pDmeMaterial->GetMaterialName(), ARRAYSIZE( szTmpResourceName ) );
 
 				for ( int i = 0; i < ARRAYSIZE( szSuffixes ); ++i )
 				{
-					if ( sTmpResourceName.FindAndReplace( szSuffixes[i], "." ) )
+					char szReplacedMaterialName[MAX_PATH] = {};
+					if ( V_StrSubst( szTmpResourceName, szSuffixes[i], ".", szReplacedMaterialName, ARRAYSIZE( szReplacedMaterialName ) ) )
 					{
-						if ( FindMaterialResource( szResourceName, sTmpResourceName.Buffer(), materialSearchPathList ) )
+						if ( FindMaterialResource( szResourceName, szReplacedMaterialName, materialSearchPathList ) )
 						{
 							V_FileBase( szResourceName, szMaterialName, ARRAYSIZE( szMaterialName ) );
 							pDmeMaterial->SetName( szMaterialName );

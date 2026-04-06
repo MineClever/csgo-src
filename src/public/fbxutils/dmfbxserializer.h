@@ -15,7 +15,7 @@
 
 
 // FBX includes
-#include <fbxsdk.h>
+#include "fbxsystem/fbxsdk_compat.h"
 
 
 // Valve includes
@@ -46,7 +46,7 @@ public:
 	virtual ~CDmFbxSerializer();
 
 	const char *GetName() const { return "fbx"; }
-	const char *GetDescription() const { return "Autodesk® FBX®"; }
+	const char *GetDescription() const { return "FBX"; }
 
 	// CDmFbxSerializer
 	CDmElement *ReadFBX( const char *pszFilename );

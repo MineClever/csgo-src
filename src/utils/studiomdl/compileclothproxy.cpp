@@ -802,7 +802,11 @@ void CClothProxyCompiler::CreateClothQuads( CMeshContext &context )
 	EnumerateFaces( context.m_pDmeMesh, context.m_pBindState, &dynamicDmePos,
 		[ pCompiler, &context, nBindCount, &nSkippedQuads ]( int nPos[], int nCount )
 	{
-		Assert( nCount >= 3 && nCount <= 4 );
+		if ( nCount < 3 || nCount > 4 )
+		{
+			Warning( "Skipping face with unexpected vertex count %d in mesh %s\n", nCount, context.m_pDmeMesh->GetName() );
+			return;
+		}
 		CAuthPhysFx::CQuad quad;
 		Vector v[ 4 ];
 		int nDynamic = 0;
@@ -815,7 +819,11 @@ void CClothProxyCompiler::CreateClothQuads( CMeshContext &context )
 			quad.m_nNodes[ j ] = nFxBone;
 			v[ j ] = context.m_pAuthFx->GetBone( nFxBone )->m_Transform.m_vPosition;
 		}
-		Assert( nDynamic > 0 ); NOTE_UNUSED( nDynamic );
+		if ( nDynamic <= 0 )
+		{
+			Warning( "Skipping cloth quad with no simulated nodes in mesh %s\n", context.m_pDmeMesh->GetName() );
+			return;
+		}
 		for ( int j = nCount; j < 4; ++j )
 		{
 			quad.m_nNodes[ j ] = quad.m_nNodes[ nCount - 1 ];
@@ -842,7 +850,11 @@ void CClothProxyCompiler::CreateClothQuads( CMeshContext &context )
 						if ( pWeight[ nBinding ] > FLT_EPSILON )
 						{
 							int nIndex = pIndices[ nBinding ];
-							Assert( nIndex >= 0 && nIndex < context.m_pModelContext->m_JointToBoneSubset.Count() );
+							if ( nIndex < 0 || nIndex >= context.m_pModelContext->m_JointToBoneSubset.Count() )
+							{
+								Warning( "Skipping invalid joint index %d in mesh %s\n", nIndex, context.m_pDmeMesh->GetName() );
+								continue;
+							}
 							arrBones.InsertIfNotFound( nIndex );
 						}
 					}

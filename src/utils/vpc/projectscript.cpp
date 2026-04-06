@@ -9,6 +9,21 @@
 #include "tier1/keyvalues.h"
 #include "baseprojectdatacollector.h"
 
+void VPC_Keyword_FileBuildOrderModifier( void )
+{
+	const char *pToken = g_pVPC->GetScript().GetToken( true );
+	if ( !pToken || !pToken[0] )
+		return;
+
+	if ( !V_stricmp( pToken, "}" ) )
+	{
+		return;
+	}
+
+	// The legacy generator doesn't preserve per-file ordering metadata,
+	// but newer scripts emit the token and expect it to parse cleanly.
+}
+
 void VPC_ParseFileSection( void )
 {
 	while ( 1 )
@@ -25,6 +40,10 @@ void VPC_ParseFileSection( void )
 		if ( !V_stricmp( pToken, "$configuration" ) )
 		{
 			VPC_Keyword_FileConfiguration( );
+		}
+		else if ( !V_stricmp( pToken, "$BuildOrderModifier" ) )
+		{
+			VPC_Keyword_FileBuildOrderModifier();
 		}
 	}
 }
@@ -438,9 +457,24 @@ void VPC_Keyword_Folder()
 			// add file
 			VPC_Keyword_AddFile();
 		}
+		else if ( !V_stricmp( pToken, "$File_CreatePCH" ) )
+		{
+			// Legacy VPC doesn't carry explicit file PCH mode, but the token must parse.
+			VPC_Keyword_AddFile();
+		}
+		else if ( !V_stricmp( pToken, "$File_NoPCH" ) )
+		{
+			// Legacy VPC doesn't carry explicit file PCH mode, but the token must parse.
+			VPC_Keyword_AddFile();
+		}
 		else if ( !V_stricmp( pToken, "$DynamicFile" ) )
 		{
 			// add file
+			VPC_Keyword_AddFile( "dynamic" );
+		}
+		else if ( !V_stricmp( pToken, "$DynamicFile_NoPCH" ) )
+		{
+			// Legacy VPC doesn't carry explicit file PCH mode, but the token must parse.
 			VPC_Keyword_AddFile( "dynamic" );
 		}
 		else if ( !V_stricmp( pToken, "$schemafile" ) )
@@ -1203,6 +1237,16 @@ void VPC_HandleProjectCommands( const char *pUnusedScriptName, int depth, bool b
 			VPC_Keyword_Folder();
 		}
 		else if ( !V_stricmp( pToken, "$File" ) )
+		{
+			// add root level file
+			VPC_Keyword_AddFile();
+		}
+		else if ( !V_stricmp( pToken, "$File_CreatePCH" ) )
+		{
+			// add root level file
+			VPC_Keyword_AddFile();
+		}
+		else if ( !V_stricmp( pToken, "$File_NoPCH" ) )
 		{
 			// add root level file
 			VPC_Keyword_AddFile();

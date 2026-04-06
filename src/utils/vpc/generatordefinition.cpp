@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2006, Valve Corporation, All rights reserved. ============//
+//========= Copyright ?1996-2006, Valve Corporation, All rights reserved. ============//
 //
 //
 //=====================================================================================//
@@ -94,6 +94,14 @@ void CGeneratorDefinition::IterateAttributesKey( ToolProperty_t *pProperty, KeyV
 	else if ( !V_stricmp( pAttributeName, "GlobalProperty" ) )
 	{
 		pProperty->m_bEmitAsGlobalProperty = pAttributesKV->GetBool();
+	}
+	else if ( !V_stricmp( pAttributeName, "IgnoreForOutput" ) )
+	{
+		pProperty->m_bIgnoreForOutput = pAttributesKV->GetBool();
+	}
+	else if ( !V_stricmp( pAttributeName, "GeneratedOnOutput" ) )
+	{
+		pProperty->m_bGeneratedOnOutput = pAttributesKV->GetBool();
 	}
 	else if ( !V_stricmp( pAttributeName, "ordinals" ) )
 	{

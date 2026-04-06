@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # src/CMakeLists.txt
 # 自动生成 — 所有 Source Engine 编译目标
 # =============================================================================
@@ -33,10 +33,13 @@ add_subdirectory(avi)
 add_subdirectory(datacache)
 add_subdirectory(dedicated)
 add_subdirectory(dedicated_main)
+add_subdirectory(dmeutils)
 add_subdirectory(dmserializers)
+add_subdirectory(dmxeditlib)
 add_subdirectory(dmxloader)
 add_subdirectory(engine)
 add_subdirectory(engine_ds)
+add_subdirectory(fbxutils)
 add_subdirectory(fgdlib)
 add_subdirectory(fow)
 add_subdirectory(game)
@@ -64,7 +67,9 @@ add_subdirectory(soundemittersystem)
 add_subdirectory(soundsystem)
 add_subdirectory(studiorender)
 add_subdirectory(thirdparty)
+add_subdirectory(togl)
 add_subdirectory(tools)
+add_subdirectory(tracker)
 add_subdirectory(utils)
 add_subdirectory(vgui2)
 add_subdirectory(vguimatsurface)

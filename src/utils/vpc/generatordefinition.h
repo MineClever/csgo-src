@@ -38,6 +38,7 @@ enum configKeyword_e
 	KEYWORD_CUSTOMBUILDSTEP,
 	KEYWORD_XBOXIMAGE,
 	KEYWORD_XBOXDEPLOYMENT,
+	KEYWORD_INTELLISENSE,
 	KEYWORD_MAX,
 };
 
@@ -70,6 +71,8 @@ struct ToolProperty_t
 		m_bAppendSlash = false;
 		m_bPreferSemicolonNoComma = false;
 		m_bPreferSemicolonNoSpace = false;
+		m_bIgnoreForOutput = false;
+		m_bGeneratedOnOutput = false;
 	}
 
 	CUtlString						m_ParseString;
@@ -86,6 +89,8 @@ struct ToolProperty_t
 	bool							m_bAppendSlash;
 	bool							m_bPreferSemicolonNoComma;
 	bool							m_bPreferSemicolonNoSpace;
+	bool							m_bIgnoreForOutput;
+	bool							m_bGeneratedOnOutput;
 };
 
 struct GeneratorTool_t
