@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -325,7 +326,8 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
         return maya_dmx::ReportWarning("maya_dmx: skipped skinning because joint weight layout did not match jointCount.");
     }
 
-    MString command("skinCluster -tsb");
+    MStatus status;
+    MString command("skinCluster -tsb -mi 0 -omi false");
     std::vector<const simple_dmx::Element *> activeJoints;
     activeJoints.reserve(context.jointOrder.size());
     for (const simple_dmx::Element *jointElement : context.jointOrder)
@@ -340,6 +342,16 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
         command += " \"";
         command += it->second.fullPathName();
         command += "\"";
+
+        MFnDependencyNode influenceNode(it->second.node(), &status);
+        if (status)
+        {
+            MPlug lockWeightsPlug = influenceNode.findPlug("liw", true, &status);
+            if (status)
+            {
+                lockWeightsPlug.setBool(false);
+            }
+        }
     }
 
     if (activeJoints.empty())
@@ -349,7 +361,7 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
     }
 
     MDagPath meshParentPath;
-    MStatus status = MDagPath::getAPathTo(meshParentObject, meshParentPath);
+    status = MDagPath::getAPathTo(meshParentObject, meshParentPath);
     if (!status)
     {
         return status;
@@ -392,6 +404,24 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
         return status;
     }
 
+    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    MPlug maintainMaxInfluencesPlug = skinClusterNode.findPlug("maintainMaxInfluences", true, &status);
+    if (status)
+    {
+        maintainMaxInfluencesPlug.setBool(false);
+    }
+
+    MPlug normalizeWeightsPlug = skinClusterNode.findPlug("normalizeWeights", true, &status);
+    if (status)
+    {
+        normalizeWeightsPlug.setShort(0);
+    }
+
     MFnSingleIndexedComponent componentFn;
     MObject vertexComponent = componentFn.create(MFn::kMeshVertComponent, &status);
     if (!status)
@@ -410,7 +440,25 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
         return status;
     }
 
+    MDagPathArray influencePaths;
+    const unsigned int influenceCount = skinClusterFn.influenceObjects(influencePaths, &status);
+    if (!status)
+    {
+        return status;
+    }
+
     MIntArray influenceIndices;
+    influenceIndices.setLength(influenceCount);
+    for (unsigned int influenceSlot = 0; influenceSlot < influenceCount; ++influenceSlot)
+    {
+        const unsigned int influenceIndex = skinClusterFn.indexForInfluenceObject(influencePaths[influenceSlot], &status);
+        if (!status)
+        {
+            return status;
+        }
+        influenceIndices[influenceSlot] = static_cast<int>(influenceIndex);
+    }
+
     std::unordered_map<int, unsigned int> dmxJointToInfluenceSlot;
     for (unsigned int dmxJointIndex = 0; dmxJointIndex < static_cast<unsigned int>(context.jointOrder.size()); ++dmxJointIndex)
     {
@@ -420,14 +468,14 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
             continue;
         }
 
-        const unsigned int influenceIndex = skinClusterFn.indexForInfluenceObject(it->second, &status);
-        if (!status)
+        for (unsigned int influenceSlot = 0; influenceSlot < influencePaths.length(); ++influenceSlot)
         {
-            return status;
+            if (influencePaths[influenceSlot] == it->second)
+            {
+                dmxJointToInfluenceSlot[static_cast<int>(dmxJointIndex)] = influenceSlot;
+                break;
+            }
         }
-
-        dmxJointToInfluenceSlot[static_cast<int>(dmxJointIndex)] = influenceIndices.length();
-        influenceIndices.append(static_cast<int>(influenceIndex));
     }
 
     if (influenceIndices.length() == 0)
@@ -451,7 +499,30 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
             }
 
             const unsigned int influenceSlot = influenceSlotIt->second;
-            weights[vertexIndex * influenceIndices.length() + influenceSlot] = weightValue;
+            weights[vertexIndex * influenceIndices.length() + influenceSlot] += weightValue;
+        }
+
+        float sum = 0.0f;
+        for (unsigned int influenceSlot = 0; influenceSlot < influenceIndices.length(); ++influenceSlot)
+        {
+            const float weightValue = weights[vertexIndex * influenceIndices.length() + influenceSlot];
+            if (weightValue > 0.0f)
+            {
+                sum += weightValue;
+            }
+        }
+
+        if (sum > 0.0f)
+        {
+            const float invSum = 1.0f / sum;
+            for (unsigned int influenceSlot = 0; influenceSlot < influenceIndices.length(); ++influenceSlot)
+            {
+                float &weightValue = weights[vertexIndex * influenceIndices.length() + influenceSlot];
+                if (weightValue > 0.0f)
+                {
+                    weightValue *= invSum;
+                }
+            }
         }
     }
 
