@@ -6,6 +6,9 @@ import maya.standalone
 
 
 def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
+    sys.stdout.write(f"[maya_dmx_case] {case_name}\n")
+    sys.stdout.flush()
+
     input_path = os.path.join(sample_dir, f"{case_name}.dmx")
     exported_text = os.path.join(output_dir, f"{case_name}.maya_export.dmx")
     exported_binary = os.path.join(output_dir, f"{case_name}.maya_export.dmxb")

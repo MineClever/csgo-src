@@ -37,6 +37,17 @@ Maya standalone regression:
 dcc_plugin\RunMayaBatchRegression.bat
 ```
 
+Workflow command inside Maya:
+
+```mel
+mayaDmxWorkflow -savePreset "default" -outputDirectory "D:/exports" -encoding "binary" -exportSkin true -exportDeltaStates true;
+mayaDmxWorkflow -listPresets;
+mayaDmxWorkflow -loadPreset "default";
+mayaDmxWorkflow -saveBatch "characters" -batchEntry "|root_chr_a|characters/chr_a.dmx" -batchEntry "|root_chr_b|characters/chr_b.dmx";
+mayaDmxWorkflow -listBatches;
+mayaDmxWorkflow -loadBatch "characters";
+```
+
 Or through CMake:
 
 ```powershell
@@ -62,6 +73,8 @@ dcc_plugin\InstallPluginModuleToMaya.bat
 This writes `%USERPROFILE%\Documents\maya\modules\maya_dmx.mod` and copies the plugin to `dcc_plugin\maya_module\plug-ins\windows\2022\`.
 
 `RunMayaBatchRegression.bat` defaults to `C:\Program Files\Autodesk\Maya2022\bin\mayapy.exe`. If Maya is installed elsewhere, set `MAYA_PYTHON_EXE_OVERRIDE` before running it.
+
+`mayaDmxWorkflow` is the current workflow-layer skeleton. It persists export presets and batch manifests through Maya optionVars, but it does not execute batch exports yet.
 
 ## Current Import Scope
 
@@ -128,4 +141,5 @@ Sample file for manual Maya import:
 - `src/common/` - shared utilities and diagnostics
 - `src/importer/` - DMX importer translator
 - `src/exporter/` - DMX exporter translator
+- `src/workflow/` - workflow-layer preset and batch manifest management for future batch export features
 - `src/plugin/` - plugin entry point and translator registration

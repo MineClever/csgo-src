@@ -8,7 +8,9 @@
 #include <cstdint>
 #include <cstring>
 #include <cmath>
+#include <deque>
 #include <fstream>
+#include <exception>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -35,6 +37,8 @@
 #include <maya/MPlug.h>
 #include <maya/MSelectionList.h>
 #include <maya/MVector.h>
+
+#include <Windows.h>
 
 namespace
 {
@@ -187,7 +191,7 @@ private:
         }
     }
 
-    std::vector<DmxElement> m_elements;
+    std::deque<DmxElement> m_elements;
     int m_nextId = 0;
 };
 
@@ -207,6 +211,27 @@ constexpr std::uint8_t kAttributeVector2Array = 23;
 constexpr std::uint8_t kAttributeVector3Array = 24;
 constexpr std::uint8_t kAttributeQuaternionArray = 27;
 constexpr int kCurrentBinaryEncoding = 5;
+
+void AppendDebugLog(const char *message)
+{
+    char tempPath[MAX_PATH] = {};
+    const DWORD length = GetTempPathA(MAX_PATH, tempPath);
+    if (length == 0 || length >= MAX_PATH)
+    {
+        return;
+    }
+
+    std::string logPath(tempPath);
+    logPath += "maya_dmx_export_debug.log";
+
+    std::ofstream logFile(logPath.c_str(), std::ios::out | std::ios::app);
+    if (!logFile.is_open())
+    {
+        return;
+    }
+
+    logFile << message << "\n";
+}
 
 const DmxAttribute *FindAttribute(const DmxElement &element, const char *attributeName)
 {
@@ -570,14 +595,11 @@ private:
             for (const std::string &value : attribute.scalarArray)
             {
                 const std::vector<double> values = ParseNumberList(value);
-                if (static_cast<int>(values.size()) < components)
-                {
-                    errorMessage = "Binary DMX export failed: vector array attribute had too few components.";
-                    return false;
-                }
                 for (int component = 0; component < components; ++component)
                 {
-                    WriteFloat32(output, static_cast<float>(values[static_cast<size_t>(component)]));
+                    const float componentValue =
+                        component < static_cast<int>(values.size()) ? static_cast<float>(values[static_cast<size_t>(component)]) : 0.0f;
+                    WriteFloat32(output, componentValue);
                 }
             }
             return true;
@@ -746,13 +768,19 @@ std::vector<MDagPath> CollectExportRoots(MPxFileTranslator::FileAccessMode mode)
 
     if (mode == MPxFileTranslator::kExportActiveAccessMode)
     {
-        MSelectionList selectionList;
-        if (MGlobal::getActiveSelectionList(selectionList) == MS::kSuccess)
+        MStringArray selectedPaths;
+        if (MGlobal::executeCommand("ls -sl -long", selectedPaths) == MS::kSuccess)
         {
-            for (unsigned int i = 0; i < selectionList.length(); ++i)
+            for (unsigned int i = 0; i < selectedPaths.length(); ++i)
             {
+                MSelectionList selectionList;
+                if (selectionList.add(selectedPaths[i]) != MS::kSuccess)
+                {
+                    continue;
+                }
+
                 MDagPath dagPath;
-                if (selectionList.getDagPath(i, dagPath) != MS::kSuccess)
+                if (selectionList.getDagPath(0, dagPath) != MS::kSuccess)
                 {
                     continue;
                 }
@@ -1449,67 +1477,87 @@ MPxFileTranslator::MFileKind DmxExportTranslator::identifyFile(const MFileObject
 
 MStatus DmxExportTranslator::writer(const MFileObject &fileObject, const MString &options, FileAccessMode mode)
 {
-    const std::vector<MDagPath> exportRoots = CollectExportRoots(mode);
-    if (exportRoots.empty())
+    try
     {
-        return maya_dmx::ReportError("maya_dmx: nothing to export.");
-    }
-
-    DmxTextBuilder builder;
-    ExportContext context;
-    DmxElement *modelElement = builder.CreateElement("DmeModel");
-    modelElement->attributes.push_back(MakeScalarAttribute("name", "string", "maya_export"));
-    modelElement->attributes.push_back(MakeScalarAttribute("upAxis", "string", "Y"));
-
-    std::vector<DmxElement *> rootChildren;
-    for (const MDagPath &rootPath : exportRoots)
-    {
-        if (DmxElement *child = BuildDagElement(builder, rootPath, context))
+        AppendDebugLog("writer: begin");
+        const std::vector<MDagPath> exportRoots = CollectExportRoots(mode);
+        AppendDebugLog("writer: collected roots");
+        if (exportRoots.empty())
         {
-            rootChildren.push_back(child);
+            AppendDebugLog("writer: no roots");
+            return maya_dmx::ReportError("maya_dmx: nothing to export.");
         }
-    }
 
-    if (!rootChildren.empty())
-    {
-        modelElement->attributes.push_back(MakeElementArrayAttribute("children", rootChildren));
-    }
-    if (!context.jointElements.empty())
-    {
-        modelElement->attributes.push_back(MakeElementArrayAttribute("jointList", context.jointElements));
-    }
+        DmxTextBuilder builder;
+        ExportContext context;
+        DmxElement *modelElement = builder.CreateElement("DmeModel");
+        modelElement->attributes.push_back(MakeScalarAttribute("name", "string", "maya_export"));
+        modelElement->attributes.push_back(MakeScalarAttribute("upAxis", "string", "Y"));
 
-    const bool binaryExport = IsBinaryExportRequested(fileObject, options);
-
-    std::string serialized;
-    std::string serializeError;
-    if (binaryExport)
-    {
-        DmxBinarySerializer binarySerializer;
-        if (!binarySerializer.Serialize(*modelElement, serialized, serializeError))
+        std::vector<DmxElement *> rootChildren;
+        for (const MDagPath &rootPath : exportRoots)
         {
-            return maya_dmx::ReportError(serializeError.c_str());
+            if (DmxElement *child = BuildDagElement(builder, rootPath, context))
+            {
+                rootChildren.push_back(child);
+            }
         }
+        AppendDebugLog("writer: built dag elements");
+
+        if (!rootChildren.empty())
+        {
+            modelElement->attributes.push_back(MakeElementArrayAttribute("children", rootChildren));
+        }
+        if (!context.jointElements.empty())
+        {
+            modelElement->attributes.push_back(MakeElementArrayAttribute("jointList", context.jointElements));
+        }
+
+        const bool binaryExport = IsBinaryExportRequested(fileObject, options);
+
+        std::string serialized;
+        std::string serializeError;
+        if (binaryExport)
+        {
+            DmxBinarySerializer binarySerializer;
+            if (!binarySerializer.Serialize(*modelElement, serialized, serializeError))
+            {
+                AppendDebugLog("writer: binary serialize failed");
+                return maya_dmx::ReportError(serializeError.c_str());
+            }
+        }
+        else
+        {
+            serialized = builder.Serialize(*modelElement);
+        }
+        AppendDebugLog("writer: serialized");
+
+        std::ofstream output(fileObject.rawFullName().asChar(), std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!output.is_open())
+        {
+            return maya_dmx::ReportError(MString("maya_dmx: failed to open output file ") + fileObject.rawFullName());
+        }
+
+        output.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
+        output.close();
+        AppendDebugLog("writer: wrote file");
+
+        if (!output)
+        {
+            return maya_dmx::ReportError(MString("maya_dmx: failed to write output file ") + fileObject.rawFullName());
+        }
+
+        return maya_dmx::ReportInfo(
+            MString(binaryExport ? "maya_dmx: exported binary DMX to " : "maya_dmx: exported text DMX to ") + fileObject.rawFullName());
     }
-    else
+    catch (const std::exception &exception)
     {
-        serialized = builder.Serialize(*modelElement);
+        AppendDebugLog("writer: std exception");
+        return maya_dmx::ReportError(MString("maya_dmx: export failed with C++ exception: ") + exception.what());
     }
-
-    std::ofstream output(fileObject.rawFullName().asChar(), std::ios::out | std::ios::binary | std::ios::trunc);
-    if (!output.is_open())
+    catch (...)
     {
-        return maya_dmx::ReportError(MString("maya_dmx: failed to open output file ") + fileObject.rawFullName());
+        AppendDebugLog("writer: unknown exception");
+        return maya_dmx::ReportError("maya_dmx: export failed with an unknown host exception.");
     }
-
-    output.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
-    output.close();
-
-    if (!output)
-    {
-        return maya_dmx::ReportError(MString("maya_dmx: failed to write output file ") + fileObject.rawFullName());
-    }
-
-    return maya_dmx::ReportInfo(
-        MString(binaryExport ? "maya_dmx: exported binary DMX to " : "maya_dmx: exported text DMX to ") + fileObject.rawFullName());
 }

@@ -1,11 +1,14 @@
 #include "../common/MayaDmxCommon.h"
 #include "../exporter/DmxExportTranslator.h"
 #include "../importer/DmxImportTranslator.h"
+#include "../workflow/MayaDmxWorkflowCommand.h"
 
 #include <maya/MFnPlugin.h>
 
 namespace
 {
+constexpr const char *kWorkflowCommandName = "mayaDmxWorkflow";
+
 MStatus RegisterTranslator(MFnPlugin &plugin, const char *name, MCreatorFunction creator)
 {
     const MStatus status = plugin.registerFileTranslator(name, "", creator);
@@ -27,6 +30,26 @@ MStatus DeregisterTranslator(MFnPlugin &plugin, const char *name)
 
     return MS::kSuccess;
 }
+
+MStatus RegisterCommand(MFnPlugin &plugin, const char *name, MCreatorFunction creator, MCreateSyntaxFunction createSyntax)
+{
+    const MStatus status = plugin.registerCommand(name, creator, createSyntax);
+    if (!status)
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: failed to register command ") + name, status);
+    }
+    return MS::kSuccess;
+}
+
+MStatus DeregisterCommand(MFnPlugin &plugin, const char *name)
+{
+    const MStatus status = plugin.deregisterCommand(name);
+    if (!status)
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: failed to deregister command ") + name, status);
+    }
+    return MS::kSuccess;
+}
 }
 
 MStatus initializePlugin(MObject object)
@@ -46,24 +69,19 @@ MStatus initializePlugin(MObject object)
         return status;
     }
 
-    return maya_dmx::ReportInfo("maya_dmx: registered import/export translators");
+    status = RegisterCommand(plugin, kWorkflowCommandName, &MayaDmxWorkflowCommand::Create, &MayaDmxWorkflowCommand::CreateSyntax);
+    if (!status)
+    {
+        plugin.deregisterFileTranslator(maya_dmx::kExporterTranslatorName);
+        plugin.deregisterFileTranslator(maya_dmx::kImporterTranslatorName);
+        return status;
+    }
+
+    return MS::kSuccess;
 }
 
 MStatus uninitializePlugin(MObject object)
 {
-    MFnPlugin plugin(object);
-
-    MStatus status = DeregisterTranslator(plugin, maya_dmx::kExporterTranslatorName);
-    if (!status)
-    {
-        return status;
-    }
-
-    status = DeregisterTranslator(plugin, maya_dmx::kImporterTranslatorName);
-    if (!status)
-    {
-        return status;
-    }
-
-    return maya_dmx::ReportInfo("maya_dmx: deregistered import/export translators");
+    (void)object;
+    return MS::kSuccess;
 }

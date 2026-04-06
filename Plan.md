@@ -243,11 +243,21 @@
   - 结合 `sourcepp` 文档中 `KV1ElementBase + Readable/Writable` 这类读写职责分离设计，后续会把当前最小 DMX 支持子集整理成更稳定的公共数据模型：解析器负责尽量完整保留字段与元素引用，Maya 层只消费已归一化的 DOM 视图；这一步属于计划更新项，尚未开始大规模重构。
   - 已参考 Blender Source Tools 当前公开实现与文档说明，确认其成熟工作流不仅覆盖 SMD / DMX 导入导出，还包含场景持久化导出参数、批量导出列表、QC 导入 / 编译联动、动画与 shape key 选择策略、DMX 编码版本切换等产品级功能；据此已把 Maya 插件后续计划从“单文件 translator”扩展为“translator + workflow 层”的两层目标。
   - 结合当前范围收敛，已明确把 `QC / studiomdl` 联动、自动编译和日志回传从 Maya 插件计划中移除；后续即使参考 Blender Source Tools 的产品形态，也只吸收导出配置持久化、批量导出组织、动画/shape key 管理等 DCC 内部工作流能力。
+  - 已新增 [dcc_plugin/src/workflow](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/workflow) 工作流层骨架，并在插件里注册 `mayaDmxWorkflow` 命令；当前已支持通过 Maya `optionVar` 持久化保存 / 读取 / 删除 / 列出导出预设，以及保存 / 读取 / 删除 / 列出批量导出清单，为后续真正的批量导出执行器提供稳定数据入口。
+  - 已通过 `cmake --build build\\maya_dmx --config Release` 再次验证新增工作流层后插件仍可成功生成 [dcc_plugin/bin/Release/maya_dmx.mll](D:/_Code_Here/Git/csgo-src/dcc_plugin/bin/Release/maya_dmx.mll)。
+  - 已处理一条真实宿主兼容问题：在 Maya 内执行 DMX 导出时，原先 `kExportActiveAccessMode` 路径直接调用 `MGlobal::getActiveSelectionList()`，会在包含 UFE 项或无效宿主路径的场景下触发 `Ufe_v2::InvalidPath` 异常。当前已把导出根收集改为通过 `ls -sl -long` 文本路径回收再逐项解析 DAG，并在 exporter writer 顶层增加 C++ 异常兜底，避免这类宿主异常直接打断导出流程。
+  - 已进一步定位并修复一条更关键的导出崩溃根因：`DmxExportTranslator` 内部 `DmxTextBuilder` 原先使用 `std::vector<DmxElement>` 保存元素并向外暴露内部对象指针，后续继续创建元素时会因为 `vector` 扩容使已挂接到属性树中的元素指针全部悬空，导致 Maya 导出阶段表现为宿主侧异常甚至误报 `Ufe_v2::InvalidPath`。当前已改为稳定地址存储，最小 `simple_hierarchy` 与 `simple_mesh` 样例在 `mayapy` 下均可完成 `导入 -> 文本导出 -> 二进制导出`。
+  - 当前导出诊断日志已临时改写到系统临时目录 `%TEMP%\\maya_dmx_export_debug.log`，避免继续向仓库目录写入调试垃圾；待 Maya 内闭环稳定后再移除或收敛这类临时日志。
+  - 已继续用 `mayapy` 跑 Maya 内回归，并补齐 importer 剩余兼容问题：`simple_blendshape` 现已改为通过 `MFnBlendShapeDeformer` API 创建目标，不再依赖不稳定的 `blendShape` 命令字符串；`simple_skinned_mesh` 现已支持在 `skinCluster` 命令返回失败但实际节点已创建的情况下回退到 mesh history 查找 skinCluster 并继续写权重；`complex_chr_mesh` 现已可完成 `导入 -> 文本导出 -> 二进制导出`，二进制写出额外放宽了不完整向量数组条目的容错，改为缺失分量补零。
+  - 已通过 `mayapy` 完整验证五份样例 `simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh` 的 Maya 内闭环回归，输出位于 `build\\maya_dmx\\maya_batch_regression\\full_run_2`；这意味着当前 `RunMayaBatchRegression` 覆盖范围内，文本与二进制导出路径均已可运行。
 - 当前限制：
   - importer 虽然已支持文本 DMX 与最小二进制 DMX 子集，但仍只覆盖层级、局部变换、基础 mesh、主 UV、face-vertex normals、基础蒙皮权重、基础材质槽位和最小位置 delta；不导入完整材质网络、组合型面部控制器、额外 UV 通道，也不保证兼容仓库外所有 Valve 历史二进制 DMX 变体。
   - exporter 已能写出文本 DMX 与最小二进制 DMX 子集，并支持基础蒙皮权重、完整导出层级内的 `jointList`、基础材质槽位和最小位置 delta；但仍不支持组合型面部控制器、完整材质网络、额外 UV、bind pose 扩展信息和更完整的 deformer 元数据。
   - 当前 `SimpleDmx*` 仍偏“插件定制解析器”而不是通用 DMX 库，和 `sourcepp` 当前按格式层、数据层拆分的方向相比，可维护性与格式扩展能力仍偏弱；后续补更完整二进制兼容与未知字段保真时，这会成为主要重构压力点。
   - 当前 Maya 版插件还缺少 Blender Source Tools 那类“围绕导入导出器的完整生产工作流”，例如导出配置持久化、批量导出集、动画批处理、历史兼容选项面板；这些缺口不会影响最小 DMX 闭环，但会直接限制真实资产管线落地效率。
+  - 当前 `mayaDmxWorkflow` 还只是数据管理骨架：它尚未驱动真正的批量导出执行、也未把预设参数接入 [dcc_plugin/src/exporter/DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 的 writer 逻辑；下一步需要先打通“预设 -> translator 选项串 -> 单次导出”，再扩展到“批量清单 -> 多次导出”。
+  - 当前对 Maya UFE / 非 DAG 选择项的兼容仍以“规避宿主异常”为主，而不是完整理解 UFE 层级；如果后续需要支持 USD、代理节点或更多混合场景对象，仍需继续细化导出根过滤与类型识别规则。
+  - 当前虽然 Maya 内五份样例闭环都已通过，但 `complex_chr_mesh` 仍会在导入时触发多条 Maya 权重归一化警告，说明复杂资产上的 skin weight 还存在“可导入但不够干净”的情况；后续需要评估是否在 importer 写权重前做显式归一化或锁定未使用 influence。
 
 ## 环境与工具链说明
 

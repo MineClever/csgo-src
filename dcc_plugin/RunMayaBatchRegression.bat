@@ -47,6 +47,8 @@ if not exist "%SCRIPT_PATH%" (
 
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
+set MAYA_SKIP_USERSETUP_PY=1
+
 "%MAYA_PYTHON_EXE%" "%SCRIPT_PATH%" ^
     --plugin "%PLUGIN_BINARY%" ^
     --samples "%SAMPLE_DIR%" ^
