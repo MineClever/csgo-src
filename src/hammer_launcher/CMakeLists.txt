@@ -37,4 +37,4 @@ target_link_libraries(Hammer_launcher PRIVATE
 # DEFINE_WINDOWED_APPLICATION_OBJECT_GLOBALVAR uses WinMain - needs SUBSYSTEM:WINDOWS
 set_target_properties(Hammer_launcher PROPERTIES WIN32_EXECUTABLE TRUE)
 
-valve_publish_exe(Hammer_launcher "${GAME_DIR}")
+valve_publish_exe(Hammer_launcher "${GAME_BIN_DIR}")

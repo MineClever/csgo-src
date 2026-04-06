@@ -40,4 +40,4 @@ target_link_libraries(Vvis_launcher PRIVATE
     user32.lib
 )
 
-valve_publish_exe(Vvis_launcher "${GAME_DIR}")
+valve_publish_exe(Vvis_launcher "${GAME_BIN_DIR}")

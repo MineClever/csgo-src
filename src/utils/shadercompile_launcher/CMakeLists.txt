@@ -38,4 +38,4 @@ target_link_libraries(Shadercompile_launcher PRIVATE
     user32.lib
 )
 
-valve_publish_exe(Shadercompile_launcher "${GAME_DIR}")
+valve_publish_exe(Shadercompile_launcher "${GAME_BIN_DIR}")

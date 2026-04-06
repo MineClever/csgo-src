@@ -15,18 +15,20 @@ echo  Building CSGO (%CONFIG%, %PLATFORM%)
 echo ============================================================
 echo.
 
-:: 如果 build 目录不存在，先生成
-if not exist "%BUILD_DIR%\CSGO.sln" (
-    echo Build directory not found, running cmake configure first...
-    cmake -B "%BUILD_DIR%" -A %PLATFORM% -S "%REPO_ROOT%"
-    if %ERRORLEVEL% NEQ 0 (
-        echo ERROR: cmake configuration failed.
-        pause
-        exit /b %ERRORLEVEL%
-    )
+echo Configuring CMake...
+cmake -B "%BUILD_DIR%" -A %PLATFORM% -S "%REPO_ROOT%"
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo ERROR: cmake configuration failed.
+    pause
+    exit /b %ERRORLEVEL%
 )
 
-cmake --build "%BUILD_DIR%" --config %CONFIG% --parallel
+echo.
+echo Building solution...
+rem Passing --parallel or explicit MSBuild args causes an immediate early exit
+rem in this repository/toolchain combination. Use the default Visual Studio build.
+cmake --build "%BUILD_DIR%" --config %CONFIG%
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo ERROR: Build failed with config: %CONFIG%

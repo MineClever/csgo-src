@@ -30,4 +30,4 @@ target_link_libraries(Dedicated_main PRIVATE
 # WinMain entry point requires SUBSYSTEM:WINDOWS
 set_target_properties(Dedicated_main PROPERTIES WIN32_EXECUTABLE TRUE)
 
-valve_publish_exe(Dedicated_main "${GAME_DIR}")
+valve_publish_exe(Dedicated_main "${GAME_BIN_DIR}")

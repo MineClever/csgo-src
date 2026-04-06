@@ -39,4 +39,4 @@ target_link_libraries(Newdat PRIVATE
     user32.lib
 )
 
-valve_publish_exe(Newdat "${GAME_DIR}")
+valve_publish_exe(Newdat "${GAME_BIN_DIR}")

@@ -80,4 +80,4 @@ target_link_libraries(Hlmv PRIVATE
     winmm.lib
 )
 
-valve_publish_exe(Hlmv "${GAME_DIR}")
+valve_publish_exe(Hlmv "${GAME_BIN_DIR}")

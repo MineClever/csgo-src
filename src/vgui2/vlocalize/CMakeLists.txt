@@ -51,4 +51,4 @@ target_link_libraries(Vlocalize PRIVATE
 
 target_link_options(Vlocalize PRIVATE /SUBSYSTEM:WINDOWS)
 
-valve_publish_exe(Vlocalize "${GAME_DIR}")
+valve_publish_exe(Vlocalize "${GAME_BIN_DIR}")
