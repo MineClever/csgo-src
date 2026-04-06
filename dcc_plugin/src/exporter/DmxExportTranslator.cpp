@@ -31,8 +31,10 @@
 #include <maya/MItDag.h>
 #include <maya/MItMeshPolygon.h>
 #include <maya/MDoubleArray.h>
+#include <maya/MFnMatrixData.h>
 #include <maya/MIntArray.h>
 #include <maya/MItDependencyGraph.h>
+#include <maya/MMatrix.h>
 #include <maya/MObjectArray.h>
 #include <maya/MPointArray.h>
 #include <maya/MPlug.h>
@@ -1115,6 +1117,41 @@ std::string FormatQuaternion(double x, double y, double z, double w)
     return FormatFloat(x) + " " + FormatFloat(y) + " " + FormatFloat(z) + " " + FormatFloat(w);
 }
 
+std::string FormatMatrix(const MMatrix &matrix)
+{
+    std::ostringstream stream;
+    for (unsigned int row = 0; row < 4; ++row)
+    {
+        for (unsigned int column = 0; column < 4; ++column)
+        {
+            if (row != 0 || column != 0)
+            {
+                stream << ' ';
+            }
+            stream << FormatFloat(matrix[row][column]);
+        }
+    }
+    return stream.str();
+}
+
+std::string ReadMatrixPlugValue(const MPlug &plug)
+{
+    MObject matrixObject;
+    if (plug.getValue(matrixObject) != MS::kSuccess || matrixObject.isNull())
+    {
+        return std::string();
+    }
+
+    MStatus status;
+    MFnMatrixData matrixDataFn(matrixObject, &status);
+    if (!status)
+    {
+        return std::string();
+    }
+
+    return FormatMatrix(matrixDataFn.matrix(&status));
+}
+
 DmxAttribute MakeScalarAttribute(const std::string &name, const std::string &type, const std::string &value)
 {
     DmxAttribute attribute;
@@ -1463,6 +1500,111 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
     vertexDataElement.attributes.push_back(MakeScalarAttribute("jointCount", "int", std::to_string(jointCount)));
     vertexDataElement.attributes.push_back(MakeScalarArrayAttribute("jointIndices", "int_array", std::move(jointIndexValues)));
     vertexDataElement.attributes.push_back(MakeScalarArrayAttribute("jointWeights", "float_array", std::move(jointWeightValues)));
+
+    MFnDependencyNode skinClusterNodeFn(skinClusterObject, &status);
+    if (!status)
+    {
+        return;
+    }
+
+    vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaDeformerType", "string", "skinCluster"));
+    vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaSkinClusterName", "string", skinClusterNodeFn.name().asChar()));
+
+    MPlug skinningMethodPlug = skinClusterNodeFn.findPlug("skinningMethod", true, &status);
+    if (status)
+    {
+        short skinningMethod = 0;
+        if (skinningMethodPlug.getValue(skinningMethod) == MS::kSuccess)
+        {
+            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaSkinningMethod", "int", std::to_string(static_cast<int>(skinningMethod))));
+        }
+    }
+
+    MPlug maxInfluencesPlug = skinClusterNodeFn.findPlug("maxInfluences", true, &status);
+    if (status)
+    {
+        int maxInfluences = 0;
+        if (maxInfluencesPlug.getValue(maxInfluences) == MS::kSuccess)
+        {
+            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaMaxInfluences", "int", std::to_string(maxInfluences)));
+        }
+    }
+
+    MPlug maintainMaxInfluencesPlug = skinClusterNodeFn.findPlug("maintainMaxInfluences", true, &status);
+    if (status)
+    {
+        bool maintainMaxInfluences = false;
+        if (maintainMaxInfluencesPlug.getValue(maintainMaxInfluences) == MS::kSuccess)
+        {
+            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaMaintainMaxInfluences", "bool", maintainMaxInfluences ? "1" : "0"));
+        }
+    }
+
+    MPlug normalizeWeightsPlug = skinClusterNodeFn.findPlug("normalizeWeights", true, &status);
+    if (status)
+    {
+        short normalizeWeights = 0;
+        if (normalizeWeightsPlug.getValue(normalizeWeights) == MS::kSuccess)
+        {
+            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaNormalizeWeights", "int", std::to_string(static_cast<int>(normalizeWeights))));
+        }
+    }
+
+    MPlug useComponentsPlug = skinClusterNodeFn.findPlug("useComponents", true, &status);
+    if (status)
+    {
+        bool useComponents = false;
+        if (useComponentsPlug.getValue(useComponents) == MS::kSuccess)
+        {
+            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaUseComponents", "bool", useComponents ? "1" : "0"));
+        }
+    }
+
+    MPlug geomMatrixPlug = skinClusterNodeFn.findPlug("geomMatrix", true, &status);
+    if (status)
+    {
+        const std::string geomMatrixValue = ReadMatrixPlugValue(geomMatrixPlug);
+        if (!geomMatrixValue.empty())
+        {
+            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaGeomMatrix", "string", geomMatrixValue));
+        }
+    }
+
+    std::vector<std::string> bindPreMatrixValues;
+    std::vector<std::string> influencePathValues;
+    bindPreMatrixValues.reserve(influenceCount);
+    influencePathValues.reserve(influenceCount);
+    MPlug bindPreMatrixArrayPlug = skinClusterNodeFn.findPlug("bindPreMatrix", true, &status);
+    if (status)
+    {
+        for (unsigned int influenceIndex = 0; influenceIndex < influenceCount; ++influenceIndex)
+        {
+            influencePathValues.push_back(influencePaths[influenceIndex].fullPathName().asChar());
+
+            MPlug bindPreMatrixPlug = bindPreMatrixArrayPlug.elementByLogicalIndex(influenceIndex, &status);
+            if (!status)
+            {
+                bindPreMatrixValues.push_back(FormatMatrix(influencePaths[influenceIndex].inclusiveMatrixInverse()));
+                status = MS::kSuccess;
+                continue;
+            }
+
+            const std::string bindPreMatrixValue = ReadMatrixPlugValue(bindPreMatrixPlug);
+            bindPreMatrixValues.push_back(
+                bindPreMatrixValue.empty() ?
+                FormatMatrix(influencePaths[influenceIndex].inclusiveMatrixInverse()) :
+                bindPreMatrixValue);
+        }
+    }
+
+    if (!influencePathValues.empty())
+    {
+        vertexDataElement.attributes.push_back(MakeScalarArrayAttribute("mayaInfluencePaths", "string_array", std::move(influencePathValues)));
+    }
+    if (!bindPreMatrixValues.empty())
+    {
+        vertexDataElement.attributes.push_back(MakeScalarArrayAttribute("mayaBindPreMatrix", "string_array", std::move(bindPreMatrixValues)));
+    }
 }
 
 DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, const ExportContext &context)
@@ -1794,6 +1936,24 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
                 deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeNode", "string", blendShapeNodeFn.name().asChar()));
                 deltaElement->attributes.push_back(MakeScalarAttribute("mayaWeightIndex", "int", std::to_string(weightIndex)));
                 deltaElement->attributes.push_back(MakeScalarAttribute("mayaTargetName", "string", targetDagNode.name().asChar()));
+                MPlug envelopePlug = blendShapeNodeFn.findPlug("envelope", true, &status);
+                if (status)
+                {
+                    float envelope = 1.0f;
+                    if (envelopePlug.getValue(envelope) == MS::kSuccess)
+                    {
+                        deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeEnvelope", "float", FormatFloat(envelope)));
+                    }
+                }
+                MPlug originPlug = blendShapeNodeFn.findPlug("origin", true, &status);
+                if (status)
+                {
+                    short origin = 0;
+                    if (originPlug.getValue(origin) == MS::kSuccess)
+                    {
+                        deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeOrigin", "int", std::to_string(static_cast<int>(origin))));
+                    }
+                }
                 deltaStateElements.push_back(deltaElement);
             }
         }

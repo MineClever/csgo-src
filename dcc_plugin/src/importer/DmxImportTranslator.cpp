@@ -349,6 +349,25 @@ bool ParseFloat3(const std::string &text, float (&components)[3])
     return true;
 }
 
+bool ParseMatrixString(const std::string &text, MMatrix &matrix)
+{
+    const std::vector<double> values = ParseNumberList(text);
+    if (values.size() < 16)
+    {
+        return false;
+    }
+
+    for (unsigned int row = 0; row < 4; ++row)
+    {
+        for (unsigned int column = 0; column < 4; ++column)
+        {
+            matrix[row][column] = values[row * 4 + column];
+        }
+    }
+
+    return true;
+}
+
 MObject FindNodeByName(const std::string &nodeName, MStatus *outStatus = nullptr)
 {
     MStatus status;
@@ -652,7 +671,7 @@ const simple_dmx::Element *FindMeshVertexData(const simple_dmx::Document &docume
 }
 
 MObject FindSkinClusterForMesh(const MObject &meshObject);
-MStatus CreateSkinClusterWithApi(const MDagPathArray &influencePaths, const MDagPath &meshDagPath, const MDagPath &meshParentPath, MObject &skinClusterObject);
+MStatus CreateSkinClusterWithApi(const simple_dmx::Element *vertexData, const MDagPathArray &influencePaths, const MDagPath &meshDagPath, const MDagPath &meshParentPath, MObject &skinClusterObject);
 
 MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *vertexData, const MObject &meshObject, const MObject &meshParentObject)
 {
@@ -764,7 +783,7 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
     }
 
     MObject skinClusterObject;
-    status = CreateSkinClusterWithApi(activeInfluencePaths, meshDagPath, meshParentPath, skinClusterObject);
+    status = CreateSkinClusterWithApi(vertexData, activeInfluencePaths, meshDagPath, meshParentPath, skinClusterObject);
     if (!status || skinClusterObject.isNull())
     {
         return maya_dmx::ReportError(MString("maya_dmx: skinCluster API creation failed for ") + meshDagPath.fullPathName(), status);
@@ -1116,7 +1135,12 @@ MObject FindSkinClusterForMesh(const MObject &meshObject)
     return MObject::kNullObj;
 }
 
-MStatus CreateSkinClusterWithApi(const MDagPathArray &influencePaths, const MDagPath &meshDagPath, const MDagPath &meshParentPath, MObject &skinClusterObject)
+MStatus CreateSkinClusterWithApi(
+    const simple_dmx::Element *vertexData,
+    const MDagPathArray &influencePaths,
+    const MDagPath &meshDagPath,
+    const MDagPath &meshParentPath,
+    MObject &skinClusterObject)
 {
     skinClusterObject = MObject::kNullObj;
 
@@ -1152,6 +1176,13 @@ MStatus CreateSkinClusterWithApi(const MDagPathArray &influencePaths, const MDag
     if (!status)
     {
         return status;
+    }
+
+    const std::string requestedSkinClusterName = FindAttributeString(vertexData, "mayaSkinClusterName");
+    if (!requestedSkinClusterName.empty())
+    {
+        skinClusterNodeFn.setName(requestedSkinClusterName.c_str(), &status);
+        status = MS::kSuccess;
     }
 
     MDGModifier dgModifier;
@@ -1237,6 +1268,8 @@ MStatus CreateSkinClusterWithApi(const MDagPathArray &influencePaths, const MDag
         return status;
     }
 
+    const std::vector<std::string> bindPreMatrixStrings = FindAttributeStringArray(vertexData, "mayaBindPreMatrix");
+    const std::vector<std::string> influencePathStrings = FindAttributeStringArray(vertexData, "mayaInfluencePaths");
     for (unsigned int influenceIndex = 0; influenceIndex < influencePaths.length(); ++influenceIndex)
     {
         status = connectArrayPlug(influencePaths[influenceIndex].node(), "worldMatrix", 0, skinClusterObject, "matrix", influenceIndex);
@@ -1257,7 +1290,22 @@ MStatus CreateSkinClusterWithApi(const MDagPathArray &influencePaths, const MDag
         }
 
         MFnMatrixData matrixDataFn;
-        MObject bindPreMatrixObject = matrixDataFn.create(influencePaths[influenceIndex].inclusiveMatrixInverse(), &status);
+        MMatrix bindPreMatrix = influencePaths[influenceIndex].inclusiveMatrixInverse();
+        if (influenceIndex < bindPreMatrixStrings.size())
+        {
+            MMatrix parsedMatrix;
+            if (ParseMatrixString(bindPreMatrixStrings[influenceIndex], parsedMatrix))
+            {
+                bindPreMatrix = parsedMatrix;
+            }
+        }
+        else if (influenceIndex < influencePathStrings.size() &&
+            influencePathStrings[influenceIndex] != influencePaths[influenceIndex].fullPathName().asChar())
+        {
+            AppendImportDebugLog("skinning: influence path order mismatch while restoring bindPreMatrix");
+        }
+
+        MObject bindPreMatrixObject = matrixDataFn.create(bindPreMatrix, &status);
         if (!status)
         {
             return status;
@@ -1275,7 +1323,13 @@ MStatus CreateSkinClusterWithApi(const MDagPathArray &influencePaths, const MDag
         return status;
     }
     MFnMatrixData geomMatrixDataFn;
-    MObject geomMatrixObject = geomMatrixDataFn.create(meshParentPath.inclusiveMatrix(), &status);
+    MMatrix geomMatrix = meshParentPath.inclusiveMatrix();
+    MMatrix parsedGeomMatrix;
+    if (ParseMatrixString(FindAttributeString(vertexData, "mayaGeomMatrix"), parsedGeomMatrix))
+    {
+        geomMatrix = parsedGeomMatrix;
+    }
+    MObject geomMatrixObject = geomMatrixDataFn.create(geomMatrix, &status);
     if (!status)
     {
         return status;
@@ -1284,6 +1338,56 @@ MStatus CreateSkinClusterWithApi(const MDagPathArray &influencePaths, const MDag
     if (!status)
     {
         return status;
+    }
+
+    MPlug skinningMethodPlug = skinClusterNode.findPlug("skinningMethod", true, &status);
+    if (status)
+    {
+        const std::vector<double> values = ParseNumberList(FindAttributeString(vertexData, "mayaSkinningMethod"));
+        if (!values.empty())
+        {
+            skinningMethodPlug.setShort(static_cast<short>(values[0]));
+        }
+    }
+
+    MPlug maxInfluencesPlug = skinClusterNode.findPlug("maxInfluences", true, &status);
+    if (status)
+    {
+        const std::vector<double> values = ParseNumberList(FindAttributeString(vertexData, "mayaMaxInfluences"));
+        if (!values.empty())
+        {
+            maxInfluencesPlug.setInt(static_cast<int>(values[0]));
+        }
+    }
+
+    MPlug maintainMaxInfluencesPlug = skinClusterNode.findPlug("maintainMaxInfluences", true, &status);
+    if (status)
+    {
+        const std::string value = FindAttributeString(vertexData, "mayaMaintainMaxInfluences");
+        if (!value.empty())
+        {
+            maintainMaxInfluencesPlug.setBool(value == "1" || value == "true");
+        }
+    }
+
+    MPlug normalizeWeightsPlug = skinClusterNode.findPlug("normalizeWeights", true, &status);
+    if (status)
+    {
+        const std::vector<double> values = ParseNumberList(FindAttributeString(vertexData, "mayaNormalizeWeights"));
+        if (!values.empty())
+        {
+            normalizeWeightsPlug.setShort(static_cast<short>(values[0]));
+        }
+    }
+
+    MPlug useComponentsPlug = skinClusterNode.findPlug("useComponents", true, &status);
+    if (status)
+    {
+        const std::string value = FindAttributeString(vertexData, "mayaUseComponents");
+        if (!value.empty())
+        {
+            useComponentsPlug.setBool(value == "1" || value == "true");
+        }
     }
 
     return dgModifier.doIt();
@@ -1445,6 +1549,30 @@ MStatus ApplyDeltaStates(
         }
         blendShapeDependency.setName(blendShapeName.c_str());
         const MString blendShapeNodeName = blendShapeDependency.name();
+
+        if (!group.states.empty())
+        {
+            const simple_dmx::Element *metadataState = group.states.front();
+            MPlug envelopePlug = blendShapeDependency.findPlug("envelope", true, &status);
+            if (status)
+            {
+                const std::vector<double> values = ParseNumberList(FindAttributeString(metadataState, "mayaBlendShapeEnvelope"));
+                if (!values.empty())
+                {
+                    envelopePlug.setFloat(static_cast<float>(values[0]));
+                }
+            }
+
+            MPlug originPlug = blendShapeDependency.findPlug("origin", true, &status);
+            if (status)
+            {
+                const std::vector<double> values = ParseNumberList(FindAttributeString(metadataState, "mayaBlendShapeOrigin"));
+                if (!values.empty())
+                {
+                    originPlug.setShort(static_cast<short>(values[0]));
+                }
+            }
+        }
 
         for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
         {
