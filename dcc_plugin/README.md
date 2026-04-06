@@ -48,6 +48,14 @@ mayaDmxWorkflow -listBatches;
 mayaDmxWorkflow -loadBatch "characters";
 ```
 
+MEL export UI helpers inside Maya:
+
+```mel
+source "DmxCreateUI.mel";
+MayaDmxShowExportSelectionOptions();
+MayaDmxShowExportAllOptions();
+```
+
 Or through CMake:
 
 ```powershell
@@ -70,11 +78,23 @@ Install the built plugin as a Maya module:
 dcc_plugin\InstallPluginModuleToMaya.bat
 ```
 
-This writes `%USERPROFILE%\Documents\maya\modules\maya_dmx.mod` and copies the plugin to `dcc_plugin\maya_module\plug-ins\windows\2022\`.
+This writes `%USERPROFILE%\Documents\maya\modules\maya_dmx.mod`, clears the staged module payload directories under `dcc_plugin\maya_module\`, then copies the plugin to `dcc_plugin\maya_module\plug-ins\windows\2022\` and copies MEL scripts from `dcc_plugin\src\mel\` to `dcc_plugin\maya_module\scripts\`.
 
 `RunMayaBatchRegression.bat` defaults to `C:\Program Files\Autodesk\Maya2022\bin\mayapy.exe`. If Maya is installed elsewhere, set `MAYA_PYTHON_EXE_OVERRIDE` before running it.
 
-`mayaDmxWorkflow` is the current workflow-layer skeleton. It persists export presets and batch manifests through Maya optionVars, but it does not execute batch exports yet.
+`mayaDmxWorkflow` now executes both single exports and batch exports. Export presets still use Maya optionVars, while batch manifests are stored as files under the Maya user prefs directory to avoid DAG path corruption.
+
+The module also now ships a minimal Alembic-style MEL export UI layer. Source files are managed under:
+
+- [src/mel/performDmxExport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/performDmxExport.mel)
+- [src/mel/doDmxExportArgList.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/doDmxExportArgList.mel)
+- [src/mel/DmxCreateUI.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/DmxCreateUI.mel)
+- [src/mel/mayaDmxTranslatorExport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/mayaDmxTranslatorExport.mel)
+- [src/mel/mayaDmxTranslatorImport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/mayaDmxTranslatorImport.mel)
+
+`InstallPluginModuleToMaya.bat` copies them into `maya_module/scripts/` during deployment.
+
+`Valve DMX Export` now registers `mayaDmxTranslatorExport` as its translator options script, so the export settings also appear in Maya's file type specific options area. `Valve DMX Import` also registers `mayaDmxTranslatorImport` there, with working `importMaterials / importSkin / importDeltaStates` toggles that are consumed by the importer.
 
 ## Current Import Scope
 
@@ -144,5 +164,6 @@ Regression inputs can also live under subdirectories of `dcc_plugin/samples/`. C
 - `src/common/` - shared utilities and diagnostics
 - `src/importer/` - DMX importer translator
 - `src/exporter/` - DMX exporter translator
-- `src/workflow/` - workflow-layer preset and batch manifest management for future batch export features
+- `src/mel/` - MEL source files for option boxes and workflow UI helpers
+- `src/workflow/` - workflow-layer preset, batch manifest, and export execution management
 - `src/plugin/` - plugin entry point and translator registration

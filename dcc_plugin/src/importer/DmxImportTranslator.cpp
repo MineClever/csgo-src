@@ -106,7 +106,72 @@ struct ImportContext
     std::vector<const simple_dmx::Element *> jointOrder;
     std::unordered_set<const simple_dmx::Element *> jointSet;
     std::unordered_map<const simple_dmx::Element *, MDagPath> importedDagPaths;
+    bool importSkin = true;
+    bool importMaterials = true;
+    bool importDeltaStates = true;
 };
+
+struct ImportOptions
+{
+    bool importSkin = true;
+    bool importMaterials = true;
+    bool importDeltaStates = true;
+};
+
+std::unordered_map<std::string, std::string> ParseOptionMap(const MString &options)
+{
+    std::unordered_map<std::string, std::string> optionMap;
+    std::string text = options.asChar();
+    size_t start = 0;
+    while (start < text.size())
+    {
+        size_t end = text.find(';', start);
+        if (end == std::string::npos)
+        {
+            end = text.size();
+        }
+
+        const std::string pair = text.substr(start, end - start);
+        const size_t separator = pair.find('=');
+        if (separator != std::string::npos)
+        {
+            std::string key = pair.substr(0, separator);
+            std::string value = pair.substr(separator + 1);
+            std::transform(key.begin(), key.end(), key.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+            optionMap[key] = value;
+        }
+
+        start = end + 1;
+    }
+    return optionMap;
+}
+
+bool ParseBoolOption(const std::unordered_map<std::string, std::string> &optionMap, const char *key, bool defaultValue)
+{
+    auto it = optionMap.find(key);
+    if (it == optionMap.end())
+    {
+        return defaultValue;
+    }
+
+    std::string value = it->second;
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value == "1" || value == "true" || value == "yes";
+}
+
+ImportOptions ParseImportOptions(const MString &options)
+{
+    ImportOptions importOptions;
+    const std::unordered_map<std::string, std::string> optionMap = ParseOptionMap(options);
+    importOptions.importSkin = ParseBoolOption(optionMap, "importskin", true);
+    importOptions.importMaterials = ParseBoolOption(optionMap, "importmaterials", true);
+    importOptions.importDeltaStates = ParseBoolOption(optionMap, "importdeltastates", true);
+    return importOptions;
+}
 
 std::string ReadTextFile(const MFileObject &fileObject)
 {
@@ -1912,10 +1977,13 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
         }
     }
 
-    status = AssignFaceSetMaterials(meshFn, faceSetAssignments);
-    if (!status)
+    if (context.importMaterials)
     {
-        return status;
+        status = AssignFaceSetMaterials(meshFn, faceSetAssignments);
+        if (!status)
+        {
+            return status;
+        }
     }
 
     if (!tangentStrings.empty() && !tangentIndexStrings.empty())
@@ -1943,13 +2011,21 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
         }
     }
 
-    status = ApplyDeltaStates(document, meshElement, meshObject, parent, points);
-    if (!status)
+    if (context.importDeltaStates)
     {
-        return status;
+        status = ApplyDeltaStates(document, meshElement, meshObject, parent, points);
+        if (!status)
+        {
+            return status;
+        }
     }
 
-    return ApplySkinning(context, vertexData, meshObject, parent);
+    if (context.importSkin)
+    {
+        return ApplySkinning(context, vertexData, meshObject, parent);
+    }
+
+    return MS::kSuccess;
 }
 
 MStatus ImportDagRecursive(
@@ -2061,7 +2137,7 @@ MPxFileTranslator::MFileKind DmxImportTranslator::identifyFile(const MFileObject
     return maya_dmx::HasDmxExtension(fileObject) ? kIsMyFileType : kNotMyFileType;
 }
 
-MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString &, FileAccessMode)
+MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString &options, FileAccessMode)
 {
     const std::string fileText = ReadTextFile(fileObject);
     if (fileText.empty())
@@ -2082,8 +2158,13 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
         return maya_dmx::ReportError("maya_dmx: no importable DMX root element found.");
     }
 
+    const ImportOptions importOptions = ParseImportOptions(options);
+
     ImportContext context{document};
     context.modelRoot = importRoot->type == "DmeModel" ? importRoot : nullptr;
+    context.importSkin = importOptions.importSkin;
+    context.importMaterials = importOptions.importMaterials;
+    context.importDeltaStates = importOptions.importDeltaStates;
     if (context.modelRoot)
     {
         CollectJointInfo(document, context.modelRoot, context);

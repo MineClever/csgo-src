@@ -1,0 +1,64 @@
+global proc string MayaDmxTranslatorExport_buildFileTypeUI(string $parent)
+{
+    setParent $parent;
+    string $layout = `columnLayout -adjustableColumn true mayaDmxTranslatorExportOptions`;
+
+    optionMenuGrp
+        -label "Encoding"
+        dmxExportEncoding;
+        menuItem -label "Text (.dmx)";
+        menuItem -label "Binary (.dmxb/.dmxbin)";
+
+    optionMenuGrp
+        -label "Up Axis"
+        dmxExportUpAxis;
+        menuItem -label "Y";
+        menuItem -label "Z";
+
+    checkBoxGrp
+        -numberOfCheckBoxes 1
+        -label "Geometry"
+        -label1 "Export Skin"
+        dmxExportSkin;
+
+    checkBoxGrp
+        -numberOfCheckBoxes 1
+        -label "Deformers"
+        -label1 "Export Delta States"
+        dmxExportDeltaStates;
+
+    textFieldGrp
+        -label "Material Root"
+        dmxExportMaterialRoot;
+
+    return $layout;
+}
+
+global proc int mayaDmxTranslatorExport(string $parent,
+                                        string $action,
+                                        string $initialSettings,
+                                        string $resultCallback)
+{
+    if (!`exists MayaDmxExport_applyOptionsString`) {
+        eval("source \"performDmxExport.mel\"");
+    }
+
+    if ($action == "post") {
+        MayaDmxTranslatorExport_buildFileTypeUI($parent);
+        MayaDmxExport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "fill") {
+        MayaDmxExport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "query") {
+        string $optionsString = MayaDmxExport_collectOptionsString();
+        eval($resultCallback + " \"" + $optionsString + "\"");
+        return 1;
+    }
+
+    return 0;
+}

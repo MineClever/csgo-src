@@ -8,10 +8,25 @@
 namespace
 {
 constexpr const char *kWorkflowCommandName = "mayaDmxWorkflow";
+constexpr const char *kImportOptionsScriptName = "mayaDmxTranslatorImport";
+constexpr const char *kExportOptionsScriptName = "mayaDmxTranslatorExport";
+constexpr const char *kImportDefaultOptions = "importMaterials=1;importSkin=1;importDeltaStates=1";
+constexpr const char *kExportDefaultOptions = "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;materialRoot=";
 
-MStatus RegisterTranslator(MFnPlugin &plugin, const char *name, MCreatorFunction creator)
+MStatus RegisterTranslator(
+    MFnPlugin &plugin,
+    const char *name,
+    MCreatorFunction creator,
+    const char *optionsScriptName = nullptr,
+    const char *defaultOptionsString = nullptr)
 {
-    const MStatus status = plugin.registerFileTranslator(name, "", creator);
+    const MStatus status = plugin.registerFileTranslator(
+        name,
+        "",
+        creator,
+        optionsScriptName,
+        defaultOptionsString,
+        true);
     if (!status)
     {
         return maya_dmx::ReportError(MString("maya_dmx: failed to register translator ") + name, status);
@@ -56,13 +71,23 @@ MStatus initializePlugin(MObject object)
 {
     MFnPlugin plugin(object, maya_dmx::kPluginVendor, maya_dmx::kPluginVersion, "Any");
 
-    MStatus status = RegisterTranslator(plugin, maya_dmx::kImporterTranslatorName, &DmxImportTranslator::Create);
+    MStatus status = RegisterTranslator(
+        plugin,
+        maya_dmx::kImporterTranslatorName,
+        &DmxImportTranslator::Create,
+        kImportOptionsScriptName,
+        kImportDefaultOptions);
     if (!status)
     {
         return status;
     }
 
-    status = RegisterTranslator(plugin, maya_dmx::kExporterTranslatorName, &DmxExportTranslator::Create);
+    status = RegisterTranslator(
+        plugin,
+        maya_dmx::kExporterTranslatorName,
+        &DmxExportTranslator::Create,
+        kExportOptionsScriptName,
+        kExportDefaultOptions);
     if (!status)
     {
         plugin.deregisterFileTranslator(maya_dmx::kImporterTranslatorName);

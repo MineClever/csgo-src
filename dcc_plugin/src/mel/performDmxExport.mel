@@ -1,0 +1,326 @@
+global proc MayaDmxExport_setOptionVars(int $forceFactorySettings)
+{
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportEncoding`) {
+        optionVar -stringValue MayaDmx_exportEncoding "text";
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportUpAxis`) {
+        optionVar -stringValue MayaDmx_exportUpAxis "Y";
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportSkin`) {
+        optionVar -intValue MayaDmx_exportSkin 1;
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportDeltaStates`) {
+        optionVar -intValue MayaDmx_exportDeltaStates 1;
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportMaterialRoot`) {
+        optionVar -stringValue MayaDmx_exportMaterialRoot "";
+    }
+}
+
+global proc string MayaDmxExport_defaultOptionsString()
+{
+    return "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;materialRoot=";
+}
+
+global proc string MayaDmxExport_collectOptionVarString()
+{
+    MayaDmxExport_setOptionVars(0);
+    string $encoding = `optionVar -q MayaDmx_exportEncoding`;
+    string $upAxis = `optionVar -q MayaDmx_exportUpAxis`;
+    int $exportSkin = `optionVar -q MayaDmx_exportSkin`;
+    int $exportDeltaStates = `optionVar -q MayaDmx_exportDeltaStates`;
+    string $materialRoot = `optionVar -q MayaDmx_exportMaterialRoot`;
+
+    return ("encoding=" + $encoding
+        + ";upAxis=" + $upAxis
+        + ";exportSkin=" + $exportSkin
+        + ";exportDeltaStates=" + $exportDeltaStates
+        + ";materialRoot=" + $materialRoot);
+}
+
+global proc MayaDmxExport_applyOptionsString(string $options)
+{
+    string $effectiveOptions = $options;
+    if (size($effectiveOptions) == 0) {
+        $effectiveOptions = MayaDmxExport_defaultOptionsString();
+    }
+
+    string $encoding = "text";
+    string $upAxis = "Y";
+    int $exportSkin = 1;
+    int $exportDeltaStates = 1;
+    string $materialRoot = "";
+
+    string $optionList[];
+    tokenize($effectiveOptions, ";", $optionList);
+    for ($option in $optionList) {
+        string $parts[];
+        tokenize($option, "=", $parts);
+        if (size($parts) < 2) {
+            continue;
+        }
+
+        string $key = $parts[0];
+        string $value = $parts[1];
+        if ($key == "encoding") {
+            $encoding = $value;
+        } else if ($key == "upAxis") {
+            $upAxis = $value;
+        } else if ($key == "exportSkin") {
+            $exportSkin = $value;
+        } else if ($key == "exportDeltaStates") {
+            $exportDeltaStates = $value;
+        } else if ($key == "materialRoot") {
+            $materialRoot = $value;
+        }
+    }
+
+    if (`optionMenuGrp -exists dmxExportEncoding`) {
+        optionMenuGrp -e -select (($encoding == "binary") ? 2 : 1) dmxExportEncoding;
+    }
+    if (`optionMenuGrp -exists dmxExportUpAxis`) {
+        optionMenuGrp -e -select (($upAxis == "Z") ? 2 : 1) dmxExportUpAxis;
+    }
+    if (`checkBoxGrp -exists dmxExportSkin`) {
+        checkBoxGrp -e -value1 $exportSkin dmxExportSkin;
+    }
+    if (`checkBoxGrp -exists dmxExportDeltaStates`) {
+        checkBoxGrp -e -value1 $exportDeltaStates dmxExportDeltaStates;
+    }
+    if (`textFieldGrp -exists dmxExportMaterialRoot`) {
+        textFieldGrp -e -text $materialRoot dmxExportMaterialRoot;
+    }
+}
+
+global proc string MayaDmxExport_collectOptionsString()
+{
+    string $encoding = "text";
+    if (`optionMenuGrp -exists dmxExportEncoding` && `optionMenuGrp -q -select dmxExportEncoding` == 2) {
+        $encoding = "binary";
+    }
+
+    string $upAxis = "Y";
+    if (`optionMenuGrp -exists dmxExportUpAxis` && `optionMenuGrp -q -select dmxExportUpAxis` == 2) {
+        $upAxis = "Z";
+    }
+
+    int $exportSkin = 1;
+    if (`checkBoxGrp -exists dmxExportSkin`) {
+        $exportSkin = `checkBoxGrp -q -value1 dmxExportSkin`;
+    }
+
+    int $exportDeltaStates = 1;
+    if (`checkBoxGrp -exists dmxExportDeltaStates`) {
+        $exportDeltaStates = `checkBoxGrp -q -value1 dmxExportDeltaStates`;
+    }
+
+    string $materialRoot = "";
+    if (`textFieldGrp -exists dmxExportMaterialRoot`) {
+        $materialRoot = `textFieldGrp -q -text dmxExportMaterialRoot`;
+    }
+
+    return ("encoding=" + $encoding
+        + ";upAxis=" + $upAxis
+        + ";exportSkin=" + $exportSkin
+        + ";exportDeltaStates=" + $exportDeltaStates
+        + ";materialRoot=" + $materialRoot);
+}
+
+global proc MayaDmx_exportSetup(string $parent, int $forceFactorySettings)
+{
+    MayaDmxExport_setOptionVars($forceFactorySettings);
+
+    setParent $parent;
+    MayaDmxExport_applyOptionsString(MayaDmxExport_collectOptionVarString());
+}
+
+global proc MayaDmx_exportCallback(string $parent, int $exportAll, int $doIt)
+{
+    setParent $parent;
+
+    string $optionString = MayaDmxExport_collectOptionsString();
+    MayaDmxExport_applyOptionsString($optionString);
+
+    string $optionList[];
+    tokenize($optionString, ";", $optionList);
+    for ($option in $optionList) {
+        string $parts[];
+        tokenize($option, "=", $parts);
+        if (size($parts) < 2) {
+            continue;
+        }
+        if ($parts[0] == "encoding") {
+            optionVar -stringValue MayaDmx_exportEncoding $parts[1];
+        } else if ($parts[0] == "upAxis") {
+            optionVar -stringValue MayaDmx_exportUpAxis $parts[1];
+        } else if ($parts[0] == "exportSkin") {
+            optionVar -intValue MayaDmx_exportSkin $parts[1];
+        } else if ($parts[0] == "exportDeltaStates") {
+            optionVar -intValue MayaDmx_exportDeltaStates $parts[1];
+        } else if ($parts[0] == "materialRoot") {
+            optionVar -stringValue MayaDmx_exportMaterialRoot $parts[1];
+        }
+    }
+
+    if ($doIt) {
+        performDmxExport 0 $exportAll;
+    }
+}
+
+global proc string DmxExportOptionsUI(string $parent)
+{
+    setParent $parent;
+    setUITemplate -pushTemplate DefaultTemplate;
+    waitCursor -state 1;
+
+    string $optionLayout = `scrollLayout`;
+        columnLayout -adjustableColumn true;
+            optionMenuGrp
+                -label "Encoding"
+                dmxExportEncoding;
+                menuItem -label "Text (.dmx)";
+                menuItem -label "Binary (.dmxb/.dmxbin)";
+
+            optionMenuGrp
+                -label "Up Axis"
+                dmxExportUpAxis;
+                menuItem -label "Y";
+                menuItem -label "Z";
+
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Geometry"
+                -label1 "Export Skin"
+                dmxExportSkin;
+
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Deformers"
+                -label1 "Export Delta States"
+                dmxExportDeltaStates;
+
+            textFieldGrp
+                -label "Material Root"
+                dmxExportMaterialRoot;
+        setParent ..;
+    setParent ..;
+
+    waitCursor -state 0;
+    setUITemplate -popTemplate;
+    return $optionLayout;
+}
+
+global proc DmxExportOptions(int $exportAll)
+{
+    string $commandName;
+    string $label;
+    if ($exportAll) {
+        $commandName = "DmxExportAll";
+        $label = "Export All";
+    } else {
+        $commandName = "DmxExportSelection";
+        $label = "Export Selection";
+    }
+
+    string $callback = "MayaDmx_exportCallback";
+    string $setup = "MayaDmx_exportSetup";
+    string $layout = getOptionBox();
+    setOptionBoxCommandName($commandName);
+
+    string $parent = DmxExportOptionsUI($layout);
+
+    string $exportBtn = getOptionBoxApplyBtn();
+    button -e -label $label -command ($callback + " " + $parent + " " + $exportAll + " 1") $exportBtn;
+
+    string $saveBtn = getOptionBoxSaveBtn();
+    button -e -command ($callback + " " + $parent + " " + $exportAll + " 0; hideOptionBox") $saveBtn;
+
+    string $resetBtn = getOptionBoxResetBtn();
+    button -e -command ($setup + " " + $parent + " 1") $resetBtn;
+
+    setOptionBoxTitle("Valve DMX Export");
+    setOptionBoxHelpTag($commandName);
+    eval($setup + " " + $parent + " 0");
+    showOptionBox();
+}
+
+global proc string[] captureDmxExportOptionVars(int $version, int $exportAll)
+{
+    MayaDmxExport_setOptionVars(0);
+    int $exportSkin = `optionVar -q MayaDmx_exportSkin`;
+    int $exportDeltaStates = `optionVar -q MayaDmx_exportDeltaStates`;
+
+    string $exportAllString = $exportAll;
+    string $exportSkinString = $exportSkin;
+    string $exportDeltaStatesString = $exportDeltaStates;
+
+    string $args[];
+    $args[0] = $exportAllString;
+    $args[1] = `optionVar -q MayaDmx_exportEncoding`;
+    $args[2] = `optionVar -q MayaDmx_exportUpAxis`;
+    $args[3] = $exportSkinString;
+    $args[4] = $exportDeltaStatesString;
+    $args[5] = `optionVar -q MayaDmx_exportMaterialRoot`;
+
+    return $args;
+}
+
+global proc string assembleDmxExportCmd(int $exportAll)
+{
+    int $version = 1;
+    string $args[] = captureDmxExportOptionVars($version, $exportAll);
+    string $cmd = "doDmxExportArgList " + $version + " {";
+    int $i;
+    for ($i = 0; $i < size($args); ++$i) {
+        if ($i > 0) {
+            $cmd += ",";
+        }
+        $cmd += ("\"" + encodeString($args[$i]) + "\"");
+    }
+    $cmd += "};";
+    return $cmd;
+}
+
+global proc MayaDmx_exportFileOptionsUICreate(string $parent)
+{
+    DmxExportOptionsUI($parent);
+}
+
+global proc MayaDmx_exportFileOptionsUIInit(string $parent, string $filter)
+{
+    MayaDmx_exportSetup($parent, 0);
+}
+
+global proc MayaDmx_exportAllFileOptionsUICommit(string $parent)
+{
+    MayaDmx_exportCallback($parent, 1, 0);
+}
+
+global proc MayaDmx_exportSelectionFileOptionsUICommit(string $parent)
+{
+    MayaDmx_exportCallback($parent, 0, 0);
+}
+
+global proc string performDmxExport(int $action, int $exportAll)
+{
+    string $cmd = "";
+
+    switch ($action) {
+    case 0:
+        $cmd = assembleDmxExportCmd($exportAll);
+        eval($cmd);
+        break;
+    case 1:
+        DmxExportOptions($exportAll);
+        break;
+    case 2:
+        $cmd = assembleDmxExportCmd($exportAll);
+        break;
+    }
+
+    return $cmd;
+}

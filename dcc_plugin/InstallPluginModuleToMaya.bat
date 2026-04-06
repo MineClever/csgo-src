@@ -9,6 +9,7 @@ set MODULE_VERSION=0.1.0
 set MAYA_VERSION=2022
 set SOURCE_PLUGIN=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll
 set SOURCE_PDB=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.pdb
+set SOURCE_MEL_DIR=%PLUGIN_ROOT%\src\mel
 set MODULE_ROOT=%PLUGIN_ROOT%\maya_module
 set MODULE_PLUGIN_DIR=%MODULE_ROOT%\plug-ins\windows\%MAYA_VERSION%
 set MODULE_SCRIPTS_DIR=%MODULE_ROOT%\scripts
@@ -35,10 +36,37 @@ if not exist "%SOURCE_PLUGIN%" (
     exit /b 1
 )
 
+if not exist "%SOURCE_MEL_DIR%" (
+    echo ERROR: MEL source directory not found: "%SOURCE_MEL_DIR%"
+    pause
+    exit /b 1
+)
+
 if not exist "%USER_MODULE_DIR%" mkdir "%USER_MODULE_DIR%"
 if not exist "%MODULE_PLUGIN_DIR%" mkdir "%MODULE_PLUGIN_DIR%"
 if not exist "%MODULE_SCRIPTS_DIR%" mkdir "%MODULE_SCRIPTS_DIR%"
 if not exist "%MODULE_ICONS_DIR%" mkdir "%MODULE_ICONS_DIR%"
+
+del /Q "%MODULE_PLUGIN_DIR%\*" >nul 2>nul
+if %ERRORLEVEL% GTR 1 (
+    echo ERROR: Failed to clear plugin target directory.
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+del /Q "%MODULE_SCRIPTS_DIR%\*" >nul 2>nul
+if %ERRORLEVEL% GTR 1 (
+    echo ERROR: Failed to clear script target directory.
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+del /Q "%MODULE_ICONS_DIR%\*" >nul 2>nul
+if %ERRORLEVEL% GTR 1 (
+    echo ERROR: Failed to clear icon target directory.
+    pause
+    exit /b %ERRORLEVEL%
+)
 
 copy /Y "%SOURCE_PLUGIN%" "%MODULE_PLUGIN_DIR%\maya_dmx.mll" >nul
 if %ERRORLEVEL% NEQ 0 (
@@ -56,6 +84,13 @@ if exist "%SOURCE_PDB%" (
     )
 ) else (
     echo NOTE: Debug symbols not found, skipping PDB copy.
+)
+
+copy /Y "%SOURCE_MEL_DIR%\*.mel" "%MODULE_SCRIPTS_DIR%\" >nul
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Failed to copy MEL scripts from "%SOURCE_MEL_DIR%".
+    pause
+    exit /b %ERRORLEVEL%
 )
 
 set MODULE_ROOT_MOD=%MODULE_ROOT:\=/%
@@ -78,6 +113,8 @@ echo Installed module file:
 echo   "%USER_MODULE_FILE%"
 echo Plugin binary:
 echo   "%MODULE_PLUGIN_DIR%\maya_dmx.mll"
+echo MEL scripts:
+echo   "%MODULE_SCRIPTS_DIR%\*.mel"
 if exist "%MODULE_PLUGIN_DIR%\maya_dmx.pdb" (
     echo Debug symbols:
     echo   "%MODULE_PLUGIN_DIR%\maya_dmx.pdb"

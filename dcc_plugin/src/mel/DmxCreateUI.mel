@@ -1,0 +1,22 @@
+global proc MayaDmxEnsureExportScripts()
+{
+    if (!`exists performDmxExport`) {
+        source "performDmxExport.mel";
+    }
+
+    if (!`exists doDmxExportArgList`) {
+        source "doDmxExportArgList.mel";
+    }
+}
+
+global proc MayaDmxShowExportSelectionOptions()
+{
+    MayaDmxEnsureExportScripts();
+    performDmxExport 1 0;
+}
+
+global proc MayaDmxShowExportAllOptions()
+{
+    MayaDmxEnsureExportScripts();
+    performDmxExport 1 1;
+}

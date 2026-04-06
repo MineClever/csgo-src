@@ -1,0 +1,92 @@
+global proc MayaDmxExport_syncOptionVars(string $version, string $args[])
+{
+    optionVar -stringValue MayaDmx_exportEncoding $args[1];
+    optionVar -stringValue MayaDmx_exportUpAxis $args[2];
+    optionVar -intValue MayaDmx_exportSkin $args[3];
+    optionVar -intValue MayaDmx_exportDeltaStates $args[4];
+    optionVar -stringValue MayaDmx_exportMaterialRoot $args[5];
+}
+
+global proc doDmxExportArgList(string $version, string $args[])
+{
+    if (!`exists captureDmxExportOptionVars`) {
+        eval("source \"performDmxExport.mel\"");
+    }
+
+    int $exportAll = $args[0];
+    string $optionVarsBackup[] = captureDmxExportOptionVars($version, $exportAll);
+
+    MayaDmxExport_syncOptionVars($version, $args);
+
+    global string $gDmxExportLastDirectory;
+    global string $gDmxExportLastWorkspace;
+
+    string $workspaceRoot = `workspace -q -rootDirectory`;
+    string $startingDir = $gDmxExportLastDirectory;
+    if (size($startingDir) == 0 || $gDmxExportLastWorkspace != $workspaceRoot) {
+        $startingDir = $workspaceRoot;
+    }
+
+    string $filter = "Valve DMX (*.dmx *.dmxb *.dmxbin);;All Files (*.*)";
+    string $result[];
+    if ($exportAll) {
+        $result = `fileDialog2
+            -returnFilter 1
+            -fileFilter $filter
+            -caption "Export Valve DMX"
+            -startingDirectory $startingDir
+            -fileMode 0
+            -okCaption "Export All"
+            -optionsUICreate "MayaDmx_exportFileOptionsUICreate"
+            -optionsUIInit "MayaDmx_exportFileOptionsUIInit"
+            -optionsUICommit "MayaDmx_exportAllFileOptionsUICommit"
+        `;
+    } else {
+        $result = `fileDialog2
+            -returnFilter 1
+            -fileFilter $filter
+            -caption "Export Valve DMX"
+            -startingDirectory $startingDir
+            -fileMode 0
+            -okCaption "Export Selection"
+            -optionsUICreate "MayaDmx_exportFileOptionsUICreate"
+            -optionsUIInit "MayaDmx_exportFileOptionsUIInit"
+            -optionsUICommit "MayaDmx_exportSelectionFileOptionsUICommit"
+        `;
+    }
+
+    if (size($result) == 0 || size($result[0]) == 0) {
+        MayaDmxExport_syncOptionVars($version, $optionVarsBackup);
+        return;
+    }
+
+    $gDmxExportLastDirectory = dirname($result[0]);
+    $gDmxExportLastWorkspace = $workspaceRoot;
+
+    string $presetName = "__mayaDmxUiExport";
+    string $encoding = `optionVar -q MayaDmx_exportEncoding`;
+    string $upAxis = `optionVar -q MayaDmx_exportUpAxis`;
+    int $exportSkin = `optionVar -q MayaDmx_exportSkin`;
+    int $exportDeltaStates = `optionVar -q MayaDmx_exportDeltaStates`;
+    string $materialRoot = `optionVar -q MayaDmx_exportMaterialRoot`;
+
+    if (!`exists mayaDmxWorkflow`) {
+        error "maya_dmx: mayaDmxWorkflow command is not available.";
+        MayaDmxExport_syncOptionVars($version, $optionVarsBackup);
+        return;
+    }
+
+    mayaDmxWorkflow
+        -savePreset $presetName
+        -outputDirectory ""
+        -materialRoot $materialRoot
+        -encoding $encoding
+        -upAxis $upAxis
+        -exportSkin ($exportSkin == 1)
+        -exportDeltaStates ($exportDeltaStates == 1);
+
+    mayaDmxWorkflow
+        -exportPreset $presetName
+        -filePath $result[0]
+        -exportAll ($exportAll == 1);
+}
