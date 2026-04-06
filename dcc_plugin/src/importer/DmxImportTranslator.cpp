@@ -4,6 +4,7 @@
 #include "../common/SimpleDmxText.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -23,6 +24,8 @@
 #include <maya/MFnIkJoint.h>
 #include <maya/MFnMatrixData.h>
 #include <maya/MFnMesh.h>
+#include <maya/MFnSet.h>
+#include <maya/MFnTypedAttribute.h>
 #include <maya/MFnSingleIndexedComponent.h>
 #include <maya/MFnSkinCluster.h>
 #include <maya/MFnTransform.h>
@@ -32,6 +35,7 @@
 #include <maya/MItDependencyGraph.h>
 #include <maya/MMatrix.h>
 #include <maya/MPointArray.h>
+#include <maya/MPlugArray.h>
 #include <maya/MQuaternion.h>
 #include <maya/MSelectionList.h>
 #include <maya/MString.h>
@@ -66,8 +70,33 @@ void AppendImportDebugLog(const char *message)
 struct FaceSetAssignment
 {
     std::string shadingGroupName;
+    std::string materialName;
+    std::string shaderName;
+    std::string shaderType;
+    std::string color;
+    std::string transparency;
+    std::string diffuseTexture;
+    std::string normalTexture;
+    std::string bumpTexture;
     int polygonStart = 0;
     int polygonCount = 0;
+};
+
+struct UvSetData
+{
+    int channelIndex = 0;
+    std::string attributeName;
+    std::string indexAttributeName;
+    std::string mayaSetName;
+    std::vector<std::string> values;
+    std::vector<int> indices;
+    MIntArray polygonVertexIndices;
+};
+
+struct DeltaStateGroup
+{
+    std::string nodeName;
+    std::vector<const simple_dmx::Element *> states;
 };
 
 struct ImportContext
@@ -172,6 +201,355 @@ std::vector<std::string> FindAttributeStringArray(const simple_dmx::Element *ele
     }
 
     return it->second.stringArray;
+}
+
+int ParseUvChannelIndex(const std::string &attributeName)
+{
+    if (attributeName == "textureCoordinates")
+    {
+        return 0;
+    }
+
+    if (attributeName.rfind("texcoord$", 0) == 0)
+    {
+        const char *suffix = attributeName.c_str() + 9;
+        if (*suffix == '\0')
+        {
+            return -1;
+        }
+
+        char *end = nullptr;
+        const long parsedIndex = std::strtol(suffix, &end, 10);
+        if (end && *end == '\0' && parsedIndex >= 1)
+        {
+            return static_cast<int>(parsedIndex);
+        }
+    }
+
+    return -1;
+}
+
+std::vector<UvSetData> CollectUvSets(const simple_dmx::Element *vertexData)
+{
+    std::vector<UvSetData> uvSets;
+    if (!vertexData)
+    {
+        return uvSets;
+    }
+
+    const std::vector<std::string> mayaUvSetNames = FindAttributeStringArray(vertexData, "mayaUvSetNames");
+    for (const auto &entry : vertexData->attributes)
+    {
+        const int channelIndex = ParseUvChannelIndex(entry.first);
+        if (channelIndex < 0 || entry.second.kind != simple_dmx::Attribute::Kind::StringArray)
+        {
+            continue;
+        }
+
+        UvSetData uvSet;
+        uvSet.channelIndex = channelIndex;
+        uvSet.attributeName = entry.first;
+        uvSet.indexAttributeName = entry.first + "Indices";
+        uvSet.values = entry.second.stringArray;
+        uvSet.indices.reserve(FindAttributeStringArray(vertexData, uvSet.indexAttributeName.c_str()).size());
+        for (const std::string &indexString : FindAttributeStringArray(vertexData, uvSet.indexAttributeName.c_str()))
+        {
+            const std::vector<double> values = ParseNumberList(indexString);
+            if (!values.empty())
+            {
+                uvSet.indices.push_back(static_cast<int>(values[0]));
+            }
+        }
+
+        if (channelIndex >= 0 && channelIndex < static_cast<int>(mayaUvSetNames.size()))
+        {
+            uvSet.mayaSetName = mayaUvSetNames[static_cast<size_t>(channelIndex)];
+        }
+        else
+        {
+            uvSet.mayaSetName = channelIndex == 0 ? "map1" : entry.first;
+        }
+
+        uvSets.push_back(std::move(uvSet));
+    }
+
+    std::sort(
+        uvSets.begin(),
+        uvSets.end(),
+        [](const UvSetData &lhs, const UvSetData &rhs)
+        {
+            return lhs.channelIndex < rhs.channelIndex;
+        });
+    return uvSets;
+}
+
+MStatus SetOrCreateStringAttribute(const MObject &nodeObject, const char *attributeName, const std::string &value)
+{
+    MStatus status;
+    MFnDependencyNode nodeFn(nodeObject, &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    MObject attributeObject = nodeFn.attribute(attributeName, &status);
+    if (!status || attributeObject.isNull())
+    {
+        MFnTypedAttribute typedAttributeFn;
+        attributeObject = typedAttributeFn.create(attributeName, attributeName, MFnData::kString, MObject::kNullObj, &status);
+        if (!status)
+        {
+            return status;
+        }
+        typedAttributeFn.setHidden(true);
+        typedAttributeFn.setStorable(true);
+        typedAttributeFn.setReadable(true);
+        typedAttributeFn.setWritable(true);
+        status = nodeFn.addAttribute(attributeObject);
+        if (!status)
+        {
+            return status;
+        }
+    }
+
+    MPlug attributePlug = nodeFn.findPlug(attributeName, true, &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    return attributePlug.setString(value.c_str());
+}
+
+std::string JoinLines(const std::vector<std::string> &values)
+{
+    std::ostringstream stream;
+    for (size_t i = 0; i < values.size(); ++i)
+    {
+        if (i > 0)
+        {
+            stream << '\n';
+        }
+        stream << values[i];
+    }
+    return stream.str();
+}
+
+bool ParseFloat3(const std::string &text, float (&components)[3])
+{
+    const std::vector<double> values = ParseNumberList(text);
+    if (values.size() < 3)
+    {
+        return false;
+    }
+
+    components[0] = static_cast<float>(values[0]);
+    components[1] = static_cast<float>(values[1]);
+    components[2] = static_cast<float>(values[2]);
+    return true;
+}
+
+MObject FindNodeByName(const std::string &nodeName, MStatus *outStatus = nullptr)
+{
+    MStatus status;
+    MSelectionList selectionList;
+    status = selectionList.add(nodeName.c_str());
+    if (!status)
+    {
+        if (outStatus)
+        {
+            *outStatus = status;
+        }
+        return MObject::kNullObj;
+    }
+
+    MObject nodeObject;
+    status = selectionList.getDependNode(0, nodeObject);
+    if (outStatus)
+    {
+        *outStatus = status;
+    }
+    return status ? nodeObject : MObject::kNullObj;
+}
+
+MStatus SetVector3Plug(const MPlug &plug, const std::string &value)
+{
+    float components[3] = {};
+    if (!ParseFloat3(value, components) || plug.numChildren() < 3)
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status = plug.child(0).setFloat(components[0]);
+    if (!status)
+    {
+        return status;
+    }
+    status = plug.child(1).setFloat(components[1]);
+    if (!status)
+    {
+        return status;
+    }
+    return plug.child(2).setFloat(components[2]);
+}
+
+MStatus DisconnectDestinationPlug(MDGModifier &modifier, const MPlug &destinationPlug)
+{
+    MPlugArray sourcePlugs;
+    destinationPlug.connectedTo(sourcePlugs, true, false);
+    MStatus status = MS::kSuccess;
+    if (destinationPlug.isNull())
+    {
+        return status;
+    }
+
+    for (unsigned int sourceIndex = 0; sourceIndex < sourcePlugs.length(); ++sourceIndex)
+    {
+        status = modifier.disconnect(sourcePlugs[sourceIndex], destinationPlug);
+        if (!status)
+        {
+            return status;
+        }
+    }
+
+    return modifier.doIt();
+}
+
+MStatus ConnectPlugs(MPlug sourcePlug, MPlug destinationPlug)
+{
+    MDGModifier modifier;
+    MStatus status = DisconnectDestinationPlug(modifier, destinationPlug);
+    if (!status)
+    {
+        return status;
+    }
+
+    status = modifier.connect(sourcePlug, destinationPlug);
+    if (!status)
+    {
+        return status;
+    }
+
+    return modifier.doIt();
+}
+
+MObject EnsureDependencyNode(const std::string &nodeType, const std::string &requestedName, MStatus &status)
+{
+    MStatus lookupStatus;
+    MObject existingNode = FindNodeByName(requestedName, &lookupStatus);
+    if (lookupStatus && !existingNode.isNull())
+    {
+        MFnDependencyNode existingNodeFn(existingNode, &status);
+        if (!status)
+        {
+            return MObject::kNullObj;
+        }
+
+        if (existingNodeFn.typeName() == nodeType.c_str())
+        {
+            return existingNode;
+        }
+    }
+
+    MDGModifier modifier;
+    MObject nodeObject = modifier.createNode(nodeType.c_str(), &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    status = modifier.doIt();
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    MFnDependencyNode nodeFn(nodeObject, &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    nodeFn.setName(requestedName.c_str(), &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+    return nodeObject;
+}
+
+MObject EnsureShadingGroup(const std::string &requestedName, MStatus &status)
+{
+    MStatus lookupStatus;
+    MObject existingNode = FindNodeByName(requestedName, &lookupStatus);
+    if (lookupStatus && !existingNode.isNull() && existingNode.hasFn(MFn::kSet))
+    {
+        MFnSet existingSet(existingNode, &status);
+        if (status && existingSet.restriction() == MFnSet::kRenderableOnly)
+        {
+            return existingNode;
+        }
+    }
+
+    MSelectionList emptyList;
+    MFnSet setFn;
+    MObject setObject = setFn.create(emptyList, MFnSet::kRenderableOnly, &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    setFn.setName(requestedName.c_str(), &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    return setObject;
+}
+
+MStatus AssignTextureToShader(
+    const std::string &fileNodeName,
+    const std::string &texturePath,
+    MPlug destinationPlug,
+    bool useAlphaOutput)
+{
+    if (texturePath.empty())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MObject fileNodeObject = EnsureDependencyNode("file", fileNodeName, status);
+    if (!status)
+    {
+        return status;
+    }
+
+    MFnDependencyNode fileNodeFn(fileNodeObject, &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    MPlug fileTextureNamePlug = fileNodeFn.findPlug("fileTextureName", true, &status);
+    if (!status)
+    {
+        return status;
+    }
+    status = fileTextureNamePlug.setString(texturePath.c_str());
+    if (!status)
+    {
+        return status;
+    }
+
+    MPlug outputPlug = fileNodeFn.findPlug(useAlphaOutput ? "outAlpha" : "outColor", true, &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    return ConnectPlugs(outputPlug, destinationPlug);
 }
 
 MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::Element *dagElement, MObject object)
@@ -508,7 +886,14 @@ MStatus AssignFaceSetMaterials(
         return MS::kSuccess;
     }
 
-    const MString meshPath = meshFn.fullPathName();
+    MStatus status;
+    MDagPath meshPath;
+    status = meshFn.getPath(meshPath);
+    if (!status)
+    {
+        return status;
+    }
+
     for (const FaceSetAssignment &assignment : faceSetAssignments)
     {
         if (assignment.polygonCount <= 0 || assignment.shadingGroupName.empty())
@@ -516,42 +901,161 @@ MStatus AssignFaceSetMaterials(
             continue;
         }
 
-        const std::string sanitizedName = SanitizeNodeName(assignment.shadingGroupName);
-        const std::string shaderName = sanitizedName + "_shader";
-
-        MString command;
-        command += "if (!`objExists \"";
-        command += assignment.shadingGroupName.c_str();
-        command += "\"`) {";
-        command += "string $shader = \"";
-        command += shaderName.c_str();
-        command += "\";";
-        command += "if (!`objExists $shader`) $shader = `shadingNode -asShader lambert -name $shader`;";
-        command += "string $sg = `sets -renderable true -noSurfaceShader true -empty -name \"";
-        command += assignment.shadingGroupName.c_str();
-        command += "\"`;";
-        command += "connectAttr -f ($shader + \".outColor\") ($sg + \".surfaceShader\");";
-        command += "}";
-        if (MGlobal::executeCommand(command, false, false) != MS::kSuccess)
+        std::string shadingGroupName = SanitizeNodeName(assignment.shadingGroupName);
+        if (shadingGroupName.empty())
         {
-            continue;
+            shadingGroupName = "dmxMaterialSet";
+        }
+        if (shadingGroupName.size() < 3 || shadingGroupName.substr(shadingGroupName.size() - 3) != "_SG")
+        {
+            shadingGroupName += "_SG";
+        }
+        const std::string materialName = assignment.materialName.empty() ? shadingGroupName : assignment.materialName;
+        const std::string shaderType = assignment.shaderType.empty() ? "lambert" : assignment.shaderType;
+        const std::string shaderName = assignment.shaderName.empty() ?
+            SanitizeNodeName(materialName) :
+            SanitizeNodeName(assignment.shaderName);
+
+        MObject shadingGroupObject = EnsureShadingGroup(shadingGroupName, status);
+        if (!status || shadingGroupObject.isNull())
+        {
+            return status;
         }
 
-        MString components;
+        MObject shaderObject = EnsureDependencyNode(shaderType, shaderName, status);
+        if (!status || shaderObject.isNull())
+        {
+            return status;
+        }
+
+        MFnDependencyNode shaderNodeFn(shaderObject, &status);
+        if (!status)
+        {
+            return status;
+        }
+
+        MFnDependencyNode shadingGroupNodeFn(shadingGroupObject, &status);
+        if (!status)
+        {
+            return status;
+        }
+
+        MPlug surfaceShaderPlug = shadingGroupNodeFn.findPlug("surfaceShader", true, &status);
+        if (!status)
+        {
+            return status;
+        }
+
+        MPlug outColorPlug = shaderNodeFn.findPlug("outColor", true, &status);
+        if (!status)
+        {
+            return status;
+        }
+
+        status = ConnectPlugs(outColorPlug, surfaceShaderPlug);
+        if (!status)
+        {
+            return status;
+        }
+
+        MPlug colorPlug = shaderNodeFn.findPlug("color", true, &status);
+        if (status && !assignment.color.empty())
+        {
+            SetVector3Plug(colorPlug, assignment.color);
+        }
+
+        MPlug transparencyPlug = shaderNodeFn.findPlug("transparency", true, &status);
+        if (status && !assignment.transparency.empty())
+        {
+            SetVector3Plug(transparencyPlug, assignment.transparency);
+        }
+
+        if (!assignment.diffuseTexture.empty() && colorPlug.isNull() == false)
+        {
+            status = AssignTextureToShader(shaderName + "_diffuseFile", assignment.diffuseTexture, colorPlug, false);
+            if (!status)
+            {
+                return status;
+            }
+        }
+
+        MPlug normalCameraPlug = shaderNodeFn.findPlug("normalCamera", true, &status);
+        const std::string normalOrBumpTexture = assignment.normalTexture.empty() ? assignment.bumpTexture : assignment.normalTexture;
+        if (status && !normalOrBumpTexture.empty())
+        {
+            MObject bumpNodeObject = EnsureDependencyNode("bump2d", shaderName + "_normalBump", status);
+            if (!status || bumpNodeObject.isNull())
+            {
+                return status;
+            }
+
+            MFnDependencyNode bumpNodeFn(bumpNodeObject, &status);
+            if (!status)
+            {
+                return status;
+            }
+
+            MPlug bumpInterpPlug = bumpNodeFn.findPlug("bumpInterp", true, &status);
+            if (status)
+            {
+                bumpInterpPlug.setInt(1);
+            }
+
+            MPlug bumpValuePlug = bumpNodeFn.findPlug("bumpValue", true, &status);
+            if (!status)
+            {
+                return status;
+            }
+
+            status = AssignTextureToShader(shaderName + "_normalFile", normalOrBumpTexture, bumpValuePlug, true);
+            if (!status)
+            {
+                return status;
+            }
+
+            MPlug outNormalPlug = bumpNodeFn.findPlug("outNormal", true, &status);
+            if (!status)
+            {
+                return status;
+            }
+
+            status = ConnectPlugs(outNormalPlug, normalCameraPlug);
+            if (!status)
+            {
+                return status;
+            }
+        }
+
+        MFnSingleIndexedComponent componentFn;
+        MObject faceComponent = componentFn.create(MFn::kMeshPolygonComponent, &status);
+        if (!status)
+        {
+            return status;
+        }
+
+        MIntArray faceIds;
         for (int offset = 0; offset < assignment.polygonCount; ++offset)
         {
-            components += " \"";
-            components += meshPath;
-            components += ".f[";
-            components += assignment.polygonStart + offset;
-            components += "]\"";
+            faceIds.append(assignment.polygonStart + offset);
         }
 
-        MString assignCommand("sets -e -forceElement \"");
-        assignCommand += assignment.shadingGroupName.c_str();
-        assignCommand += "\"";
-        assignCommand += components;
-        MGlobal::executeCommand(assignCommand, false, false);
+        status = componentFn.addElements(faceIds);
+        if (!status)
+        {
+            return status;
+        }
+
+        MFnSet shadingGroupSetFn(shadingGroupObject, &status);
+        if (!status)
+        {
+            return status;
+        }
+
+        status = shadingGroupSetFn.addMember(meshPath, faceComponent);
+        if (!status)
+        {
+            return status;
+        }
     }
 
     return MS::kSuccess;
@@ -799,6 +1303,31 @@ MStatus ApplyDeltaStates(
         return MS::kSuccess;
     }
 
+    std::vector<DeltaStateGroup> deltaStateGroups;
+    std::unordered_map<std::string, size_t> deltaStateGroupIndex;
+    for (const simple_dmx::Element *deltaState : deltaStates)
+    {
+        if (!deltaState)
+        {
+            continue;
+        }
+
+        std::string groupName = FindAttributeString(deltaState, "mayaBlendShapeNode");
+        if (groupName.empty())
+        {
+            groupName = meshElement->name.empty() ? std::string("dmx_blendShape") : meshElement->name + "_blendShape";
+        }
+
+        auto [groupIt, inserted] = deltaStateGroupIndex.emplace(groupName, deltaStateGroups.size());
+        if (inserted)
+        {
+            DeltaStateGroup group;
+            group.nodeName = groupName;
+            deltaStateGroups.push_back(std::move(group));
+        }
+        deltaStateGroups[groupIt->second].states.push_back(deltaState);
+    }
+
     MDagPath baseParentPath;
     MStatus status = MDagPath::getAPathTo(meshParentObject, baseParentPath);
     if (!status)
@@ -813,132 +1342,135 @@ MStatus ApplyDeltaStates(
         return status;
     }
 
-    MStringArray targetTransforms;
-    std::vector<MObject> targetMeshObjects;
-    std::vector<std::string> targetNames;
-    for (const simple_dmx::Element *deltaState : deltaStates)
+    for (const DeltaStateGroup &group : deltaStateGroups)
     {
-        if (!deltaState)
+        MStringArray targetTransforms;
+        std::vector<MObject> targetMeshObjects;
+        std::vector<std::string> targetNames;
+        for (const simple_dmx::Element *deltaState : group.states)
         {
-            continue;
-        }
-
-        const std::vector<std::string> deltaPositionStrings = FindAttributeStringArray(deltaState, "positions");
-        const std::vector<std::string> deltaPositionIndexStrings = FindAttributeStringArray(deltaState, "positionsIndices");
-        if (deltaPositionStrings.empty() || deltaPositionIndexStrings.empty())
-        {
-            continue;
-        }
-
-        MStringArray duplicateResult;
-        MString duplicateCommand("duplicate -rr \"");
-        duplicateCommand += baseParentPath.fullPathName();
-        duplicateCommand += "\"";
-        AppendImportDebugLog(duplicateCommand.asChar());
-        status = MGlobal::executeCommand(duplicateCommand, duplicateResult, false, false);
-        if (!status || duplicateResult.length() == 0)
-        {
-            return maya_dmx::ReportError(MString("maya_dmx: failed to duplicate base mesh for delta state ") + deltaState->name.c_str(), status);
-        }
-
-        MSelectionList selectionList;
-        selectionList.add(duplicateResult[0]);
-        MObject duplicateTransformObject;
-        status = selectionList.getDependNode(0, duplicateTransformObject);
-        if (!status)
-        {
-            return status;
-        }
-
-        const MObject duplicateMeshObject = FindPrimaryMeshChild(duplicateTransformObject);
-        if (duplicateMeshObject.isNull())
-        {
-            return maya_dmx::ReportWarning(MString("maya_dmx: delta target duplicate had no mesh shape: ") + duplicateResult[0]);
-        }
-
-        MFnMesh targetMeshFn(duplicateMeshObject, &status);
-        if (!status)
-        {
-            return status;
-        }
-
-        MPointArray deltaPoints = basePoints;
-        const size_t deltaCount = std::min(deltaPositionStrings.size(), deltaPositionIndexStrings.size());
-        for (size_t i = 0; i < deltaCount; ++i)
-        {
-            const std::vector<double> deltaValues = ParseNumberList(deltaPositionStrings[i]);
-            const std::vector<double> indexValues = ParseNumberList(deltaPositionIndexStrings[i]);
-            if (deltaValues.size() < 3 || indexValues.empty())
+            if (!deltaState)
             {
                 continue;
             }
 
-            const int pointIndex = static_cast<int>(indexValues[0]);
-            if (pointIndex < 0 || pointIndex >= static_cast<int>(deltaPoints.length()))
+            const std::vector<std::string> deltaPositionStrings = FindAttributeStringArray(deltaState, "positions");
+            const std::vector<std::string> deltaPositionIndexStrings = FindAttributeStringArray(deltaState, "positionsIndices");
+            if (deltaPositionStrings.empty() || deltaPositionIndexStrings.empty())
             {
                 continue;
             }
 
-            deltaPoints[pointIndex].x += deltaValues[0];
-            deltaPoints[pointIndex].y += deltaValues[1];
-            deltaPoints[pointIndex].z += deltaValues[2];
+            MStringArray duplicateResult;
+            MString duplicateCommand("duplicate -rr \"");
+            duplicateCommand += baseParentPath.fullPathName();
+            duplicateCommand += "\"";
+            AppendImportDebugLog(duplicateCommand.asChar());
+            status = MGlobal::executeCommand(duplicateCommand, duplicateResult, false, false);
+            if (!status || duplicateResult.length() == 0)
+            {
+                return maya_dmx::ReportError(MString("maya_dmx: failed to duplicate base mesh for delta state ") + deltaState->name.c_str(), status);
+            }
+
+            MSelectionList selectionList;
+            selectionList.add(duplicateResult[0]);
+            MObject duplicateTransformObject;
+            status = selectionList.getDependNode(0, duplicateTransformObject);
+            if (!status)
+            {
+                return status;
+            }
+
+            const MObject duplicateMeshObject = FindPrimaryMeshChild(duplicateTransformObject);
+            if (duplicateMeshObject.isNull())
+            {
+                return maya_dmx::ReportWarning(MString("maya_dmx: delta target duplicate had no mesh shape: ") + duplicateResult[0]);
+            }
+
+            MFnMesh targetMeshFn(duplicateMeshObject, &status);
+            if (!status)
+            {
+                return status;
+            }
+
+            MPointArray deltaPoints = basePoints;
+            const size_t deltaCount = std::min(deltaPositionStrings.size(), deltaPositionIndexStrings.size());
+            for (size_t i = 0; i < deltaCount; ++i)
+            {
+                const std::vector<double> deltaValues = ParseNumberList(deltaPositionStrings[i]);
+                const std::vector<double> indexValues = ParseNumberList(deltaPositionIndexStrings[i]);
+                if (deltaValues.size() < 3 || indexValues.empty())
+                {
+                    continue;
+                }
+
+                const int pointIndex = static_cast<int>(indexValues[0]);
+                if (pointIndex < 0 || pointIndex >= static_cast<int>(deltaPoints.length()))
+                {
+                    continue;
+                }
+
+                deltaPoints[pointIndex].x += deltaValues[0];
+                deltaPoints[pointIndex].y += deltaValues[1];
+                deltaPoints[pointIndex].z += deltaValues[2];
+            }
+
+            status = targetMeshFn.setPoints(deltaPoints, MSpace::kObject);
+            if (!status)
+            {
+                return status;
+            }
+
+            targetTransforms.append(duplicateResult[0]);
+            targetMeshObjects.push_back(duplicateMeshObject);
+            targetNames.push_back(deltaState->name.empty() ? std::string("delta") : SanitizeNodeName(deltaState->name));
         }
 
-        status = targetMeshFn.setPoints(deltaPoints, MSpace::kObject);
+        if (targetTransforms.length() == 0)
+        {
+            continue;
+        }
+
+        MFnBlendShapeDeformer blendShapeFn;
+        const MObject blendShapeObject = blendShapeFn.create(meshObject, MFnBlendShapeDeformer::kLocalOrigin, &status);
+        if (!status)
+        {
+            return maya_dmx::ReportError(MString("maya_dmx: failed to create blendShape for ") + baseParentPath.fullPathName(), status);
+        }
+        const std::string blendShapeName = SanitizeNodeName(group.nodeName);
+        MFnDependencyNode blendShapeDependency(blendShapeObject, &status);
         if (!status)
         {
             return status;
         }
+        blendShapeDependency.setName(blendShapeName.c_str());
+        const MString blendShapeNodeName = blendShapeDependency.name();
 
-        targetTransforms.append(duplicateResult[0]);
-        targetMeshObjects.push_back(duplicateMeshObject);
-        targetNames.push_back(deltaState->name.empty() ? std::string("delta") : SanitizeNodeName(deltaState->name));
-    }
-
-    if (targetTransforms.length() == 0)
-    {
-        return MS::kSuccess;
-    }
-
-    MFnBlendShapeDeformer blendShapeFn;
-    const MObject blendShapeObject = blendShapeFn.create(meshObject, MFnBlendShapeDeformer::kLocalOrigin, &status);
-    if (!status)
-    {
-        return maya_dmx::ReportError(MString("maya_dmx: failed to create blendShape for ") + baseParentPath.fullPathName(), status);
-    }
-    const std::string blendShapeName = SanitizeNodeName(meshElement->name.empty() ? std::string("dmx_blendShape") : meshElement->name + "_blendShape");
-    MFnDependencyNode blendShapeDependency(blendShapeObject, &status);
-    if (!status)
-    {
-        return status;
-    }
-    blendShapeDependency.setName(blendShapeName.c_str());
-    const MString blendShapeNodeName = blendShapeDependency.name();
-
-    for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
-    {
-        status = blendShapeFn.addTarget(meshObject, static_cast<int>(targetIndex), targetMeshObjects[targetIndex], 1.0);
-        if (!status)
+        for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
         {
-            return maya_dmx::ReportError(MString("maya_dmx: failed to add blendShape target to ") + blendShapeNodeName, status);
+            status = blendShapeFn.addTarget(meshObject, static_cast<int>(targetIndex), targetMeshObjects[targetIndex], 1.0);
+            if (!status)
+            {
+                return maya_dmx::ReportError(MString("maya_dmx: failed to add blendShape target to ") + blendShapeNodeName, status);
+            }
         }
-    }
 
-    for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
-    {
-        MString aliasCommand("aliasAttr \"");
-        aliasCommand += targetNames[targetIndex].c_str();
-        aliasCommand += "\" \"";
-        aliasCommand += blendShapeNodeName;
-        aliasCommand += ".w[";
-        aliasCommand += static_cast<int>(targetIndex);
-        aliasCommand += "]\"";
-        MGlobal::executeCommand(aliasCommand, false, false);
+        for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
+        {
+            MString aliasCommand("aliasAttr \"");
+            aliasCommand += targetNames[targetIndex].c_str();
+            aliasCommand += "\" \"";
+            aliasCommand += blendShapeNodeName;
+            aliasCommand += ".w[";
+            aliasCommand += static_cast<int>(targetIndex);
+            aliasCommand += "]\"";
+            MGlobal::executeCommand(aliasCommand, false, false);
 
-        MString deleteCommand("delete \"");
-        deleteCommand += targetTransforms[targetIndex];
-        deleteCommand += "\"";
-        MGlobal::executeCommand(deleteCommand, false, false);
+            MString deleteCommand("delete \"");
+            deleteCommand += targetTransforms[targetIndex];
+            deleteCommand += "\"";
+            MGlobal::executeCommand(deleteCommand, false, false);
+        }
     }
 
     return MS::kSuccess;
@@ -1004,18 +1536,9 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
         }
     }
 
-    const std::vector<std::string> uvStrings = FindAttributeStringArray(vertexData, "textureCoordinates");
-    const std::vector<std::string> uvIndexStrings = FindAttributeStringArray(vertexData, "textureCoordinatesIndices");
-    std::vector<int> uvIndices;
-    uvIndices.reserve(uvIndexStrings.size());
-    for (const std::string &indexString : uvIndexStrings)
-    {
-        const std::vector<double> values = ParseNumberList(indexString);
-        if (!values.empty())
-        {
-            uvIndices.push_back(static_cast<int>(values[0]));
-        }
-    }
+    std::vector<UvSetData> uvSets = CollectUvSets(vertexData);
+    const std::vector<std::string> tangentStrings = FindAttributeStringArray(vertexData, "tangents");
+    const std::vector<std::string> tangentIndexStrings = FindAttributeStringArray(vertexData, "tangentsIndices");
 
     const bool flipV = FindAttributeString(vertexData, "flipVCoordinates") == "1" ||
         FindAttributeString(vertexData, "flipVCoordinates") == "true";
@@ -1025,7 +1548,6 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
     MIntArray faceIds;
     MIntArray normalVertexIds;
     MVectorArray faceVertexNormals;
-    MIntArray uvIds;
     std::vector<FaceSetAssignment> faceSetAssignments;
     for (const simple_dmx::Element *faceSet : FindAttributeElementArray(document, meshElement, "faceSets"))
     {
@@ -1067,9 +1589,12 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
                             faceIds.remove(faceIds.length() - 1);
                             normalVertexIds.remove(normalVertexIds.length() - 1);
                         }
-                        if (uvIds.length() > 0)
+                        for (UvSetData &uvSet : uvSets)
                         {
-                            uvIds.remove(uvIds.length() - 1);
+                            if (uvSet.polygonVertexIndices.length() > 0)
+                            {
+                                uvSet.polygonVertexIndices.remove(uvSet.polygonVertexIndices.length() - 1);
+                            }
                         }
                     }
                 }
@@ -1109,12 +1634,15 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
                 }
             }
 
-            if (!uvStrings.empty() && faceVertexIndex < static_cast<int>(uvIndices.size()))
+            for (UvSetData &uvSet : uvSets)
             {
-                const int uvIndex = uvIndices[faceVertexIndex];
-                if (uvIndex >= 0 && uvIndex < static_cast<int>(uvStrings.size()))
+                if (faceVertexIndex < static_cast<int>(uvSet.indices.size()))
                 {
-                    uvIds.append(uvIndex);
+                    const int uvIndex = uvSet.indices[faceVertexIndex];
+                    if (uvIndex >= 0 && uvIndex < static_cast<int>(uvSet.values.size()))
+                    {
+                        uvSet.polygonVertexIndices.append(uvIndex);
+                    }
                 }
             }
 
@@ -1138,6 +1666,22 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
         {
             FaceSetAssignment assignment;
             assignment.shadingGroupName = faceSet ? faceSet->name : std::string();
+            if (const simple_dmx::Element *materialElement = FindAttributeElement(document, faceSet, "material"))
+            {
+                assignment.materialName = materialElement->name;
+                const std::string materialSlotName = FindAttributeString(materialElement, "mtlName");
+                if (!materialSlotName.empty())
+                {
+                    assignment.materialName = materialSlotName;
+                }
+                assignment.shaderName = FindAttributeString(materialElement, "mayaShaderName");
+                assignment.shaderType = FindAttributeString(materialElement, "mayaShaderType");
+                assignment.color = FindAttributeString(materialElement, "mayaColor");
+                assignment.transparency = FindAttributeString(materialElement, "mayaTransparency");
+                assignment.diffuseTexture = FindAttributeString(materialElement, "mayaDiffuseTexture");
+                assignment.normalTexture = FindAttributeString(materialElement, "mayaNormalTexture");
+                assignment.bumpTexture = FindAttributeString(materialElement, "mayaBumpTexture");
+            }
             assignment.polygonStart = polygonStart;
             assignment.polygonCount = polygonEnd - polygonStart;
             faceSetAssignments.push_back(std::move(assignment));
@@ -1159,11 +1703,11 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
 
     meshFn.setName((dagElement->name.empty() ? std::string("dmx_meshShape") : dagElement->name + "Shape").c_str());
 
-    if (!uvStrings.empty() && uvIds.length() == polygonConnects.length())
+    for (size_t uvSetIndex = 0; uvSetIndex < uvSets.size(); ++uvSetIndex)
     {
         MFloatArray uValues;
         MFloatArray vValues;
-        for (const std::string &uvString : uvStrings)
+        for (const std::string &uvString : uvSets[uvSetIndex].values)
         {
             const std::vector<double> values = ParseNumberList(uvString);
             if (values.size() < 2)
@@ -1182,10 +1726,48 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
             vValues.append(v);
         }
 
-        status = meshFn.setUVs(uValues, vValues);
+        if (uvSets[uvSetIndex].polygonVertexIndices.length() != polygonConnects.length())
+        {
+            continue;
+        }
+
+        MString uvSetName = uvSets[uvSetIndex].mayaSetName.c_str();
+        if (uvSetName.length() == 0)
+        {
+            uvSetName = uvSetIndex == 0 ? meshFn.currentUVSetName() : MString(uvSets[uvSetIndex].attributeName.c_str());
+        }
+
+        if (uvSetIndex == 0)
+        {
+            const MString currentUvSetName = meshFn.currentUVSetName();
+            if (uvSetName != currentUvSetName)
+            {
+                meshFn.renameUVSet(currentUvSetName, uvSetName);
+            }
+        }
+        else
+        {
+            MStringArray existingUvSetNames;
+            meshFn.getUVSetNames(existingUvSetNames);
+            bool uvSetExists = false;
+            for (unsigned int existingIndex = 0; existingIndex < existingUvSetNames.length(); ++existingIndex)
+            {
+                if (existingUvSetNames[existingIndex] == uvSetName)
+                {
+                    uvSetExists = true;
+                    break;
+                }
+            }
+            if (!uvSetExists)
+            {
+                meshFn.createUVSetWithName(uvSetName);
+            }
+        }
+
+        status = meshFn.setUVs(uValues, vValues, &uvSetName);
         if (status)
         {
-            status = meshFn.assignUVs(polygonCounts, uvIds);
+            status = meshFn.assignUVs(polygonCounts, uvSets[uvSetIndex].polygonVertexIndices, &uvSetName);
         }
         if (!status)
         {
@@ -1206,6 +1788,31 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
     if (!status)
     {
         return status;
+    }
+
+    if (!tangentStrings.empty() && !tangentIndexStrings.empty())
+    {
+        status = SetOrCreateStringAttribute(meshObject, "mayaDmxTangents", JoinLines(tangentStrings));
+        if (!status)
+        {
+            return status;
+        }
+
+        status = SetOrCreateStringAttribute(meshObject, "mayaDmxTangentsIndices", JoinLines(tangentIndexStrings));
+        if (!status)
+        {
+            return status;
+        }
+
+        const std::string tangentUvSetName = FindAttributeString(vertexData, "mayaTangentUvSetName");
+        if (!tangentUvSetName.empty())
+        {
+            status = SetOrCreateStringAttribute(meshObject, "mayaDmxTangentUvSetName", tangentUvSetName);
+            if (!status)
+            {
+                return status;
+            }
+        }
     }
 
     status = ApplyDeltaStates(document, meshElement, meshObject, parent, points);

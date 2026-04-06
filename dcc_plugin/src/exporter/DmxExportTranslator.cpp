@@ -20,6 +20,7 @@
 #include <maya/MDagPathArray.h>
 #include <maya/MFnBlendShapeDeformer.h>
 #include <maya/MFnDagNode.h>
+#include <maya/MFnDependencyNode.h>
 #include <maya/MFnIkJoint.h>
 #include <maya/MFnMesh.h>
 #include <maya/MFnSingleIndexedComponent.h>
@@ -35,7 +36,9 @@
 #include <maya/MObjectArray.h>
 #include <maya/MPointArray.h>
 #include <maya/MPlug.h>
+#include <maya/MPlugArray.h>
 #include <maya/MSelectionList.h>
+#include <maya/MStringArray.h>
 #include <maya/MVector.h>
 
 #include <Windows.h>
@@ -76,8 +79,34 @@ struct ExportContext
     std::unordered_map<std::string, int> jointIndexByPath;
 };
 
+struct IndexedChannel
+{
+    std::string formatName;
+    std::string valueAttributeName;
+    std::string indexAttributeName;
+    std::vector<std::string> values;
+    std::vector<std::string> indices;
+    std::unordered_map<std::string, int> valueMap;
+};
+
+struct MeshMaterialData
+{
+    std::string materialName;
+    std::string shadingGroupName;
+    std::string shaderName;
+    std::string shaderType;
+    std::string color;
+    std::string transparency;
+    std::string diffuseTexture;
+    std::string normalTexture;
+    std::string bumpTexture;
+};
+
 DmxAttribute MakeScalarAttribute(const std::string &name, const std::string &type, const std::string &value);
 DmxAttribute MakeScalarArrayAttribute(const std::string &name, const std::string &type, std::vector<std::string> values);
+DmxAttribute MakeInlineElementAttribute(const std::string &name, DmxElement *element);
+DmxAttribute MakeElementArrayAttribute(const std::string &name, const std::vector<DmxElement *> &elements);
+std::string FormatVector3(double x, double y, double z);
 
 class DmxTextBuilder
 {
@@ -211,6 +240,7 @@ constexpr std::uint8_t kAttributeBool = 4;
 constexpr std::uint8_t kAttributeString = 5;
 constexpr std::uint8_t kAttributeVector2 = 9;
 constexpr std::uint8_t kAttributeVector3 = 10;
+constexpr std::uint8_t kAttributeVector4 = 11;
 constexpr std::uint8_t kAttributeQuaternion = 13;
 constexpr std::uint8_t kAttributeElementArray = 15;
 constexpr std::uint8_t kAttributeIntArray = 16;
@@ -218,6 +248,7 @@ constexpr std::uint8_t kAttributeFloatArray = 17;
 constexpr std::uint8_t kAttributeStringArray = 19;
 constexpr std::uint8_t kAttributeVector2Array = 23;
 constexpr std::uint8_t kAttributeVector3Array = 24;
+constexpr std::uint8_t kAttributeVector4Array = 25;
 constexpr std::uint8_t kAttributeQuaternionArray = 27;
 constexpr int kCurrentBinaryEncoding = 5;
 
@@ -384,6 +415,7 @@ void AppendFaceSetElement(
     const char *faceSetName,
     const std::vector<int> &polygonIndices,
     const std::vector<std::vector<int>> &polygonFaceIndices,
+    const MeshMaterialData *materialData,
     std::vector<DmxElement *> &faceSetElements)
 {
     if (!faceSetName || polygonIndices.empty())
@@ -400,7 +432,238 @@ void AppendFaceSetElement(
     DmxElement *faceSetElement = builder.CreateElement("DmeFaceSet");
     faceSetElement->attributes.push_back(MakeScalarAttribute("name", "string", faceSetName));
     faceSetElement->attributes.push_back(MakeScalarArrayAttribute("faces", "int_array", std::move(faceValues)));
+    if (materialData && (!materialData->materialName.empty() || !materialData->shadingGroupName.empty()))
+    {
+        DmxElement *materialElement = builder.CreateElement("DmeMaterial");
+        materialElement->attributes.push_back(MakeScalarAttribute(
+            "name",
+            "string",
+            materialData->materialName.empty() ? materialData->shadingGroupName : materialData->materialName));
+        materialElement->attributes.push_back(MakeScalarAttribute(
+            "mtlName",
+            "string",
+            materialData->shadingGroupName.empty() ? materialData->materialName : materialData->shadingGroupName));
+        if (!materialData->shaderName.empty())
+        {
+            materialElement->attributes.push_back(MakeScalarAttribute("mayaShaderName", "string", materialData->shaderName));
+        }
+        if (!materialData->shaderType.empty())
+        {
+            materialElement->attributes.push_back(MakeScalarAttribute("mayaShaderType", "string", materialData->shaderType));
+        }
+        if (!materialData->color.empty())
+        {
+            materialElement->attributes.push_back(MakeScalarAttribute("mayaColor", "vector3", materialData->color));
+        }
+        if (!materialData->transparency.empty())
+        {
+            materialElement->attributes.push_back(MakeScalarAttribute("mayaTransparency", "vector3", materialData->transparency));
+        }
+        if (!materialData->diffuseTexture.empty())
+        {
+            materialElement->attributes.push_back(MakeScalarAttribute("mayaDiffuseTexture", "string", materialData->diffuseTexture));
+        }
+        if (!materialData->normalTexture.empty())
+        {
+            materialElement->attributes.push_back(MakeScalarAttribute("mayaNormalTexture", "string", materialData->normalTexture));
+        }
+        if (!materialData->bumpTexture.empty())
+        {
+            materialElement->attributes.push_back(MakeScalarAttribute("mayaBumpTexture", "string", materialData->bumpTexture));
+        }
+        faceSetElement->attributes.push_back(MakeInlineElementAttribute("material", materialElement));
+    }
     faceSetElements.push_back(faceSetElement);
+}
+
+std::string ReadStringPlugValue(const MPlug &plug)
+{
+    MString value;
+    if (plug.getValue(value) == MS::kSuccess)
+    {
+        return value.asChar();
+    }
+
+    return std::string();
+}
+
+std::vector<std::string> SplitLines(const std::string &value)
+{
+    std::vector<std::string> lines;
+    std::istringstream stream(value);
+    std::string line;
+    while (std::getline(stream, line))
+    {
+        if (!line.empty())
+        {
+            lines.push_back(line);
+        }
+    }
+    return lines;
+}
+
+std::string ReadDynamicStringAttribute(const MObject &nodeObject, const char *attributeName)
+{
+    MStatus status;
+    MFnDependencyNode nodeFn(nodeObject, &status);
+    if (!status)
+    {
+        return std::string();
+    }
+
+    MPlug attributePlug = nodeFn.findPlug(attributeName, true, &status);
+    if (!status)
+    {
+        return std::string();
+    }
+
+    return ReadStringPlugValue(attributePlug);
+}
+
+bool ReadVector3PlugValue(const MPlug &plug, std::string &formattedValue)
+{
+    if (plug.numChildren() < 3)
+    {
+        return false;
+    }
+
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+    if (plug.child(0).getValue(x) != MS::kSuccess ||
+        plug.child(1).getValue(y) != MS::kSuccess ||
+        plug.child(2).getValue(z) != MS::kSuccess)
+    {
+        return false;
+    }
+
+    formattedValue = FormatVector3(x, y, z);
+    return true;
+}
+
+MObject FindConnectedSourceNode(const MPlug &destinationPlug)
+{
+    MPlugArray connectedPlugs;
+    if (destinationPlug.connectedTo(connectedPlugs, true, false) != MS::kSuccess || connectedPlugs.length() == 0)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (unsigned int i = 0; i < connectedPlugs.length(); ++i)
+    {
+        const MObject node = connectedPlugs[i].node();
+        if (!node.isNull())
+        {
+            return node;
+        }
+    }
+
+    return MObject::kNullObj;
+}
+
+std::string FindTexturePathFromPlug(const MPlug &plug)
+{
+    const MObject sourceNode = FindConnectedSourceNode(plug);
+    if (sourceNode.isNull())
+    {
+        return std::string();
+    }
+
+    MStatus status;
+    MFnDependencyNode sourceNodeFn(sourceNode, &status);
+    if (!status)
+    {
+        return std::string();
+    }
+
+    if (sourceNodeFn.typeName() == "file")
+    {
+        MPlug textureNamePlug = sourceNodeFn.findPlug("fileTextureName", true, &status);
+        if (status)
+        {
+            return ReadStringPlugValue(textureNamePlug);
+        }
+        return std::string();
+    }
+
+    if (sourceNodeFn.typeName() == "bump2d" || sourceNodeFn.typeName() == "bump3d")
+    {
+        MPlug bumpPlug = sourceNodeFn.findPlug("bumpValue", true, &status);
+        if (status)
+        {
+            return FindTexturePathFromPlug(bumpPlug);
+        }
+    }
+
+    return std::string();
+}
+
+MeshMaterialData BuildMaterialData(const MObject &setObject, const std::string &fallbackName)
+{
+    MeshMaterialData materialData;
+    materialData.shadingGroupName = fallbackName;
+
+    MStatus status;
+    MFnDependencyNode setNodeFn(setObject, &status);
+    if (!status)
+    {
+        materialData.materialName = fallbackName;
+        return materialData;
+    }
+
+    MPlug surfaceShaderPlug = setNodeFn.findPlug("surfaceShader", true, &status);
+    if (!status)
+    {
+        materialData.materialName = fallbackName;
+        return materialData;
+    }
+
+    const MObject shaderObject = FindConnectedSourceNode(surfaceShaderPlug);
+    if (shaderObject.isNull())
+    {
+        materialData.materialName = fallbackName;
+        return materialData;
+    }
+
+    MFnDependencyNode shaderNodeFn(shaderObject, &status);
+    if (!status)
+    {
+        materialData.materialName = fallbackName;
+        return materialData;
+    }
+
+    materialData.materialName = shaderNodeFn.name().asChar();
+    materialData.shaderName = shaderNodeFn.name().asChar();
+    materialData.shaderType = shaderNodeFn.typeName().asChar();
+
+    MPlug colorPlug = shaderNodeFn.findPlug("color", true, &status);
+    if (status)
+    {
+        ReadVector3PlugValue(colorPlug, materialData.color);
+        materialData.diffuseTexture = FindTexturePathFromPlug(colorPlug);
+    }
+
+    MPlug transparencyPlug = shaderNodeFn.findPlug("transparency", true, &status);
+    if (status)
+    {
+        ReadVector3PlugValue(transparencyPlug, materialData.transparency);
+    }
+
+    MPlug normalPlug = shaderNodeFn.findPlug("normalCamera", true, &status);
+    if (status)
+    {
+        materialData.normalTexture = FindTexturePathFromPlug(normalPlug);
+        materialData.bumpTexture = materialData.normalTexture;
+    }
+
+    return materialData;
+}
+
+DmxElement *CloneElement(DmxTextBuilder &builder, const DmxElement &source)
+{
+    DmxElement *clone = builder.CreateElement(source.type);
+    clone->attributes = source.attributes;
+    return clone;
 }
 
 void WriteInt32(std::string &bytes, std::int32_t value)
@@ -698,6 +961,15 @@ private:
             WriteFloat32(output, static_cast<float>(values[2]));
             return true;
         }
+        if (attribute.type == "vector4" && values.size() >= 4)
+        {
+            WriteUInt8(output, kAttributeVector4);
+            WriteFloat32(output, static_cast<float>(values[0]));
+            WriteFloat32(output, static_cast<float>(values[1]));
+            WriteFloat32(output, static_cast<float>(values[2]));
+            WriteFloat32(output, static_cast<float>(values[3]));
+            return true;
+        }
         if (attribute.type == "quaternion" && values.size() >= 4)
         {
             WriteUInt8(output, kAttributeQuaternion);
@@ -771,6 +1043,10 @@ private:
         {
             return writeVectorArray(kAttributeVector3Array, 3);
         }
+        if (attribute.type == "vector4_array")
+        {
+            return writeVectorArray(kAttributeVector4Array, 4);
+        }
         if (attribute.type == "quaternion_array")
         {
             return writeVectorArray(kAttributeQuaternionArray, 4);
@@ -827,6 +1103,11 @@ std::string FormatVector3(double x, double y, double z)
 std::string FormatVector2(double x, double y)
 {
     return FormatFloat(x) + " " + FormatFloat(y);
+}
+
+std::string FormatVector4(double x, double y, double z, double w)
+{
+    return FormatFloat(x) + " " + FormatFloat(y) + " " + FormatFloat(z) + " " + FormatFloat(w);
 }
 
 std::string FormatQuaternion(double x, double y, double z, double w)
@@ -1210,11 +1491,32 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
     std::vector<std::string> positionsIndices;
     std::vector<std::string> normals;
     std::vector<std::string> normalsIndices;
-    std::vector<std::string> uvs;
-    std::vector<std::string> uvIndices;
     std::vector<std::vector<int>> polygonFaceIndices;
     std::unordered_map<std::string, int> normalMap;
-    std::unordered_map<std::string, int> uvMap;
+
+    MStringArray uvSetNames;
+    std::vector<IndexedChannel> uvChannels;
+    if (meshFn.getUVSetNames(uvSetNames) == MS::kSuccess)
+    {
+        for (unsigned int uvSetIndex = 0; uvSetIndex < uvSetNames.length(); ++uvSetIndex)
+        {
+            IndexedChannel uvChannel;
+            uvChannel.formatName = uvSetIndex == 0 ? "textureCoordinates" : "texcoord$" + std::to_string(uvSetIndex);
+            uvChannel.valueAttributeName = uvChannel.formatName;
+            uvChannel.indexAttributeName = uvChannel.formatName + "Indices";
+            uvChannels.push_back(std::move(uvChannel));
+        }
+    }
+
+    IndexedChannel tangentChannel;
+    tangentChannel.formatName = "tangents";
+    tangentChannel.valueAttributeName = "tangents";
+    tangentChannel.indexAttributeName = "tangentsIndices";
+
+    const std::vector<std::string> storedTangents = SplitLines(ReadDynamicStringAttribute(meshPath.node(), "mayaDmxTangents"));
+    const std::vector<std::string> storedTangentIndices = SplitLines(ReadDynamicStringAttribute(meshPath.node(), "mayaDmxTangentsIndices"));
+    const std::string storedTangentUvSetName = ReadDynamicStringAttribute(meshPath.node(), "mayaDmxTangentUvSetName");
+    const bool hasStoredTangents = !storedTangents.empty() && !storedTangentIndices.empty();
 
     MItMeshPolygon polygonIt(meshPath);
     for (; !polygonIt.isDone(); polygonIt.next())
@@ -1241,16 +1543,46 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
                 normalsIndices.push_back(std::to_string(normalIt->second));
             }
 
-            float2 uv{};
-            if (polygonIt.hasUVs() && polygonIt.getUV(localVertex, uv) == MS::kSuccess)
+            for (unsigned int uvSetIndex = 0; uvSetIndex < uvChannels.size(); ++uvSetIndex)
             {
-                const std::string uvKey = FormatVector2(uv[0], uv[1]);
-                auto [uvIt, inserted] = uvMap.emplace(uvKey, static_cast<int>(uvs.size()));
+                float2 uv{};
+                if (polygonIt.hasUVs(uvSetNames[uvSetIndex]) &&
+                    polygonIt.getUV(localVertex, uv, &uvSetNames[uvSetIndex]) == MS::kSuccess)
+                {
+                    const std::string uvKey = FormatVector2(uv[0], uv[1]);
+                    auto [uvIt, inserted] = uvChannels[uvSetIndex].valueMap.emplace(
+                        uvKey,
+                        static_cast<int>(uvChannels[uvSetIndex].values.size()));
+                    if (inserted)
+                    {
+                        uvChannels[uvSetIndex].values.push_back(uvKey);
+                    }
+                    uvChannels[uvSetIndex].indices.push_back(std::to_string(uvIt->second));
+                }
+            }
+
+            if (!uvSetNames.length() || hasStoredTangents)
+            {
+                continue;
+            }
+
+            MVector tangent;
+            if (meshFn.getFaceVertexTangent(
+                    polygonIt.index(),
+                    polygonVertices[localVertex],
+                    tangent,
+                    MSpace::kObject,
+                    &uvSetNames[0]) == MS::kSuccess)
+            {
+                const std::string tangentKey = FormatVector4(tangent.x, tangent.y, tangent.z, 1.0);
+                auto [tangentIt, inserted] = tangentChannel.valueMap.emplace(
+                    tangentKey,
+                    static_cast<int>(tangentChannel.values.size()));
                 if (inserted)
                 {
-                    uvs.push_back(uvKey);
+                    tangentChannel.values.push_back(tangentKey);
                 }
-                uvIndices.push_back(std::to_string(uvIt->second));
+                tangentChannel.indices.push_back(std::to_string(tangentIt->second));
             }
         }
 
@@ -1262,9 +1594,21 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
     {
         vertexFormat.push_back("normals");
     }
-    if (!uvs.empty() && uvIndices.size() == positionsIndices.size())
+    for (const IndexedChannel &uvChannel : uvChannels)
     {
-        vertexFormat.push_back("textureCoordinates");
+        if (!uvChannel.values.empty() && uvChannel.indices.size() == positionsIndices.size())
+        {
+            vertexFormat.push_back(uvChannel.formatName);
+        }
+    }
+    const bool useStoredTangents = hasStoredTangents && storedTangentIndices.size() == positionsIndices.size();
+    if (!tangentChannel.values.empty() && tangentChannel.indices.size() == positionsIndices.size())
+    {
+        vertexFormat.push_back("tangents");
+    }
+    else if (useStoredTangents)
+    {
+        vertexFormat.push_back("tangents");
     }
 
     DmxElement *vertexDataElement = builder.CreateElement("DmeVertexData");
@@ -1280,10 +1624,48 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
         vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("normalsIndices", "int_array", normalsIndices));
     }
 
-    if (!uvs.empty() && uvIndices.size() == positionsIndices.size())
+    std::vector<std::string> exportedUvSetNames;
+    for (unsigned int uvSetIndex = 0; uvSetIndex < uvChannels.size(); ++uvSetIndex)
     {
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("textureCoordinates", "vector2_array", uvs));
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("textureCoordinatesIndices", "int_array", uvIndices));
+        const IndexedChannel &uvChannel = uvChannels[uvSetIndex];
+        if (uvChannel.values.empty() || uvChannel.indices.size() != positionsIndices.size())
+        {
+            continue;
+        }
+
+        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute(
+            uvChannel.valueAttributeName,
+            "vector2_array",
+            uvChannel.values));
+        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute(
+            uvChannel.indexAttributeName,
+            "int_array",
+            uvChannel.indices));
+        exportedUvSetNames.push_back(uvSetNames[uvSetIndex].asChar());
+    }
+
+    if (!exportedUvSetNames.empty())
+    {
+        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("mayaUvSetNames", "string_array", exportedUvSetNames));
+    }
+
+    if (useStoredTangents)
+    {
+        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangents", "vector4_array", storedTangents));
+        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangentsIndices", "int_array", storedTangentIndices));
+        if (!storedTangentUvSetName.empty())
+        {
+            vertexDataElement->attributes.push_back(MakeScalarAttribute("mayaTangentUvSetName", "string", storedTangentUvSetName));
+        }
+    }
+    else if (!tangentChannel.values.empty() && tangentChannel.indices.size() == positionsIndices.size())
+    {
+        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangents", "vector4_array", tangentChannel.values));
+        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangentsIndices", "int_array", tangentChannel.indices));
+        if (uvSetNames.length() > 0)
+        {
+            vertexDataElement->attributes.push_back(MakeScalarAttribute("mayaTangentUvSetName", "string", uvSetNames[0].asChar()));
+        }
     }
 
     AppendSkinningData(meshPath, *vertexDataElement, context);
@@ -1408,6 +1790,10 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
                 deltaElement->attributes.push_back(MakeScalarArrayAttribute("vertexFormat", "string_array", {"positions"}));
                 deltaElement->attributes.push_back(MakeScalarArrayAttribute("positions", "vector3_array", std::move(deltaPositions)));
                 deltaElement->attributes.push_back(MakeScalarArrayAttribute("positionsIndices", "int_array", std::move(deltaPositionIndices)));
+                deltaElement->attributes.push_back(MakeScalarAttribute("mayaDeformerType", "string", "blendShape"));
+                deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeNode", "string", blendShapeNodeFn.name().asChar()));
+                deltaElement->attributes.push_back(MakeScalarAttribute("mayaWeightIndex", "int", std::to_string(weightIndex)));
+                deltaElement->attributes.push_back(MakeScalarAttribute("mayaTargetName", "string", targetDagNode.name().asChar()));
                 deltaStateElements.push_back(deltaElement);
             }
         }
@@ -1419,6 +1805,7 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
     {
         std::string name;
         std::vector<int> polygonIndices;
+        MeshMaterialData materialData;
     };
     std::vector<SetMembership> deferredWholeObjectSets;
     MObjectArray connectedSets;
@@ -1438,7 +1825,10 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
             if (componentObject.isNull())
             {
                 deferredWholeObjectSets.push_back(
-                    SetMembership{setFn.name().asChar(), BuildPolygonRange(static_cast<int>(polygonFaceIndices.size()))});
+                    SetMembership{
+                        setFn.name().asChar(),
+                        BuildPolygonRange(static_cast<int>(polygonFaceIndices.size())),
+                        BuildMaterialData(connectedSets[setIndex], setFn.name().asChar())});
                 continue;
             }
 
@@ -1449,13 +1839,14 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
             }
 
             polygonIndices = FilterUncoveredPolygons(polygonIndices, coveredPolygons);
-            AppendFaceSetElement(builder, setFn.name().asChar(), polygonIndices, polygonFaceIndices, faceSetElements);
+            const MeshMaterialData materialData = BuildMaterialData(connectedSets[setIndex], setFn.name().asChar());
+            AppendFaceSetElement(builder, setFn.name().asChar(), polygonIndices, polygonFaceIndices, &materialData, faceSetElements);
         }
 
         for (const SetMembership &membership : deferredWholeObjectSets)
         {
             std::vector<int> polygonIndices = FilterUncoveredPolygons(membership.polygonIndices, coveredPolygons);
-            AppendFaceSetElement(builder, membership.name.c_str(), polygonIndices, polygonFaceIndices, faceSetElements);
+            AppendFaceSetElement(builder, membership.name.c_str(), polygonIndices, polygonFaceIndices, &membership.materialData, faceSetElements);
         }
     }
 
@@ -1475,12 +1866,22 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
         {
             uncoveredPolygons = BuildPolygonRange(static_cast<int>(polygonFaceIndices.size()));
         }
-        AppendFaceSetElement(builder, "default_faces", uncoveredPolygons, polygonFaceIndices, faceSetElements);
+        AppendFaceSetElement(builder, "default_faces", uncoveredPolygons, polygonFaceIndices, nullptr, faceSetElements);
     }
 
     DmxElement *meshElement = builder.CreateElement("DmeMesh");
     meshElement->attributes.push_back(MakeScalarAttribute("name", "string", meshFn.name().asChar()));
     meshElement->attributes.push_back(MakeInlineElementAttribute("bindState", vertexDataElement));
+    DmxElement *baseStateElement = CloneElement(builder, *vertexDataElement);
+    meshElement->attributes.push_back(MakeElementArrayAttribute("baseStates", {baseStateElement}));
+    DmxElement *currentStateElement = CloneElement(builder, *vertexDataElement);
+    currentStateElement->attributes.clear();
+    currentStateElement->attributes.push_back(MakeScalarAttribute("name", "string", "current"));
+    currentStateElement->attributes.push_back(MakeScalarAttribute("flipVCoordinates", "bool", "0"));
+    currentStateElement->attributes.push_back(MakeScalarArrayAttribute("vertexFormat", "string_array", {"positions"}));
+    currentStateElement->attributes.push_back(MakeScalarArrayAttribute("positions", "vector3_array", positions));
+    currentStateElement->attributes.push_back(MakeScalarArrayAttribute("positionsIndices", "int_array", positionsIndices));
+    meshElement->attributes.push_back(MakeInlineElementAttribute("currentState", currentStateElement));
     if (!deltaStateElements.empty())
     {
         meshElement->attributes.push_back(MakeElementArrayAttribute("deltaStates", deltaStateElements));

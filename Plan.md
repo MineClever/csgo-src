@@ -261,14 +261,23 @@
   - 已单独用 `mayapy` 跑过 `MostComplexSampleSet/chr_mesh` 的 Maya 闭环，输出目录为 `build\\maya_dmx\\maya_batch_regression\\MostComplexSampleSet_single`。当前链路可完成 `导入 -> 文本导出 -> 二进制导出 -> 文本回读`，但 text roundtrip 仍在 mesh diff 阶段失败，现象为 `Mesh point mismatch for body_middle_tip2Shape at vertex 89`；这说明这组新样本同样落入“少数 skinned mesh 点位保真仍不足”的剩余问题域，而不是新的解析崩溃或拓扑装配崩溃。
   - 已进一步修复 importer 的 skin weight 写回稳定性：`ApplySkinning` 现在会先把传给 `MFnSkinCluster::setWeights()` 的整块权重数组显式清零，再对每个顶点的 influence 行做归一化，避免未覆盖槽位残留垃圾值或总权重漂移。这一步直接修掉了 `MostComplexSampleSet/chr_mesh` 中 `body_middle_tip2Shape` 的输出 shape 炸点问题，也让 `complex_chr_mesh` 中 `Mesh002Shape` 的 roundtrip 点位偏差消失。
   - 已重新用 `mayapy` 跑通全量 Maya 闭环回归，输出目录为 `build\\maya_dmx\\maya_batch_regression\\full_suite_after_normalize`；当前 `simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 六组样本均已通过 `导入 -> 导出 text/binary -> 再导入 -> mesh diff`。
+  - 已开始补齐你指定的高优先级格式能力，当前 [dcc_plugin/src/exporter/DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp)、[dcc_plugin/src/importer/DmxImportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/importer/DmxImportTranslator.cpp) 与 [dcc_plugin/src/common/SimpleDmxBinary.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxBinary.cpp) 已新增多 UV、切线、扩展 mesh state、材质元数据与 deformer 元数据的最小闭环支持：
+    1. exporter 现已写出主 UV 之外的 `texcoord$N` 通道，并通过 `mayaUvSetNames` 保留 Maya UV set 名称；importer 会据此重建额外 UV set。
+    2. exporter / importer 现已支持 `tangents`/`tangentsIndices` 的 `vector4_array` 文本与二进制读写；importer 会先把切线缓存到 mesh 自定义属性，exporter 在 Maya 无法直接回设 face-vertex tangent 的情况下优先回写缓存值，避免 roundtrip 时把原始切线全量丢掉。
+    3. exporter 现已同时写出 `bindState`、`baseStates` 与 `currentState`，把 mesh state 从“只有 bind”扩到“bind/base/current”三态最小子集。
+    4. faceSet 现已附带最小材质元数据：shader 名、shader 类型、基础颜色、透明度、diffuse/normal/bump 贴图路径；importer 会尝试按这些字段重建基础 lambert/同型 shader 网络。
+    5. deltaStates 现已附带 `mayaDeformerType`、`mayaBlendShapeNode`、`mayaWeightIndex`、`mayaTargetName` 元数据；importer 会按 `mayaBlendShapeNode` 分组重建多个 blendShape 节点，而不再把所有 delta 全挤进单个 deformer。
+  - 已重新验证这轮功能扩展不会打断几何闭环：`cmake --build build\\maya_dmx --config Release` 与 `cmake --build build\\maya_dmx --config Release --target maya_dmx_sample_regression` 均已通过；`mayapy` 全量回归输出目录为 `build\\maya_dmx\\maya_batch_regression\\feature_roundtrip_after_material_fix`，六组样例仍全部生成了 text/binary meshcheck 标记文件，说明 mesh roundtrip 依旧通过。
+  - importer 的 [AssignFaceSetMaterials()](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/importer/DmxImportTranslator.cpp) 已去掉 MEL 字符串拼接，改为 Maya API 版实现：`MFnSet` 负责 renderable shadingEngine，`MDGModifier + MFnDependencyNode` 负责 shader / file / bump2d 节点创建与连线，polygon 面分配改为 mesh polygon component 直接加到 shadingEngine。这样不仅去掉了此前难维护的命令串，也消除了复杂样例导入阶段那批 `The argument provided is NOT a set` 告警。当前已用 `simple_mesh` 与 `complex_chr_mesh` 重新跑过 `mayapy` smoke 回归，输出目录为 `build\\maya_dmx\\maya_batch_regression\\api_material_smoke`。
 - 当前限制：
-  - importer 虽然已支持文本 DMX 与最小二进制 DMX 子集，但仍只覆盖层级、局部变换、基础 mesh、主 UV、face-vertex normals、基础蒙皮权重、基础材质槽位和最小位置 delta；不导入完整材质网络、组合型面部控制器、额外 UV 通道，也不保证兼容仓库外所有 Valve 历史二进制 DMX 变体。
-  - exporter 已能写出文本 DMX 与最小二进制 DMX 子集，并支持基础蒙皮权重、完整导出层级内的 `jointList`、基础材质槽位和最小位置 delta；但仍不支持组合型面部控制器、完整材质网络、额外 UV、bind pose 扩展信息和更完整的 deformer 元数据。
+  - importer 虽然已支持文本 DMX 与最小二进制 DMX 子集，且已补上多 UV、切线缓存回写、基础材质元数据和按节点分组的 blendShape 重建，但“完整材质网络、组合型面部控制器、完整 bind pose 扩展信息、完整 deformer 栈/约束元数据”仍未做全；当前依旧只保证仓库内样例与插件自产最小子集的稳定闭环，不保证兼容仓库外所有 Valve 历史二进制 DMX 变体。
+  - exporter 已能写出文本 DMX 与最小二进制 DMX 子集，并新增 `texcoord$N`、`tangents`、`baseStates/currentState`、基础材质元数据和 blendShape 元数据写出；但“组合型面部控制器”和“完整材质网络/完整 deformer 元数据”仍只做到最小保真，不是对 Valve DMX 全字段的完整实现。
   - 当前 `SimpleDmx*` 仍偏“插件定制解析器”而不是通用 DMX 库，和 `sourcepp` 当前按格式层、数据层拆分的方向相比，可维护性与格式扩展能力仍偏弱；后续补更完整二进制兼容与未知字段保真时，这会成为主要重构压力点。
   - 当前 Maya 版插件还缺少 Blender Source Tools 那类“围绕导入导出器的完整生产工作流”，例如导出配置持久化、批量导出集、动画批处理、历史兼容选项面板；这些缺口不会影响最小 DMX 闭环，但会直接限制真实资产管线落地效率。
   - 当前 `mayaDmxWorkflow` 还只是数据管理骨架：它尚未驱动真正的批量导出执行、也未把预设参数接入 [dcc_plugin/src/exporter/DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 的 writer 逻辑；下一步需要先打通“预设 -> translator 选项串 -> 单次导出”，再扩展到“批量清单 -> 多次导出”。
   - 当前对 Maya UFE / 非 DAG 选择项的兼容仍以“规避宿主异常”为主，而不是完整理解 UFE 层级；如果后续需要支持 USD、代理节点或更多混合场景对象，仍需继续细化导出根过滤与类型识别规则。
   - 当前 Maya 内六组样例的 roundtrip mesh diff 已全部通过，但复杂样例在首次导入和 roundtrip 回读阶段仍会触发多条 `Some weights could not be set to the specified value. The weight total would have exceeded 1.0.` 警告；这说明虽然当前权重写回已经足以保证几何结果稳定，但 Maya 对 `skinCluster` 的内部约束仍在对部分顶点进行二次裁剪。后续若要把宿主侧警告也压平，需要继续收紧 importer 的 influence 选择、max influences 策略或 bind/setup 细节，而不只是依赖 `setWeights` 的最终结果。
+  - 材质网络目前已从 MEL 命令串切到 API 级 shadingEngine / shader 图构建，但仍只覆盖最小 lambert/同型 shader、基础颜色、透明度和 diffuse/normal/bump 贴图；诸如 place2dTexture、复杂 utility 链、分层材质和更完整的 Maya/Valve 材质语义映射仍未补齐。
 
 ## 环境与工具链说明
 

@@ -18,6 +18,7 @@ constexpr int kAttributeBool = 4;
 constexpr int kAttributeString = 5;
 constexpr int kAttributeVector2 = 9;
 constexpr int kAttributeVector3 = 10;
+constexpr int kAttributeVector4 = 11;
 constexpr int kAttributeQuaternion = 13;
 constexpr int kAttributeElementArray = 15;
 constexpr int kAttributeIntArray = 16;
@@ -25,6 +26,7 @@ constexpr int kAttributeFloatArray = 17;
 constexpr int kAttributeStringArray = 19;
 constexpr int kAttributeVector2Array = 23;
 constexpr int kAttributeVector3Array = 24;
+constexpr int kAttributeVector4Array = 25;
 constexpr int kAttributeQuaternionArray = 27;
 constexpr int kCurrentBinaryEncoding = 5;
 
@@ -293,9 +295,12 @@ bool ReadScalarAttribute(
 
     case kAttributeVector2:
     case kAttributeVector3:
+    case kAttributeVector4:
     case kAttributeQuaternion:
     {
-        const int componentCount = attributeType == kAttributeVector2 ? 2 : (attributeType == kAttributeVector3 ? 3 : 4);
+        const int componentCount =
+            attributeType == kAttributeVector2 ? 2 :
+            (attributeType == kAttributeVector3 ? 3 : 4);
         std::vector<float> values(static_cast<size_t>(componentCount), 0.0f);
         for (int i = 0; i < componentCount; ++i)
         {
@@ -397,6 +402,9 @@ bool ReadArrayAttribute(
 
     case kAttributeVector3Array:
         return readVectorArray(3);
+
+    case kAttributeVector4Array:
+        return readVectorArray(4);
 
     case kAttributeQuaternionArray:
         return readVectorArray(4);
@@ -613,6 +621,14 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
                 }
                 break;
 
+            case kAttributeVector4:
+                attribute.declaredType = "vector4";
+                if (!ReadScalarAttribute(reader, attributeType, attribute, errorMessage))
+                {
+                    return false;
+                }
+                break;
+
             case kAttributeQuaternion:
                 attribute.declaredType = "quaternion";
                 if (!ReadScalarAttribute(reader, attributeType, attribute, errorMessage))
@@ -655,6 +671,14 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
 
             case kAttributeVector3Array:
                 attribute.declaredType = "vector3_array";
+                if (!ReadArrayAttribute(reader, attributeType, attribute, errorMessage))
+                {
+                    return false;
+                }
+                break;
+
+            case kAttributeVector4Array:
+                attribute.declaredType = "vector4_array";
                 if (!ReadArrayAttribute(reader, attributeType, attribute, errorMessage))
                 {
                     return false;
