@@ -120,7 +120,13 @@ private:
     {
         stream << Indent(indentLevel);
         WriteQuoted(stream, element.type);
-        stream << "\n" << Indent(indentLevel) << "{\n";
+        stream << "\n";
+        WriteElementBody(stream, element, indentLevel);
+    }
+
+    static void WriteElementBody(std::ostringstream &stream, const DmxElement &element, int indentLevel)
+    {
+        stream << Indent(indentLevel) << "{\n";
 
         stream << Indent(indentLevel + 1);
         WriteQuoted(stream, "id");
@@ -172,7 +178,7 @@ private:
         case DmxAttribute::Kind::InlineElement:
             WriteQuoted(stream, attribute.inlineElement->type);
             stream << "\n";
-            WriteElement(stream, *attribute.inlineElement, indentLevel);
+            WriteElementBody(stream, *attribute.inlineElement, indentLevel);
             break;
 
         case DmxAttribute::Kind::ElementArray:

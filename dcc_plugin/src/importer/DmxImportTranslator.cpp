@@ -15,10 +15,13 @@
 
 #include <maya/MDagPath.h>
 #include <maya/MDagPathArray.h>
+#include <maya/MDagModifier.h>
+#include <maya/MDGModifier.h>
 #include <maya/MEulerRotation.h>
 #include <maya/MFnBlendShapeDeformer.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnIkJoint.h>
+#include <maya/MFnMatrixData.h>
 #include <maya/MFnMesh.h>
 #include <maya/MFnSingleIndexedComponent.h>
 #include <maya/MFnSkinCluster.h>
@@ -27,6 +30,7 @@
 #include <maya/MGlobal.h>
 #include <maya/MIntArray.h>
 #include <maya/MItDependencyGraph.h>
+#include <maya/MMatrix.h>
 #include <maya/MPointArray.h>
 #include <maya/MQuaternion.h>
 #include <maya/MSelectionList.h>
@@ -270,6 +274,7 @@ const simple_dmx::Element *FindMeshVertexData(const simple_dmx::Document &docume
 }
 
 MObject FindSkinClusterForMesh(const MObject &meshObject);
+MStatus CreateSkinClusterWithApi(const MDagPathArray &influencePaths, const MDagPath &meshDagPath, const MDagPath &meshParentPath, MObject &skinClusterObject);
 
 MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *vertexData, const MObject &meshObject, const MObject &meshParentObject)
 {
@@ -327,9 +332,7 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
     }
 
     MStatus status;
-    MString command("skinCluster -tsb -mi 0 -omi false");
-    std::vector<const simple_dmx::Element *> activeJoints;
-    activeJoints.reserve(context.jointOrder.size());
+    MDagPathArray activeInfluencePaths;
     for (const simple_dmx::Element *jointElement : context.jointOrder)
     {
         auto it = context.importedDagPaths.find(jointElement);
@@ -338,23 +341,10 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
             continue;
         }
 
-        activeJoints.push_back(jointElement);
-        command += " \"";
-        command += it->second.fullPathName();
-        command += "\"";
-
-        MFnDependencyNode influenceNode(it->second.node(), &status);
-        if (status)
-        {
-            MPlug lockWeightsPlug = influenceNode.findPlug("liw", true, &status);
-            if (status)
-            {
-                lockWeightsPlug.setBool(false);
-            }
-        }
+        activeInfluencePaths.append(it->second);
     }
 
-    if (activeJoints.empty())
+    if (activeInfluencePaths.length() == 0)
     {
         AppendImportDebugLog("skinning: no active joints");
         return MS::kSuccess;
@@ -374,27 +364,11 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
         return status;
     }
 
-    command += " \"";
-    command += meshDagPath.fullPathName();
-    command += "\"";
-    AppendImportDebugLog(command.asChar());
-
     MObject skinClusterObject;
-    MString skinClusterNodeName;
-    status = MGlobal::executeCommand(command, skinClusterNodeName, false, false);
-    if (status && skinClusterNodeName.length() > 0)
-    {
-        MSelectionList selectionList;
-        selectionList.add(skinClusterNodeName);
-        status = selectionList.getDependNode(0, skinClusterObject);
-    }
+    status = CreateSkinClusterWithApi(activeInfluencePaths, meshDagPath, meshParentPath, skinClusterObject);
     if (!status || skinClusterObject.isNull())
     {
-        skinClusterObject = FindSkinClusterForMesh(meshObject);
-    }
-    if (skinClusterObject.isNull())
-    {
-        return maya_dmx::ReportError(MString("maya_dmx: skinCluster creation failed for ") + meshDagPath.fullPathName(), status);
+        return maya_dmx::ReportError(MString("maya_dmx: skinCluster API creation failed for ") + meshDagPath.fullPathName(), status);
     }
     AppendImportDebugLog("skinning: created cluster");
 
@@ -402,24 +376,6 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
     if (!status)
     {
         return status;
-    }
-
-    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
-    if (!status)
-    {
-        return status;
-    }
-
-    MPlug maintainMaxInfluencesPlug = skinClusterNode.findPlug("maintainMaxInfluences", true, &status);
-    if (status)
-    {
-        maintainMaxInfluencesPlug.setBool(false);
-    }
-
-    MPlug normalizeWeightsPlug = skinClusterNode.findPlug("normalizeWeights", true, &status);
-    if (status)
-    {
-        normalizeWeightsPlug.setShort(0);
     }
 
     MFnSingleIndexedComponent componentFn;
@@ -440,42 +396,17 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
         return status;
     }
 
-    MDagPathArray influencePaths;
-    const unsigned int influenceCount = skinClusterFn.influenceObjects(influencePaths, &status);
-    if (!status)
-    {
-        return status;
-    }
-
     MIntArray influenceIndices;
-    influenceIndices.setLength(influenceCount);
-    for (unsigned int influenceSlot = 0; influenceSlot < influenceCount; ++influenceSlot)
+    std::unordered_map<int, unsigned int> dmxJointToInfluenceSlot;
+    for (unsigned int dmxJointIndex = 0; dmxJointIndex < activeInfluencePaths.length(); ++dmxJointIndex)
     {
-        const unsigned int influenceIndex = skinClusterFn.indexForInfluenceObject(influencePaths[influenceSlot], &status);
+        const unsigned int influenceIndex = skinClusterFn.indexForInfluenceObject(activeInfluencePaths[dmxJointIndex], &status);
         if (!status)
         {
             return status;
         }
-        influenceIndices[influenceSlot] = static_cast<int>(influenceIndex);
-    }
-
-    std::unordered_map<int, unsigned int> dmxJointToInfluenceSlot;
-    for (unsigned int dmxJointIndex = 0; dmxJointIndex < static_cast<unsigned int>(context.jointOrder.size()); ++dmxJointIndex)
-    {
-        auto it = context.importedDagPaths.find(context.jointOrder[dmxJointIndex]);
-        if (it == context.importedDagPaths.end())
-        {
-            continue;
-        }
-
-        for (unsigned int influenceSlot = 0; influenceSlot < influencePaths.length(); ++influenceSlot)
-        {
-            if (influencePaths[influenceSlot] == it->second)
-            {
-                dmxJointToInfluenceSlot[static_cast<int>(dmxJointIndex)] = influenceSlot;
-                break;
-            }
-        }
+        dmxJointToInfluenceSlot[static_cast<int>(dmxJointIndex)] = influenceIndices.length();
+        influenceIndices.append(static_cast<int>(influenceIndex));
     }
 
     if (influenceIndices.length() == 0)
@@ -499,30 +430,7 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
             }
 
             const unsigned int influenceSlot = influenceSlotIt->second;
-            weights[vertexIndex * influenceIndices.length() + influenceSlot] += weightValue;
-        }
-
-        float sum = 0.0f;
-        for (unsigned int influenceSlot = 0; influenceSlot < influenceIndices.length(); ++influenceSlot)
-        {
-            const float weightValue = weights[vertexIndex * influenceIndices.length() + influenceSlot];
-            if (weightValue > 0.0f)
-            {
-                sum += weightValue;
-            }
-        }
-
-        if (sum > 0.0f)
-        {
-            const float invSum = 1.0f / sum;
-            for (unsigned int influenceSlot = 0; influenceSlot < influenceIndices.length(); ++influenceSlot)
-            {
-                float &weightValue = weights[vertexIndex * influenceIndices.length() + influenceSlot];
-                if (weightValue > 0.0f)
-                {
-                    weightValue *= invSum;
-                }
-            }
+            weights[vertexIndex * influenceIndices.length() + influenceSlot] = weightValue;
         }
     }
 
@@ -662,6 +570,179 @@ MObject FindSkinClusterForMesh(const MObject &meshObject)
     }
 
     return MObject::kNullObj;
+}
+
+MStatus CreateSkinClusterWithApi(const MDagPathArray &influencePaths, const MDagPath &meshDagPath, const MDagPath &meshParentPath, MObject &skinClusterObject)
+{
+    skinClusterObject = MObject::kNullObj;
+
+    MStatus status;
+    MFnMesh meshFn(meshDagPath, &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    const MString originalShapeName = meshFn.name() + "Orig";
+    MObject originalMeshObject = meshFn.copy(meshDagPath.node(), meshParentPath.node(), &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    MFnDependencyNode originalMeshNode(originalMeshObject, &status);
+    if (!status)
+    {
+        return status;
+    }
+    originalMeshNode.setName(originalShapeName);
+
+    MPlug intermediatePlug = originalMeshNode.findPlug("intermediateObject", true, &status);
+    if (status)
+    {
+        intermediatePlug.setBool(true);
+    }
+
+    MFnDependencyNode skinClusterNodeFn;
+    skinClusterObject = skinClusterNodeFn.create("skinCluster", "mayaDmxSkinCluster#", &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    MDGModifier dgModifier;
+    const auto connectArrayPlug = [&](const MObject &srcNode, const char *srcAttr, unsigned int srcIndex,
+                                      const MObject &dstNode, const char *dstAttr, unsigned int dstIndex) -> MStatus
+    {
+        MFnDependencyNode srcFn(srcNode);
+        MFnDependencyNode dstFn(dstNode);
+        MPlug srcPlug = srcFn.findPlug(srcAttr, true, &status);
+        if (!status)
+        {
+            return status;
+        }
+        MPlug dstPlug = dstFn.findPlug(dstAttr, true, &status);
+        if (!status)
+        {
+            return status;
+        }
+        if (srcPlug.isArray())
+        {
+            srcPlug = srcPlug.elementByLogicalIndex(srcIndex, &status);
+            if (!status)
+            {
+                return status;
+            }
+        }
+        if (dstPlug.isArray())
+        {
+            dstPlug = dstPlug.elementByLogicalIndex(dstIndex, &status);
+            if (!status)
+            {
+                return status;
+            }
+        }
+        return dgModifier.connect(srcPlug, dstPlug);
+    };
+
+    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
+    if (!status)
+    {
+        return status;
+    }
+    MPlug inputPlug = skinClusterNode.findPlug("input", true, &status);
+    if (!status)
+    {
+        return status;
+    }
+    inputPlug = inputPlug.elementByLogicalIndex(0, &status);
+    if (!status)
+    {
+        return status;
+    }
+    MPlug inputGeometryPlug = inputPlug.child(0, &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    MPlug sourceWorldMeshPlug = originalMeshNode.findPlug("worldMesh", true, &status);
+    if (!status)
+    {
+        return status;
+    }
+    sourceWorldMeshPlug = sourceWorldMeshPlug.elementByLogicalIndex(0, &status);
+    if (!status)
+    {
+        return status;
+    }
+    status = dgModifier.connect(sourceWorldMeshPlug, inputGeometryPlug);
+    if (!status)
+    {
+        return status;
+    }
+
+    status = connectArrayPlug(originalMeshObject, "outMesh", 0, skinClusterObject, "originalGeometry", 0);
+    if (!status)
+    {
+        return status;
+    }
+    status = connectArrayPlug(skinClusterObject, "outputGeometry", 0, meshDagPath.node(), "inMesh", 0);
+    if (!status)
+    {
+        return status;
+    }
+
+    for (unsigned int influenceIndex = 0; influenceIndex < influencePaths.length(); ++influenceIndex)
+    {
+        status = connectArrayPlug(influencePaths[influenceIndex].node(), "worldMatrix", 0, skinClusterObject, "matrix", influenceIndex);
+        if (!status)
+        {
+            return status;
+        }
+
+        MPlug bindPreMatrixPlug = skinClusterNode.findPlug("bindPreMatrix", true, &status);
+        if (!status)
+        {
+            return status;
+        }
+        bindPreMatrixPlug = bindPreMatrixPlug.elementByLogicalIndex(influenceIndex, &status);
+        if (!status)
+        {
+            return status;
+        }
+
+        MFnMatrixData matrixDataFn;
+        MObject bindPreMatrixObject = matrixDataFn.create(influencePaths[influenceIndex].inclusiveMatrixInverse(), &status);
+        if (!status)
+        {
+            return status;
+        }
+        status = bindPreMatrixPlug.setMObject(bindPreMatrixObject);
+        if (!status)
+        {
+            return status;
+        }
+    }
+
+    MPlug geomMatrixPlug = skinClusterNode.findPlug("geomMatrix", true, &status);
+    if (!status)
+    {
+        return status;
+    }
+    MFnMatrixData geomMatrixDataFn;
+    MObject geomMatrixObject = geomMatrixDataFn.create(meshParentPath.inclusiveMatrix(), &status);
+    if (!status)
+    {
+        return status;
+    }
+    status = geomMatrixPlug.setMObject(geomMatrixObject);
+    if (!status)
+    {
+        return status;
+    }
+
+    return dgModifier.doIt();
 }
 
 MStatus ApplyDeltaStates(

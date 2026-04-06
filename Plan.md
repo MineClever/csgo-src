@@ -250,6 +250,8 @@
   - 当前导出诊断日志已临时改写到系统临时目录 `%TEMP%\\maya_dmx_export_debug.log`，避免继续向仓库目录写入调试垃圾；待 Maya 内闭环稳定后再移除或收敛这类临时日志。
   - 已继续用 `mayapy` 跑 Maya 内回归，并补齐 importer 剩余兼容问题：`simple_blendshape` 现已改为通过 `MFnBlendShapeDeformer` API 创建目标，不再依赖不稳定的 `blendShape` 命令字符串；`simple_skinned_mesh` 现已支持在 `skinCluster` 命令返回失败但实际节点已创建的情况下回退到 mesh history 查找 skinCluster 并继续写权重；`complex_chr_mesh` 现已可完成 `导入 -> 文本导出 -> 二进制导出`，二进制写出额外放宽了不完整向量数组条目的容错，改为缺失分量补零。
   - 已通过 `mayapy` 完整验证五份样例 `simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh` 的 Maya 内闭环回归，输出位于 `build\\maya_dmx\\maya_batch_regression\\full_run_2`；这意味着当前 `RunMayaBatchRegression` 覆盖范围内，文本与二进制导出路径均已可运行。
+  - importer 的 skinCluster 处理已进一步转向 OpenMaya API：当前创建阶段不再完全依赖 `skinCluster` MEL 命令，而是通过 OpenMaya 创建 `skinCluster` 节点、复制并挂接 intermediate 原始 mesh、连接 `matrix / bindPreMatrix / geomMatrix / inputGeometry / outputGeometry` 等关键属性，再由 `MFnSkinCluster::setWeights` 写入权重；这使 skin 处理主干正式切到 API 层，后续只剩复杂资产上的细节兼容需要继续收敛。
+  - [dcc_plugin/tools/MayaBatchRegression.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaBatchRegression.py) 与 [dcc_plugin/RunMayaBatchRegression.bat](D:/_Code_Here/Git/csgo-src/dcc_plugin/RunMayaBatchRegression.bat) 已扩展为完整 roundtrip 回归：当前流程会对每个样例执行 `导入 -> 导出 text/binary -> 分别再导入 -> 比较 mesh 拓扑与顶点数据`，并为 text/binary roundtrip 各自写出 meshcheck 标记文件。
   - 已继续收敛复杂资产上的 skin weight 警告：当前 importer 改为对 skinCluster 全部 influence 显式写零值基线、累加 DMX 权重并按顶点归一化，再统一写回；同时在创建 skinCluster 前尝试解锁 joint 的 `liw`，并关闭 cluster 的 `maintainMaxInfluences/normalizeWeights`。这一步已经去掉了 `Some weights could not be set to the specified value. The weight total would have exceeded 1.0.` 这类权重总量超限警告，但 `complex_chr_mesh` 仍保留 `Locked influences prevented enforcement of the max influences on some points.`，说明剩余问题主要集中在 Maya 创建 skinCluster 时的 influence 锁或默认约束策略。
 - 当前限制：
   - importer 虽然已支持文本 DMX 与最小二进制 DMX 子集，但仍只覆盖层级、局部变换、基础 mesh、主 UV、face-vertex normals、基础蒙皮权重、基础材质槽位和最小位置 delta；不导入完整材质网络、组合型面部控制器、额外 UV 通道，也不保证兼容仓库外所有 Valve 历史二进制 DMX 变体。
@@ -258,7 +260,8 @@
   - 当前 Maya 版插件还缺少 Blender Source Tools 那类“围绕导入导出器的完整生产工作流”，例如导出配置持久化、批量导出集、动画批处理、历史兼容选项面板；这些缺口不会影响最小 DMX 闭环，但会直接限制真实资产管线落地效率。
   - 当前 `mayaDmxWorkflow` 还只是数据管理骨架：它尚未驱动真正的批量导出执行、也未把预设参数接入 [dcc_plugin/src/exporter/DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 的 writer 逻辑；下一步需要先打通“预设 -> translator 选项串 -> 单次导出”，再扩展到“批量清单 -> 多次导出”。
   - 当前对 Maya UFE / 非 DAG 选择项的兼容仍以“规避宿主异常”为主，而不是完整理解 UFE 层级；如果后续需要支持 USD、代理节点或更多混合场景对象，仍需继续细化导出根过滤与类型识别规则。
-  - 当前虽然 Maya 内五份样例闭环都已通过，但 `complex_chr_mesh` 仍会在导入时触发 `Locked influences prevented enforcement of the max influences on some points.` 警告；这说明复杂资产上的 skinCluster 创建仍未完全摆脱 Maya 默认 influence 锁和 max influences 约束，后续需要继续评估是否改成更底层的 API 建 cluster、或在绑定前后显式处理 influence 锁状态。
+  - 当前虽然 Maya 内五份样例闭环都已通过，但 `complex_chr_mesh` 仍会在导入时触发 `Locked influences prevented enforcement of the max influences on some points.` 警告；这说明复杂资产上的 skinCluster 创建仍未完全摆脱 Maya 默认 influence 锁和 max influences 约束。后续处理这类问题时，优先评估更底层的 API 路径，并在 importer / exporter 后续扩展中尽可能少用 MEL 命令字符串，而不是继续在现有命令流上追加权重安全修饰。
+  - 当前新增的 roundtrip mesh diff 回归已经证明：`simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh` 可通过，但 `complex_chr_mesh` 在 `Maya -> DMX -> Maya` 路径上仍存在真实几何往返问题，当前会报 `Mesh topology mismatch for Object006Shape`。这条问题优先级高于继续压低 skin 警告，因为它直接说明复杂资产的导出后再导入仍会丢失或改变 mesh 拓扑。
 
 ## 环境与工具链说明
 
