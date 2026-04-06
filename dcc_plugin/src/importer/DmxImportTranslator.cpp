@@ -331,6 +331,27 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
         return maya_dmx::ReportWarning("maya_dmx: skipped skinning because joint weight layout did not match jointCount.");
     }
 
+    if (jointCount == 1)
+    {
+        bool rigidSingleJointBinding = true;
+        const int rigidJointIndex = jointIndices.empty() ? -1 : jointIndices[0];
+        for (size_t vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
+        {
+            const size_t baseOffset = vertexIndex;
+            if (jointIndices[baseOffset] != rigidJointIndex || std::abs(jointWeights[baseOffset] - 1.0f) > 1.0e-4f)
+            {
+                rigidSingleJointBinding = false;
+                break;
+            }
+        }
+
+        if (rigidSingleJointBinding)
+        {
+            AppendImportDebugLog("skinning: skipped rigid single-joint binding");
+            return MS::kSuccess;
+        }
+    }
+
     MStatus status;
     MDagPathArray activeInfluencePaths;
     for (const simple_dmx::Element *jointElement : context.jointOrder)

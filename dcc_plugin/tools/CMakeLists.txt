@@ -15,23 +15,25 @@ set(MAYA_DMX_SAMPLE_NAMES
     simple_mesh
     simple_skinned_mesh
     complex_chr_mesh
+    MostComplexSampleSet/chr_mesh
 )
 
 set(MAYA_DMX_SAMPLE_REGRESSION_OUTPUTS)
 set(MAYA_DMX_SAMPLE_REGRESSION_COMMANDS)
 foreach(_sample_name IN LISTS MAYA_DMX_SAMPLE_NAMES)
+    string(REPLACE "/" "__" _sample_output_name "${_sample_name}")
     list(APPEND MAYA_DMX_SAMPLE_REGRESSION_OUTPUTS
-        "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_name}.dmxb"
-        "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_name}.roundtrip.dmx"
+        "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_output_name}.dmxb"
+        "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_output_name}.roundtrip.dmx"
     )
     list(APPEND MAYA_DMX_SAMPLE_REGRESSION_COMMANDS
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>"
         COMMAND "$<TARGET_FILE:maya_dmx_sample_tool>"
             "${DCC_PLUGIN_ROOT}/samples/${_sample_name}.dmx"
-            "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_name}.dmxb"
+            "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_output_name}.dmxb"
         COMMAND "$<TARGET_FILE:maya_dmx_sample_tool>"
-            "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_name}.dmxb"
-            "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_name}.roundtrip.dmx"
+            "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_output_name}.dmxb"
+            "${CMAKE_BINARY_DIR}/sample_regression/$<CONFIG>/${_sample_output_name}.roundtrip.dmx"
     )
 endforeach()
 

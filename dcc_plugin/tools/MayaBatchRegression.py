@@ -43,7 +43,29 @@ def compare_mesh_snapshots(reference_meshes, candidate_meshes, tolerance=1.0e-4)
         candidate = candidate_meshes[mesh_name]
 
         if reference["counts"] != candidate["counts"] or reference["connects"] != candidate["connects"]:
-            raise RuntimeError(f"Mesh topology mismatch for {mesh_name}")
+            first_count_diff = next(
+                (
+                    index,
+                    reference["counts"][index],
+                    candidate["counts"][index],
+                )
+                for index in range(min(len(reference["counts"]), len(candidate["counts"])))
+                if reference["counts"][index] != candidate["counts"][index]
+            ) if reference["counts"] != candidate["counts"] else None
+            first_connect_diff = next(
+                (
+                    index,
+                    reference["connects"][index],
+                    candidate["connects"][index],
+                )
+                for index in range(min(len(reference["connects"]), len(candidate["connects"])))
+                if reference["connects"][index] != candidate["connects"][index]
+            ) if reference["connects"] != candidate["connects"] else None
+            raise RuntimeError(
+                f"Mesh topology mismatch for {mesh_name}. "
+                f"counts=({len(reference['counts'])}->{len(candidate['counts'])}, first_diff={first_count_diff}) "
+                f"connects=({len(reference['connects'])}->{len(candidate['connects'])}, first_diff={first_connect_diff})"
+            )
 
         if len(reference["points"]) != len(candidate["points"]):
             raise RuntimeError(f"Mesh vertex count mismatch for {mesh_name}")
@@ -76,15 +98,20 @@ def collect_imported_roots(cmds, before_assemblies):
     return imported_roots
 
 
+def make_case_output_name(case_name):
+    return case_name.replace("\\", "__").replace("/", "__")
+
+
 def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
     sys.stdout.write(f"[maya_dmx_case] {case_name}\n")
     sys.stdout.flush()
 
     input_path = os.path.join(sample_dir, f"{case_name}.dmx")
-    exported_text = os.path.join(output_dir, f"{case_name}.maya_export.dmx")
-    exported_binary = os.path.join(output_dir, f"{case_name}.maya_export.dmxb")
-    roundtrip_text_marker = os.path.join(output_dir, f"{case_name}.roundtrip_text_meshcheck.txt")
-    roundtrip_binary_marker = os.path.join(output_dir, f"{case_name}.roundtrip_binary_meshcheck.txt")
+    case_output_name = make_case_output_name(case_name)
+    exported_text = os.path.join(output_dir, f"{case_output_name}.maya_export.dmx")
+    exported_binary = os.path.join(output_dir, f"{case_output_name}.maya_export.dmxb")
+    roundtrip_text_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_meshcheck.txt")
+    roundtrip_binary_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_meshcheck.txt")
 
     if not os.path.isfile(input_path):
         raise RuntimeError(f"Missing sample file: {input_path}")

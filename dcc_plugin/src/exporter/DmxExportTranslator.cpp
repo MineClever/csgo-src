@@ -76,6 +76,9 @@ struct ExportContext
     std::unordered_map<std::string, int> jointIndexByPath;
 };
 
+DmxAttribute MakeScalarAttribute(const std::string &name, const std::string &type, const std::string &value);
+DmxAttribute MakeScalarArrayAttribute(const std::string &name, const std::string &type, std::vector<std::string> values);
+
 class DmxTextBuilder
 {
 public:
@@ -281,6 +284,123 @@ std::vector<double> ParseNumberList(const std::string &text)
     }
 
     return values;
+}
+
+std::vector<int> BuildPolygonRange(int polygonCount)
+{
+    std::vector<int> polygonIndices;
+    polygonIndices.reserve(static_cast<size_t>(polygonCount));
+    for (int polygonIndex = 0; polygonIndex < polygonCount; ++polygonIndex)
+    {
+        polygonIndices.push_back(polygonIndex);
+    }
+    return polygonIndices;
+}
+
+std::vector<int> ExtractPolygonIndices(const MObject &componentObject)
+{
+    if (componentObject.isNull() || !componentObject.hasFn(MFn::kMeshPolygonComponent))
+    {
+        return {};
+    }
+
+    MStatus status;
+    MFnSingleIndexedComponent componentFn(componentObject, &status);
+    if (!status)
+    {
+        return {};
+    }
+
+    MIntArray elementIndices;
+    status = componentFn.getElements(elementIndices);
+    if (!status)
+    {
+        return {};
+    }
+
+    std::vector<int> polygonIndices;
+    polygonIndices.reserve(elementIndices.length());
+    for (unsigned int i = 0; i < elementIndices.length(); ++i)
+    {
+        polygonIndices.push_back(elementIndices[i]);
+    }
+
+    return polygonIndices;
+}
+
+std::vector<int> FilterUncoveredPolygons(const std::vector<int> &polygonIndices, std::vector<bool> &coveredPolygons)
+{
+    std::vector<int> filteredIndices;
+    filteredIndices.reserve(polygonIndices.size());
+    for (int polygonIndex : polygonIndices)
+    {
+        if (polygonIndex < 0 || polygonIndex >= static_cast<int>(coveredPolygons.size()))
+        {
+            continue;
+        }
+
+        if (coveredPolygons[polygonIndex])
+        {
+            continue;
+        }
+
+        coveredPolygons[polygonIndex] = true;
+        filteredIndices.push_back(polygonIndex);
+    }
+
+    return filteredIndices;
+}
+
+std::vector<std::string> BuildFaceValues(
+    const std::vector<int> &polygonIndices,
+    const std::vector<std::vector<int>> &polygonFaceIndices)
+{
+    std::vector<std::string> faceValues;
+    for (int polygonIndex : polygonIndices)
+    {
+        if (polygonIndex < 0 || polygonIndex >= static_cast<int>(polygonFaceIndices.size()))
+        {
+            continue;
+        }
+
+        const std::vector<int> &polygonEntries = polygonFaceIndices[polygonIndex];
+        if (polygonEntries.empty())
+        {
+            continue;
+        }
+
+        for (int faceVertexIndex : polygonEntries)
+        {
+            faceValues.push_back(std::to_string(faceVertexIndex));
+        }
+        faceValues.push_back("-1");
+    }
+
+    return faceValues;
+}
+
+void AppendFaceSetElement(
+    DmxTextBuilder &builder,
+    const char *faceSetName,
+    const std::vector<int> &polygonIndices,
+    const std::vector<std::vector<int>> &polygonFaceIndices,
+    std::vector<DmxElement *> &faceSetElements)
+{
+    if (!faceSetName || polygonIndices.empty())
+    {
+        return;
+    }
+
+    std::vector<std::string> faceValues = BuildFaceValues(polygonIndices, polygonFaceIndices);
+    if (faceValues.empty())
+    {
+        return;
+    }
+
+    DmxElement *faceSetElement = builder.CreateElement("DmeFaceSet");
+    faceSetElement->attributes.push_back(MakeScalarAttribute("name", "string", faceSetName));
+    faceSetElement->attributes.push_back(MakeScalarArrayAttribute("faces", "int_array", std::move(faceValues)));
+    faceSetElements.push_back(faceSetElement);
 }
 
 void WriteInt32(std::string &bytes, std::int32_t value)
@@ -687,6 +807,11 @@ private:
 
 std::string FormatFloat(double value)
 {
+    if (!std::isfinite(value))
+    {
+        value = 0.0;
+    }
+
     std::ostringstream stream;
     stream.setf(std::ios::fixed);
     stream.precision(6);
@@ -1289,6 +1414,13 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
     }
 
     std::vector<DmxElement *> faceSetElements;
+    std::vector<bool> coveredPolygons(polygonFaceIndices.size(), false);
+    struct SetMembership
+    {
+        std::string name;
+        std::vector<int> polygonIndices;
+    };
+    std::vector<SetMembership> deferredWholeObjectSets;
     MObjectArray connectedSets;
     MObjectArray setComponents;
     status = meshFn.getConnectedSetsAndMembers(meshPath.instanceNumber(), connectedSets, setComponents, true);
@@ -1302,67 +1434,48 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
                 continue;
             }
 
-            std::vector<std::string> faceValues;
             MObject componentObject = setComponents[setIndex];
-            if (!componentObject.isNull() && componentObject.hasFn(MFn::kMeshPolygonComponent))
+            if (componentObject.isNull())
             {
-                MFnSingleIndexedComponent componentFn(componentObject, &status);
-                if (!status)
-                {
-                    continue;
-                }
-
-                MIntArray elementIndices;
-                status = componentFn.getElements(elementIndices);
-                if (!status)
-                {
-                    continue;
-                }
-
-                for (unsigned int i = 0; i < elementIndices.length(); ++i)
-                {
-                    const int polygonIndex = elementIndices[i];
-                    if (polygonIndex < 0 || polygonIndex >= static_cast<int>(polygonFaceIndices.size()))
-                    {
-                        continue;
-                    }
-
-                    for (int faceVertexIndex : polygonFaceIndices[polygonIndex])
-                    {
-                        faceValues.push_back(std::to_string(faceVertexIndex));
-                    }
-                    faceValues.push_back("-1");
-                }
+                deferredWholeObjectSets.push_back(
+                    SetMembership{setFn.name().asChar(), BuildPolygonRange(static_cast<int>(polygonFaceIndices.size()))});
+                continue;
             }
 
-            if (faceValues.empty())
+            std::vector<int> polygonIndices = ExtractPolygonIndices(componentObject);
+            if (polygonIndices.empty())
             {
                 continue;
             }
 
-            DmxElement *faceSetElement = builder.CreateElement("DmeFaceSet");
-            faceSetElement->attributes.push_back(MakeScalarAttribute("name", "string", setFn.name().asChar()));
-            faceSetElement->attributes.push_back(MakeScalarArrayAttribute("faces", "int_array", std::move(faceValues)));
-            faceSetElements.push_back(faceSetElement);
+            polygonIndices = FilterUncoveredPolygons(polygonIndices, coveredPolygons);
+            AppendFaceSetElement(builder, setFn.name().asChar(), polygonIndices, polygonFaceIndices, faceSetElements);
+        }
+
+        for (const SetMembership &membership : deferredWholeObjectSets)
+        {
+            std::vector<int> polygonIndices = FilterUncoveredPolygons(membership.polygonIndices, coveredPolygons);
+            AppendFaceSetElement(builder, membership.name.c_str(), polygonIndices, polygonFaceIndices, faceSetElements);
         }
     }
 
-    if (faceSetElements.empty())
+    std::vector<int> uncoveredPolygons;
+    uncoveredPolygons.reserve(coveredPolygons.size());
+    for (int polygonIndex = 0; polygonIndex < static_cast<int>(coveredPolygons.size()); ++polygonIndex)
     {
-        std::vector<std::string> faces;
-        for (const std::vector<int> &polygonEntries : polygonFaceIndices)
+        if (!coveredPolygons[polygonIndex])
         {
-            for (int faceVertexIndex : polygonEntries)
-            {
-                faces.push_back(std::to_string(faceVertexIndex));
-            }
-            faces.push_back("-1");
+            uncoveredPolygons.push_back(polygonIndex);
         }
+    }
 
-        DmxElement *faceSetElement = builder.CreateElement("DmeFaceSet");
-        faceSetElement->attributes.push_back(MakeScalarAttribute("name", "string", "default_faces"));
-        faceSetElement->attributes.push_back(MakeScalarArrayAttribute("faces", "int_array", std::move(faces)));
-        faceSetElements.push_back(faceSetElement);
+    if (!uncoveredPolygons.empty() || faceSetElements.empty())
+    {
+        if (uncoveredPolygons.empty())
+        {
+            uncoveredPolygons = BuildPolygonRange(static_cast<int>(polygonFaceIndices.size()));
+        }
+        AppendFaceSetElement(builder, "default_faces", uncoveredPolygons, polygonFaceIndices, faceSetElements);
     }
 
     DmxElement *meshElement = builder.CreateElement("DmeMesh");

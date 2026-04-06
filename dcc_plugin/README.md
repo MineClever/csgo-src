@@ -131,6 +131,9 @@ Sample file for manual Maya import:
 - `dcc_plugin/samples/simple_skinned_mesh.dmxb`
 - `dcc_plugin/samples/complex_chr_mesh.dmx`
 - `dcc_plugin/samples/complex_chr_mesh.dmxb`
+- `dcc_plugin/samples/MostComplexSampleSet/chr_mesh.dmx`
+
+Regression inputs can also live under subdirectories of `dcc_plugin/samples/`. Current regression scripts normalize nested sample names like `MostComplexSampleSet/chr_mesh` into flat output filenames such as `MostComplexSampleSet__chr_mesh.roundtrip.dmx`.
 
 ## Layout
 

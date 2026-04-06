@@ -42,6 +42,9 @@ if errorlevel 1 goto :fail
 call :RunCase complex_chr_mesh
 if errorlevel 1 goto :fail
 
+call :RunCase MostComplexSampleSet/chr_mesh
+if errorlevel 1 goto :fail
+
 echo.
 echo Sample regression passed.
 echo Output directory: "%OUTPUT_DIR%"
@@ -51,8 +54,9 @@ exit /b 0
 :RunCase
 set SAMPLE_NAME=%~1
 set INPUT_FILE=%PLUGIN_ROOT%\samples\%SAMPLE_NAME%.dmx
-set BINARY_FILE=%OUTPUT_DIR%\%SAMPLE_NAME%.dmxb
-set ROUNDTRIP_FILE=%OUTPUT_DIR%\%SAMPLE_NAME%.roundtrip.dmx
+set OUTPUT_NAME=%SAMPLE_NAME:/=__%
+set BINARY_FILE=%OUTPUT_DIR%\%OUTPUT_NAME%.dmxb
+set ROUNDTRIP_FILE=%OUTPUT_DIR%\%OUTPUT_NAME%.roundtrip.dmx
 
 echo [%SAMPLE_NAME%] text -^> binary
 "%TOOL_PATH%" "%INPUT_FILE%" "%BINARY_FILE%"
