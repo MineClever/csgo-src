@@ -149,6 +149,8 @@
   - importer 已能稳定导入插件目标子集。当前 [DmxImportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/importer/DmxImportTranslator.cpp) 已支持文本 DMX、插件自用最小二进制 DMX、层级、transform、静态网格、骨架、skinCluster、deltaStates、多 UV、face-vertex normals、切线缓存、自定义 face set 材质恢复，以及按 `mayaBlendShapeNode` 分组的 blendShape 重建。
   - importer 的层级判定已进一步收紧。当前只会把显式 `DmeJoint` 创建成 Maya joint，不再因为元素出现在 `jointList` 中就把 `DmeDag` 强行提升成 joint；同时根节点的 `upAxis` 校正也会先查询 Maya 当前世界上方向，仅在源 DMX 上方向与宿主世界上方向不一致时才附加旋转修正。
   - importer 的蒙皮恢复已继续收紧。当前不再对 `jointCount == 1` 的刚性蒙皮做导入期短路，因此 `MostComplexSampleSet/chr_mesh` 中原先丢失 skinCluster 的 `hair_mesh`、`headRing_low`、`low_upper` 等单 influence 网格，导入后已经能恢复出实际 `skinCluster`。
+  - importer 的建层级/建蒙皮顺序已调整为两阶段。当前 [DmxImportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/importer/DmxImportTranslator.cpp) 会先完整创建所有 `DmeDag/DmeJoint` 节点并填充 `importedDagPaths`，再第二阶段统一创建 mesh/skin；这修复了 `chr_mesh_body_bin.dmx` 一类“网格分支先于骨架分支出现”时导入后权重丢失的问题。
+  - importer 的 skinCluster 写权重时序已进一步收紧。当前会在 `setWeights()` 前临时关闭 `maintainMaxInfluences` 与 `normalizeWeights`，写完后再恢复可用的 skinCluster 设置，已在 `chr_mesh_body_bin.dmx` 上压掉 `Some weights could not be set to the specified value. The weight total would have exceeded 1.0.` 这批 Maya 宿主警告，同时保留非零顶点权重。
   - exporter 已能稳定写出插件目标子集。当前 [DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 已支持文本与最小二进制 DMX 写出，覆盖 DAG/joint/mesh/skin/blendShape 的最小模型链路，并写出 `positions`、`normals`、`textureCoordinates`、`texcoord$N`、`tangents`、`faceSets`、`jointList`、`jointCount`、`jointIndices`、`jointWeights`、`deltaStates`、`bindState`、`baseStates`、`currentState` 等核心字段。
   - 二进制 DMX 导入能力已显式验证。当前 importer 通过 [SimpleDmxText.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxText.cpp) 的 `ParseDocument()` 自动分流文本/二进制 DMX，`.dmx`、`.dmxb`、`.dmxbin` 三种扩展名都能被 translator 识别；已实际用 `mayapy` 成功导入 [simple_mesh.dmxb](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/simple_mesh.dmxb) 并完成再导入验证。
   - bind pose 与 deformer 元数据已补到“最小可闭环”。skinCluster 侧当前已写入并回读 `mayaSkinClusterName`、`mayaSkinningMethod`、`mayaMaxInfluences`、`mayaMaintainMaxInfluences`、`mayaNormalizeWeights`、`mayaUseComponents`、`mayaGeomMatrix`、`mayaInfluencePaths`、`mayaBindPreMatrix`；blendShape 侧已支持 `mayaBlendShapeNode`、`mayaBlendShapeEnvelope`、`mayaBlendShapeOrigin`、`mayaWeightIndex`、`mayaTargetName` 等元数据。
@@ -184,8 +186,9 @@
     - UFE、USD、代理节点等非 DAG 混合场景对象的完整支持。
 
 - 已确认剩余问题：
-  - 复杂样例导入时，Maya 仍会打印 `Some weights could not be set to the specified value. The weight total would have exceeded 1.0.` 警告。当前几何闭环已通过，但 importer 的 influence/max influences/bind setup 还没有完全贴合 Maya 的内部约束。
+  - 复杂样例导入时的 `weight total would have exceeded 1.0` 警告已在 `chr_mesh_body_bin.dmx` 上收敛，但还没有对所有复杂资产做全量重新回归，仍需确认这套 `setWeights()` 前后时序调整能否覆盖 `complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 等样例。
   - `MostComplexSampleSet/chr_mesh` 的“导入即丢蒙皮”问题已经在 importer 侧收敛，但新的 `skincheck` 回归确认 exporter 对复杂样例的 skin roundtrip 仍未完整保真：当前导出的 text/binary DMX 在再导入时会丢失一批使用 transform influence 的 skinCluster，说明 exporter 的 influence 注册 / `jointList` 组织仍需继续补。
+  - `chr_mesh_body_bin.dmx` 直接导入后的蒙皮权重现在已能正确落到 Maya `skinCluster`，但针对该样例的 `mayapy` roundtrip 回归仍失败在 `arm_handCoverShape at vertex 0` 的点位失配，说明 exporter 对这类复杂 body 样例的几何/skin 保真仍未完全收口。
   - 材质网络恢复深度仍不足。`AssignFaceSetMaterials()` 虽已改为 API 实现，但当前仍只覆盖基础 shader 图，尚未补 `place2dTexture`、utility 链、分层材质以及更完整的 Valve/Maya 材质语义映射。
   - `exportMetadata=0` 当前只裁掉 Maya 专用 metadata 和材质 inline metadata，不会改写核心 mesh/skin/delta 数据；如果后续希望进一步削减文件大小，还需要继续评估哪些非 `maya*` 字段也可选裁剪而不破坏回读。
   - `SimpleDmx*` 仍是插件定制层，不是通用 DMX DOM/codec。继续扩大 Valve DMX 兼容范围时，未知字段保真、顺序保真和引用语义都会成为重构阻力。

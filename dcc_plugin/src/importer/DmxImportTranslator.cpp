@@ -797,6 +797,7 @@ const simple_dmx::Element *FindMeshVertexData(const simple_dmx::Document &docume
 
 MObject FindSkinClusterForMesh(const MObject &meshObject);
 MStatus CreateSkinClusterWithApi(const simple_dmx::Element *vertexData, const MDagPathArray &influencePaths, const MDagPath &meshDagPath, const MDagPath &meshParentPath, MObject &skinClusterObject);
+MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData, const MObject &skinClusterObject);
 
 MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *vertexData, const MObject &meshObject, const MObject &meshParentObject)
 {
@@ -936,6 +937,26 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
         return MS::kSuccess;
     }
 
+    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
+    if (!status)
+    {
+        return status;
+    }
+
+    MPlug maintainMaxInfluencesPlug = skinClusterNode.findPlug("maintainMaxInfluences", true, &status);
+    if (status)
+    {
+        maintainMaxInfluencesPlug.setBool(false);
+    }
+    status = MS::kSuccess;
+
+    MPlug normalizeWeightsPlug = skinClusterNode.findPlug("normalizeWeights", true, &status);
+    if (status)
+    {
+        normalizeWeightsPlug.setShort(0);
+    }
+    status = MS::kSuccess;
+
     MFloatArray weights;
     weights.setLength(static_cast<unsigned int>(vertexCount) * influenceIndices.length());
     for (unsigned int weightIndex = 0; weightIndex < weights.length(); ++weightIndex)
@@ -980,7 +1001,12 @@ MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *v
     {
         AppendImportDebugLog("skinning: setWeights ok");
     }
-    return status;
+    if (!status)
+    {
+        return status;
+    }
+
+    return RestoreSkinClusterSettings(vertexData, skinClusterObject);
 }
 
 std::string SanitizeNodeName(const std::string &name)
@@ -1444,6 +1470,18 @@ MStatus CreateSkinClusterWithApi(
         return status;
     }
 
+    return dgModifier.doIt();
+}
+
+MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData, const MObject &skinClusterObject)
+{
+    MStatus status;
+    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
+    if (!status)
+    {
+        return status;
+    }
+
     MPlug skinningMethodPlug = skinClusterNode.findPlug("skinningMethod", true, &status);
     if (status)
     {
@@ -1453,6 +1491,18 @@ MStatus CreateSkinClusterWithApi(
             skinningMethodPlug.setShort(static_cast<short>(values[0]));
         }
     }
+    status = MS::kSuccess;
+
+    MPlug useComponentsPlug = skinClusterNode.findPlug("useComponents", true, &status);
+    if (status)
+    {
+        const std::string value = FindAttributeString(vertexData, "mayaUseComponents");
+        if (!value.empty())
+        {
+            useComponentsPlug.setBool(value == "1" || value == "true");
+        }
+    }
+    status = MS::kSuccess;
 
     MPlug maxInfluencesPlug = skinClusterNode.findPlug("maxInfluences", true, &status);
     if (status)
@@ -1463,6 +1513,7 @@ MStatus CreateSkinClusterWithApi(
             maxInfluencesPlug.setInt(static_cast<int>(values[0]));
         }
     }
+    status = MS::kSuccess;
 
     MPlug maintainMaxInfluencesPlug = skinClusterNode.findPlug("maintainMaxInfluences", true, &status);
     if (status)
@@ -1473,6 +1524,7 @@ MStatus CreateSkinClusterWithApi(
             maintainMaxInfluencesPlug.setBool(value == "1" || value == "true");
         }
     }
+    status = MS::kSuccess;
 
     MPlug normalizeWeightsPlug = skinClusterNode.findPlug("normalizeWeights", true, &status);
     if (status)
@@ -1484,17 +1536,7 @@ MStatus CreateSkinClusterWithApi(
         }
     }
 
-    MPlug useComponentsPlug = skinClusterNode.findPlug("useComponents", true, &status);
-    if (status)
-    {
-        const std::string value = FindAttributeString(vertexData, "mayaUseComponents");
-        if (!value.empty())
-        {
-            useComponentsPlug.setBool(value == "1" || value == "true");
-        }
-    }
-
-    return dgModifier.doIt();
+    return MS::kSuccess;
 }
 
 MStatus ApplyDeltaStates(
@@ -2067,7 +2109,7 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
     return MS::kSuccess;
 }
 
-MStatus ImportDagRecursive(
+MStatus ImportDagHierarchyRecursive(
     ImportContext &context,
     const simple_dmx::Element *dagElement,
     MObject parent)
@@ -2101,6 +2143,41 @@ MStatus ImportDagRecursive(
         return status;
     }
 
+    for (const simple_dmx::Element *child : FindAttributeElementArray(context.document, dagElement, "children"))
+    {
+        status = ImportDagHierarchyRecursive(context, child, nodeObject);
+        if (!status)
+        {
+            return status;
+        }
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus ImportDagShapesRecursive(
+    const ImportContext &context,
+    const simple_dmx::Element *dagElement)
+{
+    if (!dagElement)
+    {
+        return MS::kSuccess;
+    }
+
+    const std::string elementKey = ElementKey(dagElement);
+    auto it = context.importedDagPaths.find(elementKey);
+    if (it == context.importedDagPaths.end())
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: imported DAG path was missing for ") + dagElement->name.c_str());
+    }
+
+    MStatus status;
+    MObject nodeObject = it->second.node(&status);
+    if (!status)
+    {
+        return status;
+    }
+
     status = CreateMeshShape(context, dagElement, nodeObject);
     if (!status)
     {
@@ -2109,7 +2186,7 @@ MStatus ImportDagRecursive(
 
     for (const simple_dmx::Element *child : FindAttributeElementArray(context.document, dagElement, "children"))
     {
-        status = ImportDagRecursive(context, child, nodeObject);
+        status = ImportDagShapesRecursive(context, child);
         if (!status)
         {
             return status;
@@ -2240,7 +2317,16 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
 
     for (const simple_dmx::Element *child : FindAttributeElementArray(document, importRoot, "children"))
     {
-        status = ImportDagRecursive(context, child, sceneRoot);
+        status = ImportDagHierarchyRecursive(context, child, sceneRoot);
+        if (!status)
+        {
+            return status;
+        }
+    }
+
+    for (const simple_dmx::Element *child : FindAttributeElementArray(document, importRoot, "children"))
+    {
+        status = ImportDagShapesRecursive(context, child);
         if (!status)
         {
             return status;
