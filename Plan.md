@@ -131,6 +131,101 @@
   - 当构建行为发生变化时，优先重新生成这份日志，再更新本计划中的问题状态。
   - 后续调整优先级或关闭问题时，尽量引用这份日志中的最新错误作为依据。
 
+## DCC / Maya 插件计划
+
+### 9. 为 Maya 2022.5 开发 DMX 导入导出插件
+- 状态：进行中
+- 优先级：中
+- 目标目录：[dcc_plugin](D:/_Code_Here/Git/csgo-src/dcc_plugin)
+- 开发环境：
+  - Maya 2022.5 DevKit 路径：`D:\_Code_Here\Maya\Autodesk_Maya_2022_5_Update_DEVKIT_Windows\devkitBase`
+  - Maya 2022.5 安装路径：`C:\Program Files\Autodesk\Maya2022`
+  - 插件工程输出目录：`D:\_Code_Here\Git\csgo-src\dcc_plugin`
+- 参考实现：
+  - `D:\_Code_Here\Maya\Autodesk_Maya_2022_5_Update_DEVKIT_Windows\devkitBase\devkit\plug-ins\AbcImport`
+  - `D:\_Code_Here\Maya\Autodesk_Maya_2022_5_Update_DEVKIT_Windows\devkitBase\devkit\plug-ins\AbcExport`
+- 目标说明：
+  - 参考 Maya DevKit 中 `AbcImport` / `AbcExport` 的工程组织、命令注册方式、文件翻译器实现和构建方法，为 [src/datamodel](D:/_Code_Here/Git/csgo-src/src/datamodel) 对应的数据结构设计并实现 Maya 的 DMX 导入插件与导出插件。
+- 当前已确认现状：
+  - [dcc_plugin](D:/_Code_Here/Git/csgo-src/dcc_plugin) 已建立初始工程骨架，当前已包含公共层、导入层、导出层和插件入口层。
+  - 仓库内可直接复用的 DMX 核心链路主要位于 [src/datamodel](D:/_Code_Here/Git/csgo-src/src/datamodel)、[src/dmxloader](D:/_Code_Here/Git/csgo-src/src/dmxloader)、[src/dmserializers](D:/_Code_Here/Git/csgo-src/src/dmserializers)。
+  - [src/utils/studiomdl/dmxsupport.cpp](D:/_Code_Here/Git/csgo-src/src/utils/studiomdl/dmxsupport.cpp) 已包含较完整的 DMX 模型装载逻辑，可作为 Maya 导入映射与数据字段梳理的重要参考，而不应重复发明一套 DMX 解释器。
+  - DCC 插件构建策略更新为优先使用 x64 工具链，以匹配 Maya 2022.5 Windows 运行时；不再以仓库主工程的 Win32 / x86 约束反向限制插件目标。
+- 实施范围：
+  - 第一阶段只做模型向导入/导出最小闭环，不包含材质网络完整还原、动画剪辑批处理、复杂约束、粒子、灯光、摄像机和 Valve 专用编辑器元数据。
+  - 最小可用功能以静态网格、骨架、蒙皮权重、基础 transform、mesh 名称、材质槽位、基础 shape key / delta state 为核心。
+  - 插件形态采用两个 Maya 文件翻译器或一个插件内注册两个 translator，分别负责 DMX 导入与导出；公共逻辑放在共享静态库或共享源码层，避免导入导出各自复制一份转换代码。
+- 目标拆分：
+  - 阶段 1，工程落地：
+    - 在 `dcc_plugin` 下建立 `maya_dmx_common`、`maya_dmx_import`、`maya_dmx_export` 三层结构。
+    - 设计独立 CMake 入口，并通过仓库主 CMake 增加可选开关，例如 `BUILD_MAYA_DMX_PLUGIN`，未提供 DevKit 时默认关闭，不影响现有 Win32 游戏/工具链构建。
+    - 封装 Maya DevKit 检测、include/lib 路径、`.mll` 输出目录和运行时复制规则。
+  - 阶段 2，DMX 读取与场景映射：
+    - 先打通 DMX 文件加载、根元素识别、骨架层级遍历、网格顶点/索引提取、材质名读取。
+    - 在 Maya 侧最先落地 `MFnMesh`、`MFnSkinCluster`、`MFnTransform`、`MFnIkJoint` 对应的最小对象创建路径。
+    - 明确坐标系、单位、旋转顺序和骨骼朝向转换规则，统一放入公共转换模块，避免导入导出规则分散。
+  - 阶段 3，DMX 写出：
+    - 从 Maya DAG 收集 transform、joint、mesh、skin cluster、blend shape 数据，生成最小可保存的 DMX 层次。
+    - 复用 `datamodel` / `dmserializers` 直接写出合法 DMX，优先兼容仓库内 `studiomdl` / `dmxloader` 的消费路径。
+    - 增加导出选项：坐标系、是否导出蒙皮、是否导出 blend shape、是否写出材质槽位。
+  - 阶段 4，验证与样例：
+    - 建立一组最小样例资产，覆盖静态模型、单骨骼蒙皮、多人骨架、含 delta state 的面部模型。
+    - 验证链路至少包括 `Maya -> DMX -> studiomdl/dmxloader` 与 `现有 DMX -> Maya -> 再导出 DMX` 两条。
+    - 为导入导出失败场景补日志与诊断信息，避免只返回 Maya 通用报错。
+- 模块设计：
+  - `maya_dmx_common`：
+    - 负责坐标系转换、字符串/路径转换、DMX 元素查找、名称规范化、错误日志桥接、导入导出共享选项结构。
+  - `maya_dmx_import`：
+    - 负责 Maya `MPxFileTranslator` 导入入口、文件选项解析、场景对象创建、DMX 到 Maya 的数据映射。
+  - `maya_dmx_export`：
+    - 负责 Maya `MPxFileTranslator` 导出入口、选择集遍历、Maya 到 DMX 的数据采集与写出。
+- 数据映射约束：
+  - 坐标系必须显式定义 Valve 与 Maya 之间的轴向映射，禁止在不同模块内各自硬编码。
+  - 骨骼命名、父子层级、bind pose、蒙皮权重精度需要以 `studiomdl` 可消费为准，而不是只满足 Maya 内可见效果。
+  - blend shape / delta state 的命名和顺序需要保持稳定，避免回写后破坏下游面部动画控制器。
+  - 材质先只保留槽位和材质名，不在第一阶段尝试恢复完整 Hypershade 网络。
+- 验收标准：
+  - 能在 Maya 2022.5 中成功加载 `.mll`，并出现可用的 DMX 导入与导出入口。
+  - 能导入至少一份仓库现有 DMX 模型并在 Maya 中看到正确层级、网格和基础蒙皮结果。
+  - 能从 Maya 导出一份最小骨架网格 DMX，并被仓库内 DMX 读取链路接受。
+  - 插件构建默认对未安装 Maya DevKit 的开发者无侵入，不破坏主工程配置与构建。
+- 主要风险：
+  - Maya 2022.5 官方插件 ABI 为 x64，和仓库现有主工程 Win32 构建体系分离后，跨模块直接复用现有库时需要谨慎处理位数与二进制兼容边界。
+  - `datamodel` / `dmserializers` 是否能直接无修改地嵌入 Maya 插件进程尚未验证，可能需要补一层更轻的适配封装以避免依赖过重。
+  - 现有 DMX 字段并不都适合直接映射为 Maya 原生节点属性，需要先约束最小支持子集，再逐步扩展。
+- 近期执行顺序：
+  - 先以 x64 工具链确认 Maya 2022.5 插件最小构建方式、运行库与输出目录规则。
+  - 再建立 `dcc_plugin` 工程骨架和可选 CMake 开关，确保空实现插件可以编译输出 `.mll`。
+  - 之后实现导入最小闭环，再实现导出最小闭环，最后补样例与回归验证。
+- 当前进展：
+  - 已建立 [dcc_plugin/CMakeLists.txt](D:/_Code_Here/Git/csgo-src/dcc_plugin/CMakeLists.txt) 与 [dcc_plugin/cmake/MayaPluginSupport.cmake](D:/_Code_Here/Git/csgo-src/dcc_plugin/cmake/MayaPluginSupport.cmake)，用于独立配置 Maya SDK、x64 优先策略和 `.mll` 输出规则。
+  - 已建立 [dcc_plugin/src/common](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common)、[dcc_plugin/src/importer](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/importer)、[dcc_plugin/src/exporter](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter)、[dcc_plugin/src/plugin](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/plugin) 骨架，并注册了导入 / 导出 translator 空实现。
+  - 已在仓库根 [CMakeLists.txt](D:/_Code_Here/Git/csgo-src/CMakeLists.txt) 增加 `BUILD_MAYA_DMX_PLUGIN` 可选开关，但该插件仍建议通过独立 x64 配置使用，避免与主仓库 Win32 目标混淆。
+  - 已通过 `cmake -S dcc_plugin -B build\\maya_dmx -A x64` 与 `cmake --build build\\maya_dmx --config Release` 验证骨架可以生成 [dcc_plugin/bin/Release/maya_dmx.mll](D:/_Code_Here/Git/csgo-src/dcc_plugin/bin/Release/maya_dmx.mll)。
+  - 已新增 [dcc_plugin/CreatePluginSolution.bat](D:/_Code_Here/Git/csgo-src/dcc_plugin/CreatePluginSolution.bat) 与 [dcc_plugin/BuildPlugin.bat](D:/_Code_Here/Git/csgo-src/dcc_plugin/BuildPlugin.bat)，用于独立生成 x64 工程和快速构建插件。
+  - 已新增 [dcc_plugin/InstallPluginModuleToMaya.bat](D:/_Code_Here/Git/csgo-src/dcc_plugin/InstallPluginModuleToMaya.bat)，按 `C:\Users\chnis\Documents\maya\modules` 现有风格生成 `.mod` 文件，并把插件拷贝到仓库内的 `maya_module/plug-ins/windows/2022` 目录作为 module 载荷。
+  - 已新增 [dcc_plugin/src/common/SimpleDmxText.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxText.cpp) 与 [dcc_plugin/src/common/SimpleDmxText.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxText.h)，实现文本 DMX 最小解析器，当前覆盖 `DmeModel`、`DmeDag`、`DmeJoint`、`DmeTransform`、`children`、`jointList`、`position`、`orientation` 等常见字段。
+  - [dcc_plugin/src/importer/DmxImportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/importer/DmxImportTranslator.cpp) 已从纯 stub 升级为可导入文本 DMX 层级、局部变换和基础 polygon mesh，当前会在 Maya 中创建 transform / joint 层级，并支持 `shape -> DmeMesh -> bindState/baseStates -> positions/positionsIndices -> faceSets/faces` 这条最小网格路径；同时已支持主 UV 通道 `textureCoordinates/textureCoordinatesIndices`、face-vertex normals `normals/normalsIndices`，以及基于 `jointList + jointCount + jointWeights + jointIndices` 的基础 skinCluster 权重导入；对 `upAxis = Z` 的模型会添加一层简单的 X 轴校正。
+  - importer 已补上最小材质槽位恢复：当前会按 `DmeFaceSet.name` 创建或复用 Maya shading group，并把对应 polygon 范围重新分配到这些面集上，用于保留基础材质槽位组织。
+  - importer 已补上最小二进制 DMX 读取：当前会自动识别 `<!-- dmx encoding binary 5 ... -->` 头，并解析插件当前使用的最小属性子集，包括 `string/int/float/bool/vector2/vector3/quaternion`、对应数组、`element`、`element_array`，从而让现有层级、mesh、UV、normals、skin、faceSet 导入路径也能处理二进制 DMX。
+  - 已新增 [dcc_plugin/samples/simple_hierarchy.dmx](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/simple_hierarchy.dmx) 作为最小手工验证样例，用于在 Maya 2022.5 中快速验证 importer。
+  - 已新增 [dcc_plugin/samples/simple_mesh.dmx](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/simple_mesh.dmx) 作为最小网格导入样例，用于验证基础 mesh 创建路径。
+  - 已新增 [dcc_plugin/samples/simple_skinned_mesh.dmx](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/simple_skinned_mesh.dmx) 作为最小蒙皮导入样例，用于验证 `jointList` 与 skin weights 导入路径。
+  - 已新增 [dcc_plugin/tools/DmxSampleTool.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/DmxSampleTool.cpp) 与 [dcc_plugin/tools/CMakeLists.txt](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/CMakeLists.txt)，生成独立命令行工具 [dcc_plugin/bin/Release/maya_dmx_sample_tool.exe](D:/_Code_Here/Git/csgo-src/dcc_plugin/bin/Release/maya_dmx_sample_tool.exe)，用于在当前最小支持子集内执行 text/binary DMX 样例互转，减少 Maya 内手工回归成本。
+  - 已新增 [dcc_plugin/RunSampleRegression.bat](D:/_Code_Here/Git/csgo-src/dcc_plugin/RunSampleRegression.bat) 与 CMake 自定义目标 `maya_dmx_sample_regression`，会统一跑 `simple_hierarchy`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh` 四份文本样例的 `text -> binary -> text` 转换回归。
+  - 已新增 [dcc_plugin/src/common/SimpleDmxWrite.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxWrite.cpp) 与 [dcc_plugin/src/common/SimpleDmxWrite.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxWrite.h)，把当前最小 DMX 文本/二进制写出逻辑下沉到公共层，供 exporter 与样例工具复用。
+  - [dcc_plugin/src/exporter/DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 已从 stub 升级为最小文本 DMX exporter，可从当前场景或活动选择集中收集 DAG / joint / mesh，写出 `DmeModel -> DmeDag/DmeJoint -> DmeTransform/DmeMesh` 的基础结构，并覆盖 `positions`、`positionsIndices`、`normals`、`normalsIndices`、`textureCoordinates`、`textureCoordinatesIndices`、`faceSets/faces`。
+  - exporter 已进一步补上完整导出骨架的 `jointList` 以及基础蒙皮字段 `jointCount`、`jointIndices`、`jointWeights`，当前会从 Maya `skinCluster` 收集导出层级内的 influence，并按顶点写出固定槽位权重布局，以便当前 importer 可以回读。
+  - exporter 已补上最小材质槽位写出：当前会从 Maya mesh 连接的 shading group 收集 polygon 分配，并按集合名称写出多个 `DmeFaceSet`，以保留基础材质槽位信息。
+  - exporter 已补上最小二进制 DMX 写出：当前支持通过 `.dmxb` / `.dmxbin` 扩展名，或 translator 选项中的 `binary=1` / `encoding=binary` 输出二进制 DMX；二进制写出覆盖插件当前已支持的最小属性子集，以保证 importer 可以回读。
+  - 已再次通过 `cmake --build build\\maya_dmx --config Release` 验证 importer + exporter 的当前 x64 插件工程可以成功生成 [dcc_plugin/bin/Release/maya_dmx.mll](D:/_Code_Here/Git/csgo-src/dcc_plugin/bin/Release/maya_dmx.mll)。
+  - 已用 `maya_dmx_sample_tool.exe` 从现有文本样例生成 [dcc_plugin/samples/simple_hierarchy.dmxb](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/simple_hierarchy.dmxb)、[dcc_plugin/samples/simple_mesh.dmxb](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/simple_mesh.dmxb)、[dcc_plugin/samples/simple_skinned_mesh.dmxb](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/simple_skinned_mesh.dmxb)，并额外验证 `simple_mesh.dmxb -> build/simple_mesh_roundtrip.dmx` 的最小双向转换链路可运行。
+  - 已将你提供的真实样例 [dcc_plugin/samples/complex_chr_mesh.dmx](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/complex_chr_mesh.dmx) 纳入测试范围；当前最小工具链已可完成 `complex_chr_mesh.dmx -> complex_chr_mesh.dmxb` 与 `complex_chr_mesh.dmx -> build/complex_chr_mesh_roundtrip_text.dmx`，说明这份真实资产至少落在现阶段 text/binary 最小支持子集内。
+  - 已通过 `cmake --build build\\maya_dmx --config Release --target maya_dmx_sample_regression` 验证样例回归目标可运行，当前会在 `build\\maya_dmx\\sample_regression\\Release` 下生成各样例的二进制文件和 roundtrip 文本文件。
+- 当前限制：
+  - importer 虽然已支持文本 DMX 与最小二进制 DMX 子集，但仍只覆盖层级、局部变换、基础 mesh、主 UV、face-vertex normals、基础蒙皮权重和基础材质槽位；不导入完整材质网络、delta state、额外 UV 通道，也不保证兼容仓库外所有 Valve 历史二进制 DMX 变体。
+  - exporter 已能写出文本 DMX 与最小二进制 DMX 子集，并支持基础蒙皮权重、完整导出层级内的 `jointList` 和基础材质槽位；但仍不支持完整材质网络、delta state、额外 UV、bind pose 扩展信息和更完整的 deformer 元数据。
+
 ## 环境与工具链说明
 
 ### A. 批处理构建包装脚本已做兼容性修复

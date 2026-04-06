@@ -1,0 +1,18 @@
+add_library(maya_dmx_serialization STATIC
+    SimpleDmxBinary.cpp
+    SimpleDmxBinary.h
+    SimpleDmxText.cpp
+    SimpleDmxText.h
+    SimpleDmxWrite.cpp
+    SimpleDmxWrite.h
+)
+
+maya_dmx_apply_common_target_settings(maya_dmx_serialization)
+
+add_library(maya_dmx_common STATIC
+    MayaDmxCommon.cpp
+    MayaDmxCommon.h
+)
+
+target_link_libraries(maya_dmx_common PUBLIC maya_dmx_serialization)
+maya_dmx_apply_common_target_settings(maya_dmx_common)

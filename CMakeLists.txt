@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 option(VALVE_CONFIGURE_VPC_ONLY "Configure only the VPC toolchain targets." OFF)
+option(BUILD_MAYA_DMX_PLUGIN "Build the Maya 2022.5 DMX plugin scaffold." OFF)
 
 if(VALVE_CONFIGURE_VPC_ONLY)
     project(VPC CXX C ASM_MASM)
@@ -16,4 +17,8 @@ if(VALVE_CONFIGURE_VPC_ONLY)
     valve_configure_vpc_project()
 else()
     add_subdirectory(src)
+endif()
+
+if(BUILD_MAYA_DMX_PLUGIN)
+    add_subdirectory(dcc_plugin)
 endif()

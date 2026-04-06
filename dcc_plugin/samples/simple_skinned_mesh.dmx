@@ -1,0 +1,117 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmeModel"
+{
+    "id" "elementid" "skinned-model-root"
+    "name" "string" "simple_skinned_model"
+    "upAxis" "string" "Y"
+    "jointList" "element_array"
+    [
+        "element" "joint-root"
+    ]
+    "children" "element_array"
+    [
+        "DmeJoint"
+        {
+            "id" "elementid" "joint-root"
+            "name" "string" "root_joint"
+            "transform" "DmeTransform"
+            {
+                "id" "elementid" "joint-root-xform"
+                "position" "vector3" "0 0 0"
+                "orientation" "quaternion" "0 0 0 1"
+            }
+        },
+        "DmeDag"
+        {
+            "id" "elementid" "skinned-mesh-dag"
+            "name" "string" "skinned_mesh_node"
+            "transform" "DmeTransform"
+            {
+                "id" "elementid" "skinned-mesh-xform"
+                "position" "vector3" "0 0 0"
+                "orientation" "quaternion" "0 0 0 1"
+            }
+            "shape" "DmeMesh"
+            {
+                "id" "elementid" "skinned-mesh-shape"
+                "name" "string" "skinned_triangle"
+                "bindState" "DmeVertexData"
+                {
+                    "id" "elementid" "skinned-mesh-bind"
+                    "name" "string" "bind"
+                    "jointCount" "int" "1"
+                    "flipVCoordinates" "bool" "0"
+                    "vertexFormat" "string_array"
+                    [
+                        "positions",
+                        "normals",
+                        "textureCoordinates",
+                        "jointWeights",
+                        "jointIndices"
+                    ]
+                    "positions" "vector3_array"
+                    [
+                        "0 0 0",
+                        "2 0 0",
+                        "0 2 0"
+                    ]
+                    "positionsIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2"
+                    ]
+                    "normals" "vector3_array"
+                    [
+                        "0 0 1"
+                    ]
+                    "normalsIndices" "int_array"
+                    [
+                        "0",
+                        "0",
+                        "0"
+                    ]
+                    "textureCoordinates" "vector2_array"
+                    [
+                        "0 0",
+                        "1 0",
+                        "0 1"
+                    ]
+                    "textureCoordinatesIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2"
+                    ]
+                    "jointWeights" "float_array"
+                    [
+                        "1.0",
+                        "1.0",
+                        "1.0"
+                    ]
+                    "jointIndices" "int_array"
+                    [
+                        "0",
+                        "0",
+                        "0"
+                    ]
+                }
+                "faceSets" "element_array"
+                [
+                    "DmeFaceSet"
+                    {
+                        "id" "elementid" "skinned-mesh-faces"
+                        "name" "string" "default_faces"
+                        "faces" "int_array"
+                        [
+                            "0",
+                            "1",
+                            "2",
+                            "-1"
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}

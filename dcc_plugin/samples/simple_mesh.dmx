@@ -1,0 +1,87 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmeModel"
+{
+    "id" "elementid" "mesh-model-root"
+    "name" "string" "simple_mesh_model"
+    "upAxis" "string" "Y"
+    "children" "element_array"
+    [
+        "DmeDag"
+        {
+            "id" "elementid" "mesh-dag"
+            "name" "string" "mesh_node"
+            "transform" "DmeTransform"
+            {
+                "id" "elementid" "mesh-xform"
+                "position" "vector3" "0 0 0"
+                "orientation" "quaternion" "0 0 0 1"
+            }
+            "shape" "DmeMesh"
+            {
+                "id" "elementid" "mesh-shape"
+                "name" "string" "triangle_mesh"
+                "bindState" "DmeVertexData"
+                {
+                    "id" "elementid" "mesh-bind"
+                    "name" "string" "bind"
+                    "flipVCoordinates" "bool" "0"
+                    "vertexFormat" "string_array"
+                    [
+                        "positions",
+                        "normals",
+                        "textureCoordinates"
+                    ]
+                    "positions" "vector3_array"
+                    [
+                        "0 0 0",
+                        "2 0 0",
+                        "0 2 0"
+                    ]
+                    "positionsIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2"
+                    ]
+                    "normals" "vector3_array"
+                    [
+                        "0 0 1"
+                    ]
+                    "normalsIndices" "int_array"
+                    [
+                        "0",
+                        "0",
+                        "0"
+                    ]
+                    "textureCoordinates" "vector2_array"
+                    [
+                        "0 0",
+                        "1 0",
+                        "0 1"
+                    ]
+                    "textureCoordinatesIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2"
+                    ]
+                }
+                "faceSets" "element_array"
+                [
+                    "DmeFaceSet"
+                    {
+                        "id" "elementid" "mesh-faces"
+                        "name" "string" "default_faces"
+                        "faces" "int_array"
+                        [
+                            "0",
+                            "1",
+                            "2",
+                            "-1"
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}

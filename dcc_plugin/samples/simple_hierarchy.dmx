@@ -1,0 +1,35 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmeModel"
+{
+    "id" "elementid" "model-root"
+    "name" "string" "simple_hierarchy"
+    "upAxis" "string" "Y"
+    "children" "element_array"
+    [
+        "DmeDag"
+        {
+            "id" "elementid" "child-a"
+            "name" "string" "joint_root"
+            "transform" "DmeTransform"
+            {
+                "id" "elementid" "child-a-xform"
+                "position" "vector3" "0 5 0"
+                "orientation" "quaternion" "0 0 0 1"
+            }
+            "children" "element_array"
+            [
+                "DmeDag"
+                {
+                    "id" "elementid" "child-b"
+                    "name" "string" "child_ctrl"
+                    "transform" "DmeTransform"
+                    {
+                        "id" "elementid" "child-b-xform"
+                        "position" "vector3" "2 0 0"
+                        "orientation" "quaternion" "0 0 0 1"
+                    }
+                }
+            ]
+        }
+    ]
+}
