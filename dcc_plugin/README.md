@@ -37,6 +37,12 @@ Maya standalone regression:
 dcc_plugin\RunMayaBatchRegression.bat
 ```
 
+Interactive Maya validation:
+
+```bat
+dcc_plugin\RunMayaInteractiveValidation.bat
+```
+
 Workflow command inside Maya:
 
 ```mel
@@ -52,6 +58,7 @@ MEL export UI helpers inside Maya:
 
 ```mel
 source "DmxCreateUI.mel";
+MayaDmxShowImportOptions();
 MayaDmxShowExportSelectionOptions();
 MayaDmxShowExportAllOptions();
 ```
@@ -82,11 +89,15 @@ This writes `%USERPROFILE%\Documents\maya\modules\maya_dmx.mod`, clears the stag
 
 `RunMayaBatchRegression.bat` defaults to `C:\Program Files\Autodesk\Maya2022\bin\mayapy.exe`. If Maya is installed elsewhere, set `MAYA_PYTHON_EXE_OVERRIDE` before running it.
 
+`RunMayaInteractiveValidation.bat` defaults to `C:\Program Files\Autodesk\Maya2022\bin\maya.exe`. It launches Maya with `MAYA_SKIP_USERSETUP_PY=1`, loads the built plugin, sources the DMX MEL scripts from `dcc_plugin\src\mel\`, verifies the expected MEL entrypoints exist, and opens a small validation window with buttons for the import/export option boxes. If Maya is installed elsewhere, set `MAYA_EXE_OVERRIDE` before running it.
+
 `mayaDmxWorkflow` now executes both single exports and batch exports. Export presets still use Maya optionVars, while batch manifests are stored as files under the Maya user prefs directory to avoid DAG path corruption.
 
 The module also now ships a minimal Alembic-style MEL export UI layer. Source files are managed under:
 
 - [src/mel/performDmxExport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/performDmxExport.mel)
+- [src/mel/performDmxImport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/performDmxImport.mel)
+- [src/mel/doDmxImportArgList.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/doDmxImportArgList.mel)
 - [src/mel/doDmxExportArgList.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/doDmxExportArgList.mel)
 - [src/mel/DmxCreateUI.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/DmxCreateUI.mel)
 - [src/mel/mayaDmxTranslatorExport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/mayaDmxTranslatorExport.mel)

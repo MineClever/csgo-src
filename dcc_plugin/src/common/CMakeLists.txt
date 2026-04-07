@@ -1,8 +1,11 @@
 add_library(maya_dmx_serialization STATIC
     SimpleDmxBinary.cpp
     SimpleDmxBinary.h
+    SimpleDmxDocument.h
     SimpleDmxText.cpp
     SimpleDmxText.h
+    SimpleDmxTypes.cpp
+    SimpleDmxTypes.h
     SimpleDmxWrite.cpp
     SimpleDmxWrite.h
 )

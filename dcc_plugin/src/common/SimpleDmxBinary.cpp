@@ -1,4 +1,5 @@
 #include "SimpleDmxBinary.h"
+#include "SimpleDmxTypes.h"
 
 #include <array>
 #include <cstdint>
@@ -11,23 +12,6 @@ namespace simple_dmx
 {
 namespace
 {
-constexpr int kAttributeElement = 1;
-constexpr int kAttributeInt = 2;
-constexpr int kAttributeFloat = 3;
-constexpr int kAttributeBool = 4;
-constexpr int kAttributeString = 5;
-constexpr int kAttributeVector2 = 9;
-constexpr int kAttributeVector3 = 10;
-constexpr int kAttributeVector4 = 11;
-constexpr int kAttributeQuaternion = 13;
-constexpr int kAttributeElementArray = 15;
-constexpr int kAttributeIntArray = 16;
-constexpr int kAttributeFloatArray = 17;
-constexpr int kAttributeStringArray = 19;
-constexpr int kAttributeVector2Array = 23;
-constexpr int kAttributeVector3Array = 24;
-constexpr int kAttributeVector4Array = 25;
-constexpr int kAttributeQuaternionArray = 27;
 constexpr int kCurrentBinaryEncoding = 5;
 
 std::string MakeError(const char *message)
@@ -249,15 +233,15 @@ bool ReadElementReference(
 
 bool ReadScalarAttribute(
     BinaryReader &reader,
-    int attributeType,
+    ValueType valueType,
     Attribute &attribute,
     std::string &errorMessage)
 {
     attribute.kind = Attribute::Kind::String;
 
-    switch (attributeType)
+    switch (valueType)
     {
-    case kAttributeInt:
+    case ValueType::Int:
     {
         std::int32_t value = 0;
         if (!reader.ReadInt32(value))
@@ -269,7 +253,7 @@ bool ReadScalarAttribute(
         return true;
     }
 
-    case kAttributeFloat:
+    case ValueType::Float:
     {
         float value = 0.0f;
         if (!reader.ReadFloat(value))
@@ -281,7 +265,7 @@ bool ReadScalarAttribute(
         return true;
     }
 
-    case kAttributeBool:
+    case ValueType::Bool:
     {
         std::uint8_t value = 0;
         if (!reader.ReadUInt8(value))
@@ -293,14 +277,12 @@ bool ReadScalarAttribute(
         return true;
     }
 
-    case kAttributeVector2:
-    case kAttributeVector3:
-    case kAttributeVector4:
-    case kAttributeQuaternion:
+    case ValueType::Vector2:
+    case ValueType::Vector3:
+    case ValueType::Vector4:
+    case ValueType::Quaternion:
     {
-        const int componentCount =
-            attributeType == kAttributeVector2 ? 2 :
-            (attributeType == kAttributeVector3 ? 3 : 4);
+        const int componentCount = ComponentCountForValueType(valueType);
         std::vector<float> values(static_cast<size_t>(componentCount), 0.0f);
         for (int i = 0; i < componentCount; ++i)
         {
@@ -322,7 +304,7 @@ bool ReadScalarAttribute(
 
 bool ReadArrayAttribute(
     BinaryReader &reader,
-    int attributeType,
+    ValueType valueType,
     Attribute &attribute,
     std::string &errorMessage)
 {
@@ -356,9 +338,9 @@ bool ReadArrayAttribute(
         return true;
     };
 
-    switch (attributeType)
+    switch (valueType)
     {
-    case kAttributeIntArray:
+    case ValueType::IntArray:
         for (std::int32_t i = 0; i < count; ++i)
         {
             std::int32_t value = 0;
@@ -371,7 +353,7 @@ bool ReadArrayAttribute(
         }
         return true;
 
-    case kAttributeFloatArray:
+    case ValueType::FloatArray:
         for (std::int32_t i = 0; i < count; ++i)
         {
             float value = 0.0f;
@@ -384,7 +366,7 @@ bool ReadArrayAttribute(
         }
         return true;
 
-    case kAttributeStringArray:
+    case ValueType::StringArray:
         for (std::int32_t i = 0; i < count; ++i)
         {
             std::string value;
@@ -397,16 +379,16 @@ bool ReadArrayAttribute(
         }
         return true;
 
-    case kAttributeVector2Array:
+    case ValueType::Vector2Array:
         return readVectorArray(2);
 
-    case kAttributeVector3Array:
+    case ValueType::Vector3Array:
         return readVectorArray(3);
 
-    case kAttributeVector4Array:
+    case ValueType::Vector4Array:
         return readVectorArray(4);
 
-    case kAttributeQuaternionArray:
+    case ValueType::QuaternionArray:
         return readVectorArray(4);
 
     default:
@@ -510,8 +492,8 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
         for (std::int32_t attributeIndex = 0; attributeIndex < attributeCount; ++attributeIndex)
         {
             std::int32_t nameIndex = -1;
-            std::uint8_t attributeType = 0;
-            if (!reader.ReadInt32(nameIndex) || !reader.ReadUInt8(attributeType))
+            std::uint8_t attributeTypeCode = 0;
+            if (!reader.ReadInt32(nameIndex) || !reader.ReadUInt8(attributeTypeCode))
             {
                 errorMessage = MakeError("unexpected end while reading attribute header");
                 return false;
@@ -524,22 +506,29 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
                 return false;
             }
 
-            Attribute attribute;
-            switch (attributeType)
+            ValueType valueType = ValueType::Unknown;
+            if (!TryGetValueTypeFromBinaryTypeCode(attributeTypeCode, valueType))
             {
-            case kAttributeElement:
+                errorMessage = MakeError("encountered an unsupported attribute type in binary DMX");
+                return false;
+            }
+
+            Attribute attribute;
+            switch (valueType)
+            {
+            case ValueType::Element:
                 attribute.kind = Attribute::Kind::Element;
-                attribute.declaredType = "element";
+                attribute.declaredType = DeclaredTypeFromValueType(valueType);
                 if (!ReadElementReference(reader, elements, attribute.elementValue, errorMessage))
                 {
                     return false;
                 }
                 break;
 
-            case kAttributeElementArray:
+            case ValueType::ElementArray:
             {
                 attribute.kind = Attribute::Kind::ElementArray;
-                attribute.declaredType = "element_array";
+                attribute.declaredType = DeclaredTypeFromValueType(valueType);
 
                 std::int32_t count = 0;
                 if (!reader.ReadInt32(count) || count < 0)
@@ -561,10 +550,10 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
                 break;
             }
 
-            case kAttributeString:
+            case ValueType::String:
             {
                 attribute.kind = Attribute::Kind::String;
-                attribute.declaredType = "string";
+                attribute.declaredType = DeclaredTypeFromValueType(valueType);
                 std::int32_t valueIndex = -1;
                 if (!reader.ReadInt32(valueIndex))
                 {
@@ -581,113 +570,29 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
                 break;
             }
 
-            case kAttributeInt:
-                attribute.declaredType = "int";
-                if (!ReadScalarAttribute(reader, attributeType, attribute, errorMessage))
+            case ValueType::Int:
+            case ValueType::Float:
+            case ValueType::Bool:
+            case ValueType::Vector2:
+            case ValueType::Vector3:
+            case ValueType::Vector4:
+            case ValueType::Quaternion:
+                attribute.declaredType = DeclaredTypeFromValueType(valueType);
+                if (!ReadScalarAttribute(reader, valueType, attribute, errorMessage))
                 {
                     return false;
                 }
                 break;
 
-            case kAttributeFloat:
-                attribute.declaredType = "float";
-                if (!ReadScalarAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeBool:
-                attribute.declaredType = "bool";
-                if (!ReadScalarAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeVector2:
-                attribute.declaredType = "vector2";
-                if (!ReadScalarAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeVector3:
-                attribute.declaredType = "vector3";
-                if (!ReadScalarAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeVector4:
-                attribute.declaredType = "vector4";
-                if (!ReadScalarAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeQuaternion:
-                attribute.declaredType = "quaternion";
-                if (!ReadScalarAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeIntArray:
-                attribute.declaredType = "int_array";
-                if (!ReadArrayAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeFloatArray:
-                attribute.declaredType = "float_array";
-                if (!ReadArrayAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeStringArray:
-                attribute.declaredType = "string_array";
-                if (!ReadArrayAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeVector2Array:
-                attribute.declaredType = "vector2_array";
-                if (!ReadArrayAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeVector3Array:
-                attribute.declaredType = "vector3_array";
-                if (!ReadArrayAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeVector4Array:
-                attribute.declaredType = "vector4_array";
-                if (!ReadArrayAttribute(reader, attributeType, attribute, errorMessage))
-                {
-                    return false;
-                }
-                break;
-
-            case kAttributeQuaternionArray:
-                attribute.declaredType = "quaternion_array";
-                if (!ReadArrayAttribute(reader, attributeType, attribute, errorMessage))
+            case ValueType::IntArray:
+            case ValueType::FloatArray:
+            case ValueType::StringArray:
+            case ValueType::Vector2Array:
+            case ValueType::Vector3Array:
+            case ValueType::Vector4Array:
+            case ValueType::QuaternionArray:
+                attribute.declaredType = DeclaredTypeFromValueType(valueType);
+                if (!ReadArrayAttribute(reader, valueType, attribute, errorMessage))
                 {
                     return false;
                 }

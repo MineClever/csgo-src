@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SimpleDmxText.h"
+#include "SimpleDmxDocument.h"
 
 #include <string>
 

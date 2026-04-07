@@ -1,9 +1,9 @@
 #include "SimpleDmxText.h"
 #include "SimpleDmxBinary.h"
+#include "SimpleDmxTypes.h"
 
 #include <cctype>
 #include <sstream>
-#include <unordered_set>
 
 namespace simple_dmx
 {
@@ -123,7 +123,7 @@ private:
                     return false;
                 }
             }
-            else if (IsArrayType(attributeType))
+            else if (IsArrayValueType(ValueTypeFromDeclaredType(attributeType)))
             {
                 attribute.kind = Attribute::Kind::StringArray;
                 if (!ParseStringArray(attribute.stringArray, errorMessage))
@@ -131,7 +131,7 @@ private:
                     return false;
                 }
             }
-            else if (IsScalarType(attributeType))
+            else if (IsScalarValueType(ValueTypeFromDeclaredType(attributeType)))
             {
                 attribute.kind = Attribute::Kind::String;
                 if (!ParseQuotedString(attribute.stringValue, errorMessage))
@@ -346,25 +346,6 @@ private:
 
             break;
         }
-    }
-
-    bool IsScalarType(const std::string &typeName) const
-    {
-        static const std::unordered_set<std::string> kScalarTypes = {
-            "string", "int", "float", "bool", "time", "color", "vector2", "vector3",
-            "vector4", "qangle", "quaternion", "vmatrix", "void"
-        };
-        return kScalarTypes.find(typeName) != kScalarTypes.end();
-    }
-
-    bool IsArrayType(const std::string &typeName) const
-    {
-        static const std::unordered_set<std::string> kArrayTypes = {
-            "string_array", "int_array", "float_array", "bool_array", "time_array",
-            "color_array", "vector2_array", "vector3_array", "vector4_array",
-            "qangle_array", "quaternion_array", "vmatrix_array", "void_array"
-        };
-        return kArrayTypes.find(typeName) != kArrayTypes.end();
     }
 
     bool MatchSequence(const char *sequence) const

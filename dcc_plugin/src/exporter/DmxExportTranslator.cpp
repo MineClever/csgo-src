@@ -1,6 +1,7 @@
 #include "DmxExportTranslator.h"
 
 #include "../common/MayaDmxCommon.h"
+#include "../common/SimpleDmxTypes.h"
 
 #include <algorithm>
 #include <array>
@@ -250,23 +251,6 @@ private:
     int m_nextId = 0;
 };
 
-constexpr std::uint8_t kAttributeElement = 1;
-constexpr std::uint8_t kAttributeInt = 2;
-constexpr std::uint8_t kAttributeFloat = 3;
-constexpr std::uint8_t kAttributeBool = 4;
-constexpr std::uint8_t kAttributeString = 5;
-constexpr std::uint8_t kAttributeVector2 = 9;
-constexpr std::uint8_t kAttributeVector3 = 10;
-constexpr std::uint8_t kAttributeVector4 = 11;
-constexpr std::uint8_t kAttributeQuaternion = 13;
-constexpr std::uint8_t kAttributeElementArray = 15;
-constexpr std::uint8_t kAttributeIntArray = 16;
-constexpr std::uint8_t kAttributeFloatArray = 17;
-constexpr std::uint8_t kAttributeStringArray = 19;
-constexpr std::uint8_t kAttributeVector2Array = 23;
-constexpr std::uint8_t kAttributeVector3Array = 24;
-constexpr std::uint8_t kAttributeVector4Array = 25;
-constexpr std::uint8_t kAttributeQuaternionArray = 27;
 constexpr int kCurrentBinaryEncoding = 5;
 
 void AppendDebugLog(const char *message)
@@ -979,11 +963,18 @@ private:
             return WriteScalarArray(output, attribute, errorMessage);
 
         case DmxAttribute::Kind::InlineElement:
-            WriteUInt8(output, kAttributeElement);
+        {
+            std::uint8_t typeCode = 0;
+            simple_dmx::TryGetBinaryTypeCode(simple_dmx::ValueType::Element, typeCode);
+            WriteUInt8(output, typeCode);
             return WriteElementReference(output, attribute.inlineElement, errorMessage);
+        }
 
         case DmxAttribute::Kind::ElementArray:
-            WriteUInt8(output, kAttributeElementArray);
+        {
+            std::uint8_t typeCode = 0;
+            simple_dmx::TryGetBinaryTypeCode(simple_dmx::ValueType::ElementArray, typeCode);
+            WriteUInt8(output, typeCode);
             WriteInt32(output, static_cast<std::int32_t>(attribute.elementArray.size()));
             for (DmxElement *child : attribute.elementArray)
             {
@@ -994,6 +985,7 @@ private:
             }
             return true;
         }
+        }
 
         errorMessage = "Binary DMX export failed: unsupported attribute kind.";
         return false;
@@ -1001,9 +993,17 @@ private:
 
     bool WriteScalar(std::string &output, const DmxAttribute &attribute, std::string &errorMessage) const
     {
+        const simple_dmx::ValueType valueType = simple_dmx::ValueTypeFromDeclaredType(attribute.type);
+        std::uint8_t typeCode = 0;
+
         if (attribute.type == "string")
         {
-            WriteUInt8(output, kAttributeString);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported scalar attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             auto it = m_stringToIndex.find(attribute.value);
             if (it == m_stringToIndex.end())
             {
@@ -1017,33 +1017,58 @@ private:
         const std::vector<double> values = ParseNumberList(attribute.value);
         if (attribute.type == "int")
         {
-            WriteUInt8(output, kAttributeInt);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported scalar attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             WriteInt32(output, values.empty() ? 0 : static_cast<std::int32_t>(values[0]));
             return true;
         }
         if (attribute.type == "float")
         {
-            WriteUInt8(output, kAttributeFloat);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported scalar attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             WriteFloat32(output, values.empty() ? 0.0f : static_cast<float>(values[0]));
             return true;
         }
         if (attribute.type == "bool")
         {
-            WriteUInt8(output, kAttributeBool);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported scalar attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             const bool boolValue = attribute.value == "1" || attribute.value == "true";
             WriteUInt8(output, boolValue ? 1 : 0);
             return true;
         }
         if (attribute.type == "vector2" && values.size() >= 2)
         {
-            WriteUInt8(output, kAttributeVector2);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported scalar attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             WriteFloat32(output, static_cast<float>(values[0]));
             WriteFloat32(output, static_cast<float>(values[1]));
             return true;
         }
         if (attribute.type == "vector3" && values.size() >= 3)
         {
-            WriteUInt8(output, kAttributeVector3);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported scalar attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             WriteFloat32(output, static_cast<float>(values[0]));
             WriteFloat32(output, static_cast<float>(values[1]));
             WriteFloat32(output, static_cast<float>(values[2]));
@@ -1051,7 +1076,12 @@ private:
         }
         if (attribute.type == "vector4" && values.size() >= 4)
         {
-            WriteUInt8(output, kAttributeVector4);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported scalar attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             WriteFloat32(output, static_cast<float>(values[0]));
             WriteFloat32(output, static_cast<float>(values[1]));
             WriteFloat32(output, static_cast<float>(values[2]));
@@ -1060,7 +1090,12 @@ private:
         }
         if (attribute.type == "quaternion" && values.size() >= 4)
         {
-            WriteUInt8(output, kAttributeQuaternion);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported scalar attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             WriteFloat32(output, static_cast<float>(values[0]));
             WriteFloat32(output, static_cast<float>(values[1]));
             WriteFloat32(output, static_cast<float>(values[2]));
@@ -1074,9 +1109,15 @@ private:
 
     bool WriteScalarArray(std::string &output, const DmxAttribute &attribute, std::string &errorMessage) const
     {
-        auto writeVectorArray = [&](std::uint8_t type, int components) -> bool
+        auto writeVectorArray = [&](simple_dmx::ValueType valueType, int components) -> bool
         {
-            WriteUInt8(output, type);
+            std::uint8_t typeCode = 0;
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                return false;
+            }
+
+            WriteUInt8(output, typeCode);
             WriteInt32(output, static_cast<std::int32_t>(attribute.scalarArray.size()));
             for (const std::string &value : attribute.scalarArray)
             {
@@ -1091,9 +1132,17 @@ private:
             return true;
         };
 
+        const simple_dmx::ValueType valueType = simple_dmx::ValueTypeFromDeclaredType(attribute.type);
+        std::uint8_t typeCode = 0;
+
         if (attribute.type == "int_array")
         {
-            WriteUInt8(output, kAttributeIntArray);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported array attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             WriteInt32(output, static_cast<std::int32_t>(attribute.scalarArray.size()));
             for (const std::string &value : attribute.scalarArray)
             {
@@ -1104,7 +1153,12 @@ private:
         }
         if (attribute.type == "float_array")
         {
-            WriteUInt8(output, kAttributeFloatArray);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported array attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             WriteInt32(output, static_cast<std::int32_t>(attribute.scalarArray.size()));
             for (const std::string &value : attribute.scalarArray)
             {
@@ -1115,7 +1169,12 @@ private:
         }
         if (attribute.type == "string_array")
         {
-            WriteUInt8(output, kAttributeStringArray);
+            if (!simple_dmx::TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                errorMessage = "Binary DMX export failed: unsupported array attribute type '" + attribute.type + "'.";
+                return false;
+            }
+            WriteUInt8(output, typeCode);
             WriteInt32(output, static_cast<std::int32_t>(attribute.scalarArray.size()));
             for (const std::string &value : attribute.scalarArray)
             {
@@ -1125,19 +1184,19 @@ private:
         }
         if (attribute.type == "vector2_array")
         {
-            return writeVectorArray(kAttributeVector2Array, 2);
+            return writeVectorArray(valueType, 2);
         }
         if (attribute.type == "vector3_array")
         {
-            return writeVectorArray(kAttributeVector3Array, 3);
+            return writeVectorArray(valueType, 3);
         }
         if (attribute.type == "vector4_array")
         {
-            return writeVectorArray(kAttributeVector4Array, 4);
+            return writeVectorArray(valueType, 4);
         }
         if (attribute.type == "quaternion_array")
         {
-            return writeVectorArray(kAttributeQuaternionArray, 4);
+            return writeVectorArray(valueType, 4);
         }
 
         errorMessage = "Binary DMX export failed: unsupported array attribute type '" + attribute.type + "'.";

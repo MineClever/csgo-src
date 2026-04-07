@@ -1,4 +1,5 @@
 #include "SimpleDmxWrite.h"
+#include "SimpleDmxTypes.h"
 
 #include <algorithm>
 #include <array>
@@ -14,22 +15,6 @@ namespace simple_dmx
 {
 namespace
 {
-constexpr std::uint8_t kAttributeElement = 1;
-constexpr std::uint8_t kAttributeInt = 2;
-constexpr std::uint8_t kAttributeFloat = 3;
-constexpr std::uint8_t kAttributeBool = 4;
-constexpr std::uint8_t kAttributeString = 5;
-constexpr std::uint8_t kAttributeVector2 = 9;
-constexpr std::uint8_t kAttributeVector3 = 10;
-constexpr std::uint8_t kAttributeQuaternion = 13;
-constexpr std::uint8_t kAttributeElementArray = 15;
-constexpr std::uint8_t kAttributeIntArray = 16;
-constexpr std::uint8_t kAttributeFloatArray = 17;
-constexpr std::uint8_t kAttributeStringArray = 19;
-constexpr std::uint8_t kAttributeVector2Array = 23;
-constexpr std::uint8_t kAttributeVector3Array = 24;
-constexpr std::uint8_t kAttributeQuaternionArray = 27;
-
 std::vector<double> ParseNumberList(const std::string &text)
 {
     std::string normalized = text;
@@ -385,13 +370,17 @@ private:
     {
         if (attribute.kind == Attribute::Kind::Element)
         {
-            WriteUInt8(output, kAttributeElement);
+            std::uint8_t typeCode = 0;
+            TryGetBinaryTypeCode(ValueType::Element, typeCode);
+            WriteUInt8(output, typeCode);
             return WriteElementRef(document.ResolveElement(attribute), output, errorMessage);
         }
 
         if (attribute.kind == Attribute::Kind::ElementArray)
         {
-            WriteUInt8(output, kAttributeElementArray);
+            std::uint8_t typeCode = 0;
+            TryGetBinaryTypeCode(ValueType::ElementArray, typeCode);
+            WriteUInt8(output, typeCode);
             const std::vector<const Element *> targets = document.ResolveElementArray(attribute);
             WriteInt32(output, static_cast<std::int32_t>(attribute.elementArray.size()));
             for (size_t i = 0; i < attribute.elementArray.size(); ++i)
@@ -422,49 +411,51 @@ private:
     bool WriteScalar(const Attribute &attribute, std::string &output, std::string &errorMessage) const
     {
         const std::vector<double> values = ParseNumberList(attribute.stringValue);
-        if (attribute.declaredType == "string")
+        const ValueType valueType = ValueTypeFromDeclaredType(attribute.declaredType);
+        std::uint8_t typeCode = 0;
+        if (valueType == ValueType::String && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeString);
+            WriteUInt8(output, typeCode);
             WriteInt32(output, m_stringToIndex.at(attribute.stringValue));
             return true;
         }
-        if (attribute.declaredType == "int")
+        if (valueType == ValueType::Int && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeInt);
+            WriteUInt8(output, typeCode);
             WriteInt32(output, values.empty() ? 0 : static_cast<std::int32_t>(values[0]));
             return true;
         }
-        if (attribute.declaredType == "float")
+        if (valueType == ValueType::Float && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeFloat);
+            WriteUInt8(output, typeCode);
             WriteFloat32(output, values.empty() ? 0.0f : static_cast<float>(values[0]));
             return true;
         }
-        if (attribute.declaredType == "bool")
+        if (valueType == ValueType::Bool && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeBool);
+            WriteUInt8(output, typeCode);
             const bool boolValue = attribute.stringValue == "1" || attribute.stringValue == "true";
             WriteUInt8(output, boolValue ? 1 : 0);
             return true;
         }
-        if (attribute.declaredType == "vector2" && values.size() >= 2)
+        if (valueType == ValueType::Vector2 && values.size() >= 2 && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeVector2);
+            WriteUInt8(output, typeCode);
             WriteFloat32(output, static_cast<float>(values[0]));
             WriteFloat32(output, static_cast<float>(values[1]));
             return true;
         }
-        if (attribute.declaredType == "vector3" && values.size() >= 3)
+        if (valueType == ValueType::Vector3 && values.size() >= 3 && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeVector3);
+            WriteUInt8(output, typeCode);
             WriteFloat32(output, static_cast<float>(values[0]));
             WriteFloat32(output, static_cast<float>(values[1]));
             WriteFloat32(output, static_cast<float>(values[2]));
             return true;
         }
-        if (attribute.declaredType == "quaternion" && values.size() >= 4)
+        if (valueType == ValueType::Quaternion && values.size() >= 4 && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeQuaternion);
+            WriteUInt8(output, typeCode);
             WriteFloat32(output, static_cast<float>(values[0]));
             WriteFloat32(output, static_cast<float>(values[1]));
             WriteFloat32(output, static_cast<float>(values[2]));
@@ -478,9 +469,15 @@ private:
 
     bool WriteArray(const Attribute &attribute, std::string &output, std::string &errorMessage) const
     {
-        const auto writeVectorArray = [&](std::uint8_t type, int components) -> bool
+        const auto writeVectorArray = [&](ValueType valueType, int components) -> bool
         {
-            WriteUInt8(output, type);
+            std::uint8_t typeCode = 0;
+            if (!TryGetBinaryTypeCode(valueType, typeCode))
+            {
+                return false;
+            }
+
+            WriteUInt8(output, typeCode);
             WriteInt32(output, static_cast<std::int32_t>(attribute.stringArray.size()));
             for (const std::string &value : attribute.stringArray)
             {
@@ -497,9 +494,11 @@ private:
             return true;
         };
 
-        if (attribute.declaredType == "int_array")
+        const ValueType valueType = ValueTypeFromDeclaredType(attribute.declaredType);
+        std::uint8_t typeCode = 0;
+        if (valueType == ValueType::IntArray && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeIntArray);
+            WriteUInt8(output, typeCode);
             WriteInt32(output, static_cast<std::int32_t>(attribute.stringArray.size()));
             for (const std::string &value : attribute.stringArray)
             {
@@ -508,9 +507,9 @@ private:
             }
             return true;
         }
-        if (attribute.declaredType == "float_array")
+        if (valueType == ValueType::FloatArray && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeFloatArray);
+            WriteUInt8(output, typeCode);
             WriteInt32(output, static_cast<std::int32_t>(attribute.stringArray.size()));
             for (const std::string &value : attribute.stringArray)
             {
@@ -519,9 +518,9 @@ private:
             }
             return true;
         }
-        if (attribute.declaredType == "string_array")
+        if (valueType == ValueType::StringArray && TryGetBinaryTypeCode(valueType, typeCode))
         {
-            WriteUInt8(output, kAttributeStringArray);
+            WriteUInt8(output, typeCode);
             WriteInt32(output, static_cast<std::int32_t>(attribute.stringArray.size()));
             for (const std::string &value : attribute.stringArray)
             {
@@ -529,23 +528,23 @@ private:
             }
             return true;
         }
-        if (attribute.declaredType == "vector2_array")
+        if (valueType == ValueType::Vector2Array)
         {
-            if (writeVectorArray(kAttributeVector2Array, 2))
+            if (writeVectorArray(valueType, 2))
             {
                 return true;
             }
         }
-        else if (attribute.declaredType == "vector3_array")
+        else if (valueType == ValueType::Vector3Array)
         {
-            if (writeVectorArray(kAttributeVector3Array, 3))
+            if (writeVectorArray(valueType, 3))
             {
                 return true;
             }
         }
-        else if (attribute.declaredType == "quaternion_array")
+        else if (valueType == ValueType::QuaternionArray)
         {
-            if (writeVectorArray(kAttributeQuaternionArray, 4))
+            if (writeVectorArray(valueType, 4))
             {
                 return true;
             }

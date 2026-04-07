@@ -160,7 +160,12 @@
   - 工作流层已具备真实执行能力。当前 [MayaDmxWorkflow.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/workflow/MayaDmxWorkflow.cpp) 与 [MayaDmxWorkflowCommand.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/workflow/MayaDmxWorkflowCommand.cpp) 已支持导出预设保存/加载、`-exportPreset -filePath` 单次导出、batch manifest 保存/加载/列出/删除/运行；batch manifest 已从 `optionVar` 迁移到 Maya 用户目录下的 `maya_dmx_workflow/*.batch` 文件。
   - Maya 文件对话框的 file type specific options 已接通。当前 [PluginMain.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/plugin/PluginMain.cpp) 已为 `Valve DMX Import` 和 `Valve DMX Export` 注册 options script；[mayaDmxTranslatorExport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/mayaDmxTranslatorExport.mel) 与 [mayaDmxTranslatorImport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/mayaDmxTranslatorImport.mel) 已提供导入导出选项 UI 和默认选项串。
   - 导入端 option box 工作流已补齐。当前 [performDmxImport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/performDmxImport.mel)、[doDmxImportArgList.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/doDmxImportArgList.mel)、[mayaDmxTranslatorImport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/mayaDmxTranslatorImport.mel) 与 [DmxCreateUI.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/DmxCreateUI.mel) 已按导出端同构的 `OptionsUI / Setup / Callback / ArgList / Perform` 结构接通，file dialog 与 option box 现在共用同一套导入选项状态与 optionVar 持久化。
+  - 交互 Maya 验证入口已固定。当前 [RunMayaInteractiveValidation.bat](D:/_Code_Here/Git/csgo-src/dcc_plugin/RunMayaInteractiveValidation.bat) 会默认从 `C:\Program Files\Autodesk\Maya2022\bin\maya.exe` 启动宿主，并通过 [MayaInteractiveValidation.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaInteractiveValidation.py) 自动加载插件、source DMX MEL 脚本、校验 `MayaDmxShowImportOptions` / `MayaDmxShowExportSelectionOptions` / `MayaDmxShowExportAllOptions` 等入口并弹出验证窗口，减少手工交互验证时的环境漂移。
+  - 交互 Maya 宿主验证已完成一次人工点检。当前已实际通过 [RunMayaInteractiveValidation.bat](D:/_Code_Here/Git/csgo-src/dcc_plugin/RunMayaInteractiveValidation.bat) 启动 Maya，确认验证窗口可见，导入/导出 option box 入口可正常打开，说明这套宿主内验证链路已可复用。
   - importer 的 influence 选择与临时 `maxInfluences` 已继续收紧。当前 [DmxImportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/importer/DmxImportTranslator.cpp) 会先按 `jointIndices` 实际引用子集筛选 influence，再按原始 `jointList` 下标映射回 Maya influence slot，避免 `jointList` 中存在未导入节点时权重错位；同时写权重前会按每顶点实际非零 influence 数设置临时 `maxInfluences`，以进一步压低复杂样例中的宿主告警面。
+  - DMX 基础层已开始做边界拆分。当前 [SimpleDmxDocument.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxDocument.h) 已把 `Document/Element/Attribute` 这层公共 DOM 类型从 [SimpleDmxText.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxText.h) 里拆出，`SimpleDmxText/Binary/Write` 现在共享同一份文档模型头文件，为后续继续拆 codec / attribute typing / 未知字段保真做准备。
+  - DMX 基础层的 attribute type 映射已开始统一。当前 [SimpleDmxTypes.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxTypes.h) 与 [SimpleDmxTypes.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxTypes.cpp) 已集中维护 declared type、binary type code、scalar/array 分类和 component count；[SimpleDmxText.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxText.cpp)、[SimpleDmxBinary.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxBinary.cpp) 与 [SimpleDmxWrite.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxWrite.cpp) 已切到这套公共映射，减少 text/binary/write 三处重复硬编码。
+  - exporter 侧的 binary type 常量也已开始并到公共层。当前 [DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 的 binary serializer 已不再手写 `kAttribute*` type code，而是改走 [SimpleDmxTypes.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxTypes.h) 的公共映射；已重新编译并通过 `simple_skinned_mesh` 的 sample tool 转换，以及 `simple_mesh` 的 `mayapy` roundtrip 回归。
   - 导出端 Alembic 风格 UI 已落地。当前 [performDmxExport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/performDmxExport.mel)、[doDmxExportArgList.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/doDmxExportArgList.mel)、[DmxCreateUI.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/DmxCreateUI.mel) 已按 `OptionsUI / Init / Commit / Perform / ArgList` 模式组织，并桥接到 `mayaDmxWorkflow`。
   - 当前样例回归已经稳定。`simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 六组样例已通过 `导入 -> 导出 text/binary -> 再导入 -> mesh diff` 闭环。
   - Maya roundtrip 回归已扩展到“类型稳定”检查。当前 [MayaBatchRegression.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaBatchRegression.py) 除了 mesh diff，还会对导入根下的 `transform/joint` DAG 节点类型做快照并在 text/binary roundtrip 后比对，确保 `DmeDag`/`DmeJoint` 不会在导出再导入时漂移。
@@ -197,19 +202,19 @@
   - 材质网络恢复深度仍不足。`AssignFaceSetMaterials()` 虽已改为 API 实现，但当前仍只覆盖基础 shader 图，尚未补 `place2dTexture`、utility 链、分层材质以及更完整的 Valve/Maya 材质语义映射。
   - `exportMetadata=0` 当前只裁掉 Maya 专用 metadata 和材质 inline metadata，不会改写核心 mesh/skin/delta 数据；如果后续希望进一步削减文件大小，还需要继续评估哪些非 `maya*` 字段也可选裁剪而不破坏回读。
   - `SimpleDmx*` 仍是插件定制层，不是通用 DMX DOM/codec。继续扩大 Valve DMX 兼容范围时，未知字段保真、顺序保真和引用语义都会成为重构阻力。
-  - 导入端 MEL option box 工作流虽然已补齐，但还没有在交互 Maya 会话里完成一次从 option box 到 `fileDialog2` 提交导入的人工点检，最终 UI 呈现和提交行为仍缺宿主内确认；后续验证默认直接从 `C:\Program Files\Autodesk\Maya2022\` 下调用 Maya 宿主程序执行。
+  - `SimpleDmx*` 虽然已经拆出公共 DOM 和 type 映射，exporter 侧 type code 也已切到公共映射，但 [DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 仍保留一套独立的 binary serializer 结构；如果不继续把这层往公共 codec 收，后续补 unknown field / 顺序保真时仍会存在实现分叉。
   - 旧版错误编码产生的历史 batch 文件如果残留在 Maya 用户目录里，`listBatches` 仍可能显示脏名称；新格式已可用，但还缺一次性清理或文件头校验。
 
 - 下一阶段计划：
   - 第一优先级：
     - 针对 `complex_chr_mesh/Object001Shape` 与 `MostComplexSampleSet/chr_mesh`、`chr_mesh_body_bin.dmx` 中 `arm_handCoverShape` 的顶点漂移，继续定位 exporter 在复杂 body 样例上的几何/skin roundtrip 失真来源，并补新的对比日志或最小复现。
-    - 在交互 Maya 会话里手工验证 file type specific options 与 option box 的最终呈现和提交行为；默认从 `C:\Program Files\Autodesk\Maya2022\` 下启动 Maya 宿主程序执行这一步。
   - 第二优先级：
     - 继续补材质网络，扩到 `place2dTexture`、utility 节点链、更多 shader 类型和更稳定的贴图路径还原。
     - 继续补组合型面部控制器和更完整 deformer / rig 元数据，逐步接近 Valve 角色资产的面部工作流。
     - 为 workflow 增加旧 batch 文件清理、格式校验和更明确的错误提示。
   - 中期重构方向：
-    - 把 `SimpleDmx*` 从插件定制实现逐步拆成更通用的 DOM/codec 层，优先补完整 attribute type、未知字段保真和 text/binary 对称。
+    - 在 [SimpleDmxDocument.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxDocument.h) 与 [SimpleDmxTypes.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxTypes.h) 这一层稳定后，继续把 `SimpleDmx*` 从插件定制实现逐步拆成更通用的 DOM/codec 层，优先补完整 attribute type、未知字段保真和 text/binary 对称。
+    - 在 type code 已统一后，继续处理 unknown field、属性顺序保真和 exporter 私有 serializer 向公共 codec 的收敛，避免继续双份维护。
     - 在通用 DMX 层稳定后，再扩主干类型覆盖范围，最后再评估更大范围的 Valve DMX rig / animation 兼容。
 
 ## 环境与工具链说明
