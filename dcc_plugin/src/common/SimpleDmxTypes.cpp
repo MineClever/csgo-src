@@ -20,29 +20,29 @@ constexpr ValueTypeInfo kValueTypeInfos[] = {
     {ValueType::Float, "float", true, false, 1, 3},
     {ValueType::Bool, "bool", true, false, 1, 4},
     {ValueType::String, "string", true, false, 1, 5},
-    {ValueType::Time, "time", true, false, 1, -1},
-    {ValueType::Color, "color", true, false, 4, -1},
+    {ValueType::Time, "time", true, false, 1, 7},
+    {ValueType::Color, "color", true, false, 4, 8},
     {ValueType::Vector2, "vector2", true, false, 2, 9},
     {ValueType::Vector3, "vector3", true, false, 3, 10},
     {ValueType::Vector4, "vector4", true, false, 4, 11},
-    {ValueType::QAngle, "qangle", true, false, 3, -1},
+    {ValueType::QAngle, "qangle", true, false, 3, 12},
     {ValueType::Quaternion, "quaternion", true, false, 4, 13},
-    {ValueType::VMatrix, "vmatrix", true, false, 16, -1},
-    {ValueType::Void, "void", true, false, 0, -1},
+    {ValueType::VMatrix, "matrix", true, false, 16, 14},
+    {ValueType::Void, "binary", true, false, 0, 6},
     {ValueType::ElementArray, "element_array", false, false, 0, 15},
     {ValueType::IntArray, "int_array", false, true, 1, 16},
     {ValueType::FloatArray, "float_array", false, true, 1, 17},
-    {ValueType::BoolArray, "bool_array", false, true, 1, -1},
+    {ValueType::BoolArray, "bool_array", false, true, 1, 18},
     {ValueType::StringArray, "string_array", false, true, 1, 19},
-    {ValueType::TimeArray, "time_array", false, true, 1, -1},
-    {ValueType::ColorArray, "color_array", false, true, 4, -1},
+    {ValueType::TimeArray, "time_array", false, true, 1, 21},
+    {ValueType::ColorArray, "color_array", false, true, 4, 22},
     {ValueType::Vector2Array, "vector2_array", false, true, 2, 23},
     {ValueType::Vector3Array, "vector3_array", false, true, 3, 24},
     {ValueType::Vector4Array, "vector4_array", false, true, 4, 25},
-    {ValueType::QAngleArray, "qangle_array", false, true, 3, -1},
+    {ValueType::QAngleArray, "qangle_array", false, true, 3, 26},
     {ValueType::QuaternionArray, "quaternion_array", false, true, 4, 27},
-    {ValueType::VMatrixArray, "vmatrix_array", false, true, 16, -1},
-    {ValueType::VoidArray, "void_array", false, true, 0, -1},
+    {ValueType::VMatrixArray, "matrix_array", false, true, 16, 28},
+    {ValueType::VoidArray, "binary_array", false, true, 0, 20},
 };
 
 const ValueTypeInfo *FindValueTypeInfo(ValueType valueType)
@@ -84,6 +84,23 @@ const ValueTypeInfo *FindValueTypeInfo(std::uint8_t binaryTypeCode)
 
 ValueType ValueTypeFromDeclaredType(const std::string &declaredType)
 {
+    if (declaredType == "vmatrix")
+    {
+        return ValueType::VMatrix;
+    }
+    if (declaredType == "vmatrix_array")
+    {
+        return ValueType::VMatrixArray;
+    }
+    if (declaredType == "void")
+    {
+        return ValueType::Void;
+    }
+    if (declaredType == "void_array")
+    {
+        return ValueType::VoidArray;
+    }
+
     const ValueTypeInfo *info = FindValueTypeInfo(declaredType);
     return info ? info->valueType : ValueType::Unknown;
 }

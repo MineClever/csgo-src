@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cmath>
 #include <cstring>
 #include <sstream>
 #include <unordered_map>
@@ -35,6 +36,68 @@ std::vector<double> ParseNumberList(const std::string &text)
         values.push_back(value);
     }
     return values;
+}
+
+std::string NormalizeTimeString(const std::string &text)
+{
+    const std::vector<double> values = ParseNumberList(text);
+    const double seconds = values.empty() ? 0.0 : values[0];
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(4);
+    stream << seconds;
+    return stream.str();
+}
+
+bool TryDecodeBinaryText(const std::string &text, std::vector<std::uint8_t> &bytes)
+{
+    bytes.clear();
+
+    auto hexToInt = [](char ch) -> int
+    {
+        if (ch >= '0' && ch <= '9')
+        {
+            return ch - '0';
+        }
+        if (ch >= 'A' && ch <= 'F')
+        {
+            return ch - 'A' + 10;
+        }
+        if (ch >= 'a' && ch <= 'f')
+        {
+            return ch - 'a' + 10;
+        }
+        return -1;
+    };
+
+    std::string compact;
+    compact.reserve(text.size());
+    for (char ch : text)
+    {
+        if (!std::isspace(static_cast<unsigned char>(ch)))
+        {
+            compact.push_back(ch);
+        }
+    }
+
+    if ((compact.size() % 2) != 0)
+    {
+        return false;
+    }
+
+    bytes.reserve(compact.size() / 2);
+    for (size_t i = 0; i < compact.size(); i += 2)
+    {
+        const int hi = hexToInt(compact[i]);
+        const int lo = hexToInt(compact[i + 1]);
+        if (hi < 0 || lo < 0)
+        {
+            return false;
+        }
+        bytes.push_back(static_cast<std::uint8_t>((hi << 4) | lo));
+    }
+
+    return true;
 }
 
 void WriteQuoted(std::ostringstream &stream, const std::string &value)
@@ -89,6 +152,20 @@ void CollectReachableElements(
 
 void WriteElementText(const Document &document, std::ostringstream &stream, const Element &element)
 {
+    std::vector<std::pair<std::string, const Attribute *>> sortedAttributes;
+    sortedAttributes.reserve(element.attributes.size());
+    for (const auto &entry : element.attributes)
+    {
+        sortedAttributes.emplace_back(entry.first, &entry.second);
+    }
+    std::sort(
+        sortedAttributes.begin(),
+        sortedAttributes.end(),
+        [](const std::pair<std::string, const Attribute *> &lhs, const std::pair<std::string, const Attribute *> &rhs)
+        {
+            return lhs.first < rhs.first;
+        });
+
     WriteQuoted(stream, element.type);
     stream << "\n{\n";
     stream << Indent(1);
@@ -110,10 +187,10 @@ void WriteElementText(const Document &document, std::ostringstream &stream, cons
         stream << "\n";
     }
 
-    for (const auto &entry : element.attributes)
+    for (const auto &entry : sortedAttributes)
     {
         const std::string &attributeName = entry.first;
-        const Attribute &attribute = entry.second;
+        const Attribute &attribute = *entry.second;
         if (attributeName == "name")
         {
             continue;
@@ -438,6 +515,24 @@ private:
             WriteUInt8(output, boolValue ? 1 : 0);
             return true;
         }
+        if (valueType == ValueType::Time && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            const double seconds = values.empty() ? 0.0 : values[0];
+            const std::int32_t tenThousandths = static_cast<std::int32_t>(std::floor(seconds * 10000.0 + 0.5));
+            WriteInt32(output, tenThousandths);
+            return true;
+        }
+        if (valueType == ValueType::Color && values.size() >= 4 && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            for (int i = 0; i < 4; ++i)
+            {
+                const int component = static_cast<int>(values[static_cast<size_t>(i)]);
+                WriteUInt8(output, static_cast<std::uint8_t>(component < 0 ? 0 : (component > 255 ? 255 : component)));
+            }
+            return true;
+        }
         if (valueType == ValueType::Vector2 && values.size() >= 2 && TryGetBinaryTypeCode(valueType, typeCode))
         {
             WriteUInt8(output, typeCode);
@@ -453,6 +548,23 @@ private:
             WriteFloat32(output, static_cast<float>(values[2]));
             return true;
         }
+        if (valueType == ValueType::Vector4 && values.size() >= 4 && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            WriteFloat32(output, static_cast<float>(values[0]));
+            WriteFloat32(output, static_cast<float>(values[1]));
+            WriteFloat32(output, static_cast<float>(values[2]));
+            WriteFloat32(output, static_cast<float>(values[3]));
+            return true;
+        }
+        if (valueType == ValueType::QAngle && values.size() >= 3 && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            WriteFloat32(output, static_cast<float>(values[0]));
+            WriteFloat32(output, static_cast<float>(values[1]));
+            WriteFloat32(output, static_cast<float>(values[2]));
+            return true;
+        }
         if (valueType == ValueType::Quaternion && values.size() >= 4 && TryGetBinaryTypeCode(valueType, typeCode))
         {
             WriteUInt8(output, typeCode);
@@ -460,6 +572,32 @@ private:
             WriteFloat32(output, static_cast<float>(values[1]));
             WriteFloat32(output, static_cast<float>(values[2]));
             WriteFloat32(output, static_cast<float>(values[3]));
+            return true;
+        }
+        if (valueType == ValueType::VMatrix && values.size() >= 16 && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            for (int i = 0; i < 16; ++i)
+            {
+                WriteFloat32(output, static_cast<float>(values[static_cast<size_t>(i)]));
+            }
+            return true;
+        }
+        if (valueType == ValueType::Void && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            std::vector<std::uint8_t> blob;
+            if (!TryDecodeBinaryText(attribute.stringValue, blob))
+            {
+                errorMessage = "Binary DMX export failed: invalid binary text for '" + attribute.declaredType + "'.";
+                return false;
+            }
+
+            WriteUInt8(output, typeCode);
+            WriteInt32(output, static_cast<std::int32_t>(blob.size()));
+            if (!blob.empty())
+            {
+                output.append(reinterpret_cast<const char *>(blob.data()), blob.size());
+            }
             return true;
         }
 
@@ -518,6 +656,17 @@ private:
             }
             return true;
         }
+        if (valueType == ValueType::BoolArray && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            WriteInt32(output, static_cast<std::int32_t>(attribute.stringArray.size()));
+            for (const std::string &value : attribute.stringArray)
+            {
+                const bool boolValue = value == "1" || value == "true";
+                WriteUInt8(output, boolValue ? 1 : 0);
+            }
+            return true;
+        }
         if (valueType == ValueType::StringArray && TryGetBinaryTypeCode(valueType, typeCode))
         {
             WriteUInt8(output, typeCode);
@@ -525,6 +674,39 @@ private:
             for (const std::string &value : attribute.stringArray)
             {
                 WriteCString(output, value);
+            }
+            return true;
+        }
+        if (valueType == ValueType::TimeArray && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            WriteInt32(output, static_cast<std::int32_t>(attribute.stringArray.size()));
+            for (const std::string &value : attribute.stringArray)
+            {
+                const std::vector<double> values = ParseNumberList(value);
+                const double seconds = values.empty() ? 0.0 : values[0];
+                const std::int32_t tenThousandths = static_cast<std::int32_t>(std::floor(seconds * 10000.0 + 0.5));
+                WriteInt32(output, tenThousandths);
+            }
+            return true;
+        }
+        if (valueType == ValueType::ColorArray && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            WriteInt32(output, static_cast<std::int32_t>(attribute.stringArray.size()));
+            for (const std::string &value : attribute.stringArray)
+            {
+                const std::vector<double> values = ParseNumberList(value);
+                if (values.size() < 4)
+                {
+                    errorMessage = "Binary DMX export failed: unsupported array type '" + attribute.declaredType + "'.";
+                    return false;
+                }
+                for (int i = 0; i < 4; ++i)
+                {
+                    const int component = static_cast<int>(values[static_cast<size_t>(i)]);
+                    WriteUInt8(output, static_cast<std::uint8_t>(component < 0 ? 0 : (component > 255 ? 255 : component)));
+                }
             }
             return true;
         }
@@ -542,12 +724,65 @@ private:
                 return true;
             }
         }
+        else if (valueType == ValueType::Vector4Array)
+        {
+            if (writeVectorArray(valueType, 4))
+            {
+                return true;
+            }
+        }
+        else if (valueType == ValueType::QAngleArray)
+        {
+            if (writeVectorArray(valueType, 3))
+            {
+                return true;
+            }
+        }
         else if (valueType == ValueType::QuaternionArray)
         {
             if (writeVectorArray(valueType, 4))
             {
                 return true;
             }
+        }
+        else if (valueType == ValueType::VMatrixArray && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            WriteInt32(output, static_cast<std::int32_t>(attribute.stringArray.size()));
+            for (const std::string &value : attribute.stringArray)
+            {
+                const std::vector<double> values = ParseNumberList(value);
+                if (values.size() < 16)
+                {
+                    errorMessage = "Binary DMX export failed: unsupported array type '" + attribute.declaredType + "'.";
+                    return false;
+                }
+                for (int i = 0; i < 16; ++i)
+                {
+                    WriteFloat32(output, static_cast<float>(values[static_cast<size_t>(i)]));
+                }
+            }
+            return true;
+        }
+        else if (valueType == ValueType::VoidArray && TryGetBinaryTypeCode(valueType, typeCode))
+        {
+            WriteUInt8(output, typeCode);
+            WriteInt32(output, static_cast<std::int32_t>(attribute.stringArray.size()));
+            for (const std::string &value : attribute.stringArray)
+            {
+                std::vector<std::uint8_t> blob;
+                if (!TryDecodeBinaryText(value, blob))
+                {
+                    errorMessage = "Binary DMX export failed: invalid binary text for '" + attribute.declaredType + "'.";
+                    return false;
+                }
+                WriteInt32(output, static_cast<std::int32_t>(blob.size()));
+                if (!blob.empty())
+                {
+                    output.append(reinterpret_cast<const char *>(blob.data()), blob.size());
+                }
+            }
+            return true;
         }
 
         errorMessage = "Binary DMX export failed: unsupported array type '" + attribute.declaredType + "'.";

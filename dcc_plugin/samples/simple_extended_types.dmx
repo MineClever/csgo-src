@@ -1,0 +1,40 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmeModel"
+{
+    "id" "elementid" "simple_extended_types_model"
+    "name" "string" "simple_extended_types"
+    "upAxis" "string" "Y"
+    "sampleTime" "time" "1.2500"
+    "sampleColor" "color" "255 128 64 32"
+    "sampleAngles" "qangle" "10.000000 20.000000 30.000000"
+    "sampleMatrix" "matrix" "1.000000 0.000000 0.000000 0.000000
+0.000000 1.000000 0.000000 0.000000
+0.000000 0.000000 1.000000 0.000000
+0.000000 0.000000 0.000000 1.000000"
+    "sampleBinary" "binary" "0A1B2C3D"
+    "sampleTimes" "time_array"
+    [
+        "0.5000",
+        "1.2500"
+    ]
+    "sampleColors" "color_array"
+    [
+        "255 0 0 255",
+        "0 255 0 255"
+    ]
+    "sampleAnglesArray" "qangle_array"
+    [
+        "1.000000 2.000000 3.000000",
+        "4.000000 5.000000 6.000000"
+    ]
+    "sampleMatrices" "matrix_array"
+    [
+        "1.000000 0.000000 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 1.000000",
+        "2.000000 0.000000 0.000000 0.000000 0.000000 2.000000 0.000000 0.000000 0.000000 0.000000 2.000000 0.000000 0.000000 0.000000 0.000000 2.000000"
+    ]
+    "sampleBinaryArray" "binary_array"
+    [
+        "AA55",
+        "11223344"
+    ]
+}

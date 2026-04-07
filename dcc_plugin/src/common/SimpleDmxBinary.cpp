@@ -4,9 +4,9 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cmath>
 #include <memory>
 #include <sstream>
-#include <unordered_set>
 
 namespace simple_dmx
 {
@@ -154,6 +154,11 @@ std::string FormatFloat(float value)
     return stream.str();
 }
 
+std::string FormatInt(int value)
+{
+    return std::to_string(value);
+}
+
 std::string FormatVector(const std::vector<float> &values)
 {
     std::ostringstream stream;
@@ -164,6 +169,55 @@ std::string FormatVector(const std::vector<float> &values)
             stream << ' ';
         }
         stream << FormatFloat(values[i]);
+    }
+    return stream.str();
+}
+
+std::string FormatTime(std::int32_t tenThousandthsOfSecond)
+{
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(4);
+    stream << (static_cast<double>(tenThousandthsOfSecond) / 10000.0);
+    return stream.str();
+}
+
+std::string FormatMatrixText(const std::array<float, 16> &values)
+{
+    std::ostringstream stream;
+    for (int row = 0; row < 4; ++row)
+    {
+        if (row > 0)
+        {
+            stream << '\n';
+        }
+
+        for (int column = 0; column < 4; ++column)
+        {
+            if (column > 0)
+            {
+                stream << ' ';
+            }
+            stream << FormatFloat(values[static_cast<size_t>(row * 4 + column)]);
+        }
+    }
+    return stream.str();
+}
+
+std::string FormatBinaryText(const std::vector<std::uint8_t> &bytes)
+{
+    std::ostringstream stream;
+    for (size_t i = 0; i < bytes.size(); ++i)
+    {
+        if ((i % 40) == 0 && i != 0)
+        {
+            stream << '\n';
+        }
+
+        const std::uint8_t value = bytes[i];
+        const char upper = (value >> 4) <= 9 ? static_cast<char>('0' + (value >> 4)) : static_cast<char>('A' + ((value >> 4) - 10));
+        const char lower = (value & 0xF) <= 9 ? static_cast<char>('0' + (value & 0xF)) : static_cast<char>('A' + ((value & 0xF) - 10));
+        stream << upper << lower;
     }
     return stream.str();
 }
@@ -277,9 +331,34 @@ bool ReadScalarAttribute(
         return true;
     }
 
+    case ValueType::Time:
+    {
+        std::int32_t value = 0;
+        if (!reader.ReadInt32(value))
+        {
+            errorMessage = MakeError("unexpected end while reading time");
+            return false;
+        }
+        attribute.stringValue = FormatTime(value);
+        return true;
+    }
+
+    case ValueType::Color:
+    {
+        std::array<std::uint8_t, 4> rgba{};
+        if (!reader.ReadBytes(rgba.data(), rgba.size()))
+        {
+            errorMessage = MakeError("unexpected end while reading color");
+            return false;
+        }
+        attribute.stringValue = FormatInt(rgba[0]) + " " + FormatInt(rgba[1]) + " " + FormatInt(rgba[2]) + " " + FormatInt(rgba[3]);
+        return true;
+    }
+
     case ValueType::Vector2:
     case ValueType::Vector3:
     case ValueType::Vector4:
+    case ValueType::QAngle:
     case ValueType::Quaternion:
     {
         const int componentCount = ComponentCountForValueType(valueType);
@@ -293,6 +372,38 @@ bool ReadScalarAttribute(
             }
         }
         attribute.stringValue = FormatVector(values);
+        return true;
+    }
+
+    case ValueType::VMatrix:
+    {
+        std::array<float, 16> matrixValues{};
+        if (!reader.ReadBytes(matrixValues.data(), sizeof(float) * matrixValues.size()))
+        {
+            errorMessage = MakeError("unexpected end while reading matrix");
+            return false;
+        }
+        attribute.stringValue = FormatMatrixText(matrixValues);
+        return true;
+    }
+
+    case ValueType::Void:
+    {
+        std::int32_t byteCount = 0;
+        if (!reader.ReadInt32(byteCount) || byteCount < 0)
+        {
+            errorMessage = MakeError("invalid binary blob length");
+            return false;
+        }
+
+        std::vector<std::uint8_t> blob(static_cast<size_t>(byteCount), 0);
+        if (byteCount > 0 && !reader.ReadBytes(blob.data(), blob.size()))
+        {
+            errorMessage = MakeError("unexpected end while reading binary blob");
+            return false;
+        }
+
+        attribute.stringValue = FormatBinaryText(blob);
         return true;
     }
 
@@ -366,6 +477,19 @@ bool ReadArrayAttribute(
         }
         return true;
 
+    case ValueType::BoolArray:
+        for (std::int32_t i = 0; i < count; ++i)
+        {
+            std::uint8_t value = 0;
+            if (!reader.ReadUInt8(value))
+            {
+                errorMessage = MakeError("unexpected end while reading bool array");
+                return false;
+            }
+            attribute.stringArray.push_back(value != 0 ? "1" : "0");
+        }
+        return true;
+
     case ValueType::StringArray:
         for (std::int32_t i = 0; i < count; ++i)
         {
@@ -379,6 +503,33 @@ bool ReadArrayAttribute(
         }
         return true;
 
+    case ValueType::TimeArray:
+        for (std::int32_t i = 0; i < count; ++i)
+        {
+            std::int32_t value = 0;
+            if (!reader.ReadInt32(value))
+            {
+                errorMessage = MakeError("unexpected end while reading time array");
+                return false;
+            }
+            attribute.stringArray.push_back(FormatTime(value));
+        }
+        return true;
+
+    case ValueType::ColorArray:
+        for (std::int32_t i = 0; i < count; ++i)
+        {
+            std::array<std::uint8_t, 4> rgba{};
+            if (!reader.ReadBytes(rgba.data(), rgba.size()))
+            {
+                errorMessage = MakeError("unexpected end while reading color array");
+                return false;
+            }
+            attribute.stringArray.push_back(
+                FormatInt(rgba[0]) + " " + FormatInt(rgba[1]) + " " + FormatInt(rgba[2]) + " " + FormatInt(rgba[3]));
+        }
+        return true;
+
     case ValueType::Vector2Array:
         return readVectorArray(2);
 
@@ -388,8 +539,45 @@ bool ReadArrayAttribute(
     case ValueType::Vector4Array:
         return readVectorArray(4);
 
+    case ValueType::QAngleArray:
+        return readVectorArray(3);
+
     case ValueType::QuaternionArray:
         return readVectorArray(4);
+
+    case ValueType::VMatrixArray:
+        for (std::int32_t i = 0; i < count; ++i)
+        {
+            std::array<float, 16> matrixValues{};
+            if (!reader.ReadBytes(matrixValues.data(), sizeof(float) * matrixValues.size()))
+            {
+                errorMessage = MakeError("unexpected end while reading matrix array");
+                return false;
+            }
+            attribute.stringArray.push_back(FormatMatrixText(matrixValues));
+        }
+        return true;
+
+    case ValueType::VoidArray:
+        for (std::int32_t i = 0; i < count; ++i)
+        {
+            std::int32_t byteCount = 0;
+            if (!reader.ReadInt32(byteCount) || byteCount < 0)
+            {
+                errorMessage = MakeError("invalid binary blob array length");
+                return false;
+            }
+
+            std::vector<std::uint8_t> blob(static_cast<size_t>(byteCount), 0);
+            if (byteCount > 0 && !reader.ReadBytes(blob.data(), blob.size()))
+            {
+                errorMessage = MakeError("unexpected end while reading binary blob array");
+                return false;
+            }
+
+            attribute.stringArray.push_back(FormatBinaryText(blob));
+        }
+        return true;
 
     default:
         errorMessage = MakeError("unsupported array attribute type");
@@ -573,10 +761,15 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
             case ValueType::Int:
             case ValueType::Float:
             case ValueType::Bool:
+            case ValueType::Time:
+            case ValueType::Color:
             case ValueType::Vector2:
             case ValueType::Vector3:
             case ValueType::Vector4:
+            case ValueType::QAngle:
             case ValueType::Quaternion:
+            case ValueType::VMatrix:
+            case ValueType::Void:
                 attribute.declaredType = DeclaredTypeFromValueType(valueType);
                 if (!ReadScalarAttribute(reader, valueType, attribute, errorMessage))
                 {
@@ -586,11 +779,17 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
 
             case ValueType::IntArray:
             case ValueType::FloatArray:
+            case ValueType::BoolArray:
             case ValueType::StringArray:
+            case ValueType::TimeArray:
+            case ValueType::ColorArray:
             case ValueType::Vector2Array:
             case ValueType::Vector3Array:
             case ValueType::Vector4Array:
+            case ValueType::QAngleArray:
             case ValueType::QuaternionArray:
+            case ValueType::VMatrixArray:
+            case ValueType::VoidArray:
                 attribute.declaredType = DeclaredTypeFromValueType(valueType);
                 if (!ReadArrayAttribute(reader, valueType, attribute, errorMessage))
                 {

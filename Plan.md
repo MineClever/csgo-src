@@ -166,6 +166,8 @@
   - DMX 基础层已开始做边界拆分。当前 [SimpleDmxDocument.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxDocument.h) 已把 `Document/Element/Attribute` 这层公共 DOM 类型从 [SimpleDmxText.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxText.h) 里拆出，`SimpleDmxText/Binary/Write` 现在共享同一份文档模型头文件，为后续继续拆 codec / attribute typing / 未知字段保真做准备。
   - DMX 基础层的 attribute type 映射已开始统一。当前 [SimpleDmxTypes.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxTypes.h) 与 [SimpleDmxTypes.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxTypes.cpp) 已集中维护 declared type、binary type code、scalar/array 分类和 component count；[SimpleDmxText.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxText.cpp)、[SimpleDmxBinary.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxBinary.cpp) 与 [SimpleDmxWrite.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxWrite.cpp) 已切到这套公共映射，减少 text/binary/write 三处重复硬编码。
   - exporter 侧的 binary type 常量也已开始并到公共层。当前 [DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 的 binary serializer 已不再手写 `kAttribute*` type code，而是改走 [SimpleDmxTypes.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxTypes.h) 的公共映射；已重新编译并通过 `simple_skinned_mesh` 的 sample tool 转换，以及 `simple_mesh` 的 `mayapy` roundtrip 回归。
+  - 已重新对照 Valve 原始 datamodel / dmxloader。当前仓库内 [dmattributetypes.h](D:/_Code_Here/Git/csgo-src/src/public/datamodel/dmattributetypes.h)、[dmxattribute.cpp](D:/_Code_Here/Git/csgo-src/src/dmxloader/dmxattribute.cpp)、[dmxloader.cpp](D:/_Code_Here/Git/csgo-src/src/dmxloader/dmxloader.cpp) 与 [dmxloadertext.cpp](D:/_Code_Here/Git/csgo-src/src/dmxloader/dmxloadertext.cpp) 已确认 Valve canonical 类型名更偏向 `matrix` / `binary` / `matrix_array` / `binary_array`，binary type code 与 `DmAttributeType_t` 一一对应，text serializer 会按属性名排序写出。插件侧当前已把 [SimpleDmxTypes.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxTypes.cpp) 的 canonical 类型名切到 Valve 风格，同时保留 `vmatrix` / `void` 兼容别名；[SimpleDmxWrite.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxWrite.cpp) 也已改成稳定排序写出属性。
+  - 公共 DMX codec 已补齐一轮 Valve 类型支持。当前 [SimpleDmxBinary.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxBinary.cpp) 与 [SimpleDmxWrite.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxWrite.cpp) 已支持 `time/color/qangle/matrix/binary` 及其数组类型的 binary 读写，并按 Valve 语义处理 `time` 的 4 位小数秒、`color` 的 RGBA 字节、`matrix` 的 16 float、`binary` 的十六进制文本块；新增样例 [simple_extended_types.dmx](D:/_Code_Here/Git/csgo-src/dcc_plugin/samples/simple_extended_types.dmx) 已通过 `maya_dmx_sample_tool` 的 text -> binary -> text roundtrip 验证。
   - 导出端 Alembic 风格 UI 已落地。当前 [performDmxExport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/performDmxExport.mel)、[doDmxExportArgList.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/doDmxExportArgList.mel)、[DmxCreateUI.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/DmxCreateUI.mel) 已按 `OptionsUI / Init / Commit / Perform / ArgList` 模式组织，并桥接到 `mayaDmxWorkflow`。
   - 当前样例回归已经稳定。`simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 六组样例已通过 `导入 -> 导出 text/binary -> 再导入 -> mesh diff` 闭环。
   - Maya roundtrip 回归已扩展到“类型稳定”检查。当前 [MayaBatchRegression.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaBatchRegression.py) 除了 mesh diff，还会对导入根下的 `transform/joint` DAG 节点类型做快照并在 text/binary roundtrip 后比对，确保 `DmeDag`/`DmeJoint` 不会在导出再导入时漂移。
@@ -203,6 +205,7 @@
   - `exportMetadata=0` 当前只裁掉 Maya 专用 metadata 和材质 inline metadata，不会改写核心 mesh/skin/delta 数据；如果后续希望进一步削减文件大小，还需要继续评估哪些非 `maya*` 字段也可选裁剪而不破坏回读。
   - `SimpleDmx*` 仍是插件定制层，不是通用 DMX DOM/codec。继续扩大 Valve DMX 兼容范围时，未知字段保真、顺序保真和引用语义都会成为重构阻力。
   - `SimpleDmx*` 虽然已经拆出公共 DOM 和 type 映射，exporter 侧 type code 也已切到公共映射，但 [DmxExportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/exporter/DmxExportTranslator.cpp) 仍保留一套独立的 binary serializer 结构；如果不继续把这层往公共 codec 收，后续补 unknown field / 顺序保真时仍会存在实现分叉。
+  - 当前 `SimpleDmx*` 的核心类型语义已经向 Valve datamodel 靠拢，但 unknown field / 顺序保真仍未落地；现阶段 roundtrip 仍主要依赖“已知类型 + 规范化重写”，还不是“原样保真”。
   - 旧版错误编码产生的历史 batch 文件如果残留在 Maya 用户目录里，`listBatches` 仍可能显示脏名称；新格式已可用，但还缺一次性清理或文件头校验。
 
 - 下一阶段计划：
@@ -214,6 +217,7 @@
     - 为 workflow 增加旧 batch 文件清理、格式校验和更明确的错误提示。
   - 中期重构方向：
     - 在 [SimpleDmxDocument.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxDocument.h) 与 [SimpleDmxTypes.h](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/common/SimpleDmxTypes.h) 这一层稳定后，继续把 `SimpleDmx*` 从插件定制实现逐步拆成更通用的 DOM/codec 层，优先补完整 attribute type、未知字段保真和 text/binary 对称。
+    - 在 `time/color/qangle/matrix/binary` 及其数组已经补齐后，继续推进 unknown field / 顺序保真，把当前“规范化重写”逐步收敛到更接近 Valve datamodel 的保真 roundtrip。
     - 在 type code 已统一后，继续处理 unknown field、属性顺序保真和 exporter 私有 serializer 向公共 codec 的收敛，避免继续双份维护。
     - 在通用 DMX 层稳定后，再扩主干类型覆盖范围，最后再评估更大范围的 Valve DMX rig / animation 兼容。
 
