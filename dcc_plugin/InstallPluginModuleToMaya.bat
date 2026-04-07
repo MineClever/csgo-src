@@ -18,8 +18,6 @@ set USER_MODULE_DIR=%USERPROFILE%\Documents\maya\modules
 set USER_MODULE_FILE=%USER_MODULE_DIR%\%MODULE_NAME%.mod
 
 if not "%~1"=="" set CONFIG=%~1
-set SOURCE_PLUGIN=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll
-set SOURCE_PDB=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.pdb
 
 echo ============================================================
 echo  Installing Maya DMX plugin module (%CONFIG%)
@@ -30,10 +28,19 @@ taskkill /f /im maya.exe 2>nul
 timeout /t 2
 
 if not exist "%SOURCE_PLUGIN%" (
-    echo ERROR: Built plugin not found: "%SOURCE_PLUGIN%"
-    echo Run "%PLUGIN_ROOT%\BuildPlugin.bat" first.
-    pause
-    exit /b 1
+    echo WARNING: Built plugin not found: "%SOURCE_PLUGIN%"
+    ::REM TODO: Check if valid maya_dmx.mll in MODULE_PLUGIN_DIR
+    if exist "%MODULE_PLUGIN_DIR%\maya_dmx.mll" (
+        echo NOTE: Using existing plugin binary found in module directory:
+        echo   "%MODULE_PLUGIN_DIR%\maya_dmx.mll"
+        echo Skipping copy of plugin binary.
+        goto :skip_plugin_copy
+    ) else (
+        echo ERROR: No plugin binary available in build output or module directory.
+        echo Run "%PLUGIN_ROOT%\BuildPlugin.bat" first.
+        pause
+        exit /b 1
+    )
 )
 
 if not exist "%SOURCE_MEL_DIR%" (
@@ -74,6 +81,8 @@ if %ERRORLEVEL% NEQ 0 (
     pause
     exit /b %ERRORLEVEL%
 )
+
+:skip_plugin_copy
 
 if exist "%SOURCE_PDB%" (
     copy /Y "%SOURCE_PDB%" "%MODULE_PLUGIN_DIR%\maya_dmx.pdb" >nul
