@@ -478,30 +478,30 @@ MStatus AssignTextureToShader(
     MObject fileNodeObject = EnsureDependencyNode("file", fileNodeName, status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MFnDependencyNode fileNodeFn(fileNodeObject, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MPlug fileTextureNamePlug = fileNodeFn.findPlug("fileTextureName", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     status = fileTextureNamePlug.setString(texturePath.c_str());
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MPlug outputPlug = fileNodeFn.findPlug(useAlphaOutput ? "outAlpha" : "outColor", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     return ConnectPlugs(outputPlug, destinationPlug);
@@ -524,7 +524,7 @@ MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::E
     MFnTransform transformFn(object, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     if (positionValues.size() >= 3)
@@ -532,7 +532,7 @@ MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::E
         status = transformFn.setTranslation(MVector(positionValues[0], positionValues[1], positionValues[2]), MSpace::kTransform);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -545,7 +545,7 @@ MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::E
             orientationValues[3]));
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -811,7 +811,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
     const MObject meshObject = meshFn.create(points.length(), polygonCounts.length(), points, polygonCounts, polygonConnects, parent, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     meshFn.setName((dagElement->name.empty() ? std::string("dmx_meshShape") : dagElement->name + "Shape").c_str());
