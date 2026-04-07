@@ -1,0 +1,59 @@
+global proc MayaDmxImport_syncOptionVars(string $version, string $args[])
+{
+    optionVar -intValue MayaDmx_importMaterials $args[0];
+    optionVar -intValue MayaDmx_importSkin $args[1];
+    optionVar -intValue MayaDmx_importDeltaStates $args[2];
+}
+
+global proc doDmxImportArgList(string $version, string $args[])
+{
+    if (!`exists captureDmxImportOptionVars`) {
+        eval("source \"performDmxImport.mel\"");
+    }
+
+    string $optionVarsBackup[] = captureDmxImportOptionVars($version);
+    MayaDmxImport_syncOptionVars($version, $args);
+
+    global string $gDmxImportLastDirectory;
+    global string $gDmxImportLastWorkspace;
+
+    string $workspaceRoot = `workspace -q -rootDirectory`;
+    string $startingDir = $gDmxImportLastDirectory;
+    if (size($startingDir) == 0 || $gDmxImportLastWorkspace != $workspaceRoot) {
+        $startingDir = $workspaceRoot;
+    }
+
+    string $filter = "Valve DMX (*.dmx *.dmxb *.dmxbin);;All Files (*.*)";
+    string $result[] = `fileDialog2
+        -returnFilter 1
+        -fileFilter $filter
+        -caption "Import Valve DMX"
+        -startingDirectory $startingDir
+        -fileMode 1
+        -okCaption "Import"
+        -optionsUICreate "MayaDmx_importFileOptionsUICreate"
+        -optionsUIInit "MayaDmx_importFileOptionsUIInit"
+        -optionsUICommit "MayaDmx_importFileOptionsUICommit"
+    `;
+
+    if (size($result) == 0 || size($result[0]) == 0) {
+        MayaDmxImport_syncOptionVars($version, $optionVarsBackup);
+        return;
+    }
+
+    $gDmxImportLastDirectory = dirname($result[0]);
+    $gDmxImportLastWorkspace = $workspaceRoot;
+
+    string $options = ("importMaterials=" + `optionVar -q MayaDmx_importMaterials`
+        + ";importSkin=" + `optionVar -q MayaDmx_importSkin`
+        + ";importDeltaStates=" + `optionVar -q MayaDmx_importDeltaStates`);
+
+    file
+        -import
+        -type "Valve DMX Import"
+        -ignoreVersion
+        -ra true
+        -mergeNamespacesOnClash false
+        -options $options
+        $result[0];
+}

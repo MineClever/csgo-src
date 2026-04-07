@@ -1,0 +1,250 @@
+global proc MayaDmxImport_setOptionVars(int $forceFactorySettings)
+{
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_importMaterials`) {
+        optionVar -intValue MayaDmx_importMaterials 1;
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_importSkin`) {
+        optionVar -intValue MayaDmx_importSkin 1;
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_importDeltaStates`) {
+        optionVar -intValue MayaDmx_importDeltaStates 1;
+    }
+}
+
+global proc string MayaDmxImport_defaultOptionsString()
+{
+    return "importMaterials=1;importSkin=1;importDeltaStates=1";
+}
+
+global proc string MayaDmxImport_collectOptionVarString()
+{
+    MayaDmxImport_setOptionVars(0);
+    int $importMaterials = `optionVar -q MayaDmx_importMaterials`;
+    int $importSkin = `optionVar -q MayaDmx_importSkin`;
+    int $importDeltaStates = `optionVar -q MayaDmx_importDeltaStates`;
+
+    return ("importMaterials=" + $importMaterials
+        + ";importSkin=" + $importSkin
+        + ";importDeltaStates=" + $importDeltaStates);
+}
+
+global proc MayaDmxImport_applyOptionsString(string $options)
+{
+    string $effectiveOptions = $options;
+    if (size($effectiveOptions) == 0) {
+        $effectiveOptions = MayaDmxImport_defaultOptionsString();
+    }
+
+    int $importMaterials = 1;
+    int $importSkin = 1;
+    int $importDeltaStates = 1;
+
+    string $optionList[];
+    tokenize($effectiveOptions, ";", $optionList);
+    for ($option in $optionList) {
+        string $parts[];
+        tokenize($option, "=", $parts);
+        if (size($parts) < 2) {
+            continue;
+        }
+
+        if ($parts[0] == "importMaterials") {
+            $importMaterials = $parts[1];
+        } else if ($parts[0] == "importSkin") {
+            $importSkin = $parts[1];
+        } else if ($parts[0] == "importDeltaStates") {
+            $importDeltaStates = $parts[1];
+        }
+    }
+
+    if (`checkBoxGrp -exists dmxImportMaterials`) {
+        checkBoxGrp -e -value1 $importMaterials dmxImportMaterials;
+    }
+    if (`checkBoxGrp -exists dmxImportSkin`) {
+        checkBoxGrp -e -value1 $importSkin dmxImportSkin;
+    }
+    if (`checkBoxGrp -exists dmxImportDeltaStates`) {
+        checkBoxGrp -e -value1 $importDeltaStates dmxImportDeltaStates;
+    }
+}
+
+global proc string MayaDmxImport_collectOptionsString()
+{
+    int $importMaterials = 1;
+    if (`checkBoxGrp -exists dmxImportMaterials`) {
+        $importMaterials = `checkBoxGrp -q -value1 dmxImportMaterials`;
+    }
+
+    int $importSkin = 1;
+    if (`checkBoxGrp -exists dmxImportSkin`) {
+        $importSkin = `checkBoxGrp -q -value1 dmxImportSkin`;
+    }
+
+    int $importDeltaStates = 1;
+    if (`checkBoxGrp -exists dmxImportDeltaStates`) {
+        $importDeltaStates = `checkBoxGrp -q -value1 dmxImportDeltaStates`;
+    }
+
+    return ("importMaterials=" + $importMaterials
+        + ";importSkin=" + $importSkin
+        + ";importDeltaStates=" + $importDeltaStates);
+}
+
+global proc MayaDmx_importSetup(string $parent, int $forceFactorySettings)
+{
+    MayaDmxImport_setOptionVars($forceFactorySettings);
+
+    setParent $parent;
+    MayaDmxImport_applyOptionsString(MayaDmxImport_collectOptionVarString());
+}
+
+global proc MayaDmx_importCallback(string $parent, int $doIt)
+{
+    setParent $parent;
+
+    string $optionString = MayaDmxImport_collectOptionsString();
+    MayaDmxImport_applyOptionsString($optionString);
+
+    string $optionList[];
+    tokenize($optionString, ";", $optionList);
+    for ($option in $optionList) {
+        string $parts[];
+        tokenize($option, "=", $parts);
+        if (size($parts) < 2) {
+            continue;
+        }
+
+        if ($parts[0] == "importMaterials") {
+            optionVar -intValue MayaDmx_importMaterials $parts[1];
+        } else if ($parts[0] == "importSkin") {
+            optionVar -intValue MayaDmx_importSkin $parts[1];
+        } else if ($parts[0] == "importDeltaStates") {
+            optionVar -intValue MayaDmx_importDeltaStates $parts[1];
+        }
+    }
+
+    if ($doIt) {
+        performDmxImport 0;
+    }
+}
+
+global proc string DmxImportOptionsUI(string $parent)
+{
+    setParent $parent;
+    setUITemplate -pushTemplate DefaultTemplate;
+    waitCursor -state 1;
+
+    string $optionLayout = `scrollLayout`;
+        columnLayout -adjustableColumn true;
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Materials"
+                -label1 "Import Face Set Materials"
+                dmxImportMaterials;
+
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Skinning"
+                -label1 "Import Skin Weights"
+                dmxImportSkin;
+
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Deformers"
+                -label1 "Import Delta States"
+                dmxImportDeltaStates;
+        setParent ..;
+    setParent ..;
+
+    waitCursor -state 0;
+    setUITemplate -popTemplate;
+    return $optionLayout;
+}
+
+global proc DmxImportOptions()
+{
+    string $callback = "MayaDmx_importCallback";
+    string $setup = "MayaDmx_importSetup";
+    string $layout = getOptionBox();
+    setOptionBoxCommandName("DmxImport");
+
+    string $parent = DmxImportOptionsUI($layout);
+
+    string $importBtn = getOptionBoxApplyBtn();
+    button -e -label "Import" -command ($callback + " " + $parent + " 1") $importBtn;
+
+    string $saveBtn = getOptionBoxSaveBtn();
+    button -e -command ($callback + " " + $parent + " 0; hideOptionBox") $saveBtn;
+
+    string $resetBtn = getOptionBoxResetBtn();
+    button -e -command ($setup + " " + $parent + " 1") $resetBtn;
+
+    setOptionBoxTitle("Valve DMX Import");
+    setOptionBoxHelpTag("DmxImport");
+    eval($setup + " " + $parent + " 0");
+    showOptionBox();
+}
+
+global proc string[] captureDmxImportOptionVars(string $version)
+{
+    MayaDmxImport_setOptionVars(0);
+
+    string $args[];
+    $args[0] = `optionVar -q MayaDmx_importMaterials`;
+    $args[1] = `optionVar -q MayaDmx_importSkin`;
+    $args[2] = `optionVar -q MayaDmx_importDeltaStates`;
+    return $args;
+}
+
+global proc string assembleDmxImportCmd()
+{
+    int $version = 1;
+    string $args[] = captureDmxImportOptionVars($version);
+    string $cmd = "doDmxImportArgList " + $version + " {";
+    int $i;
+    for ($i = 0; $i < size($args); ++$i) {
+        if ($i > 0) {
+            $cmd += ",";
+        }
+        $cmd += ("\"" + encodeString($args[$i]) + "\"");
+    }
+    $cmd += "};";
+    return $cmd;
+}
+
+global proc MayaDmx_importFileOptionsUICreate(string $parent)
+{
+    DmxImportOptionsUI($parent);
+}
+
+global proc MayaDmx_importFileOptionsUIInit(string $parent, string $filter)
+{
+    MayaDmx_importSetup($parent, 0);
+}
+
+global proc MayaDmx_importFileOptionsUICommit(string $parent)
+{
+    MayaDmx_importCallback($parent, 0);
+}
+
+global proc string performDmxImport(int $action)
+{
+    string $cmd = "";
+
+    switch ($action) {
+    case 0:
+        $cmd = assembleDmxImportCmd();
+        eval($cmd);
+        break;
+    case 1:
+        DmxImportOptions();
+        break;
+    case 2:
+        $cmd = assembleDmxImportCmd();
+        break;
+    }
+
+    return $cmd;
+}

@@ -140,6 +140,7 @@
 - 开发环境：
   - Maya 2022.5 DevKit：`D:\_Code_Here\Maya\Autodesk_Maya_2022_5_Update_DEVKIT_Windows\devkitBase`
   - Maya 2022.5 安装目录：`C:\Program Files\Autodesk\Maya2022`
+  - Maya 默认宿主执行入口：`C:\Program Files\Autodesk\Maya2022\`（后续交互验证默认从该目录下调用 Maya 宿主程序）
   - 插件独立构建目录：`build\maya_dmx`
 
 - 当前实际状态：
@@ -158,12 +159,15 @@
   - 材质面集回建已切到 API。`AssignFaceSetMaterials()` 已不再拼 MEL，而是通过 `MFnSet`、`MDGModifier`、`MFnDependencyNode` 和 polygon component 直接构建/连接 shadingEngine 与基础 shader 图。
   - 工作流层已具备真实执行能力。当前 [MayaDmxWorkflow.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/workflow/MayaDmxWorkflow.cpp) 与 [MayaDmxWorkflowCommand.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/workflow/MayaDmxWorkflowCommand.cpp) 已支持导出预设保存/加载、`-exportPreset -filePath` 单次导出、batch manifest 保存/加载/列出/删除/运行；batch manifest 已从 `optionVar` 迁移到 Maya 用户目录下的 `maya_dmx_workflow/*.batch` 文件。
   - Maya 文件对话框的 file type specific options 已接通。当前 [PluginMain.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/plugin/PluginMain.cpp) 已为 `Valve DMX Import` 和 `Valve DMX Export` 注册 options script；[mayaDmxTranslatorExport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/mayaDmxTranslatorExport.mel) 与 [mayaDmxTranslatorImport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/mayaDmxTranslatorImport.mel) 已提供导入导出选项 UI 和默认选项串。
+  - 导入端 option box 工作流已补齐。当前 [performDmxImport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/performDmxImport.mel)、[doDmxImportArgList.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/doDmxImportArgList.mel)、[mayaDmxTranslatorImport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/mayaDmxTranslatorImport.mel) 与 [DmxCreateUI.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/DmxCreateUI.mel) 已按导出端同构的 `OptionsUI / Setup / Callback / ArgList / Perform` 结构接通，file dialog 与 option box 现在共用同一套导入选项状态与 optionVar 持久化。
+  - importer 的 influence 选择与临时 `maxInfluences` 已继续收紧。当前 [DmxImportTranslator.cpp](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/importer/DmxImportTranslator.cpp) 会先按 `jointIndices` 实际引用子集筛选 influence，再按原始 `jointList` 下标映射回 Maya influence slot，避免 `jointList` 中存在未导入节点时权重错位；同时写权重前会按每顶点实际非零 influence 数设置临时 `maxInfluences`，以进一步压低复杂样例中的宿主告警面。
   - 导出端 Alembic 风格 UI 已落地。当前 [performDmxExport.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/performDmxExport.mel)、[doDmxExportArgList.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/doDmxExportArgList.mel)、[DmxCreateUI.mel](D:/_Code_Here/Git/csgo-src/dcc_plugin/src/mel/DmxCreateUI.mel) 已按 `OptionsUI / Init / Commit / Perform / ArgList` 模式组织，并桥接到 `mayaDmxWorkflow`。
   - 当前样例回归已经稳定。`simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 六组样例已通过 `导入 -> 导出 text/binary -> 再导入 -> mesh diff` 闭环。
   - Maya roundtrip 回归已扩展到“类型稳定”检查。当前 [MayaBatchRegression.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaBatchRegression.py) 除了 mesh diff，还会对导入根下的 `transform/joint` DAG 节点类型做快照并在 text/binary roundtrip 后比对，确保 `DmeDag`/`DmeJoint` 不会在导出再导入时漂移。
   - Maya roundtrip 回归已继续扩展到 `skincheck`。当前 [MayaBatchRegression.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaBatchRegression.py) 会额外记录哪些 mesh 在原始导入后带有 `skinCluster`，并在 text/binary roundtrip 后确认这些 mesh 仍然保有 skin 绑定，用于捕获“几何不变但权重丢失”的问题。
   - Maya 回归脚本已支持直接吃二进制样例名。当前 [MayaBatchRegression.py](D:/_Code_Here/Git/csgo-src/dcc_plugin/tools/MayaBatchRegression.py) 除了默认解析 `case_name.dmx`，也支持直接传入 `.dmxb/.dmxbin` 样例名或在 `.dmx/.dmxb/.dmxbin` 之间自动探测输入文件，便于把二进制导入能力直接纳入 `mayapy` 回归。
   - 已实际用 `mayapy` 跑通六组样例的全量类型稳定回归，输出目录为 `build\\maya_dmx\\maya_batch_regression\\type_stability_check`；当前 mesh roundtrip 与 `transform/joint` 类型快照均通过，说明 `DmeDag` 被误读成 joint 的问题已在真实 Maya 宿主回归里收敛。
+  - 已按第一优先级实际重跑复杂样例宿主回归。当前直接通过 `C:\Program Files\Autodesk\Maya2022\bin\mayapy.exe` 配合 `MAYA_SKIP_USERSETUP_PY=1` 跑了 `complex_chr_mesh`、`MostComplexSampleSet/chr_mesh`、`chr_mesh_body_bin.dmx` 三组样例；外部 `userSetup.py` 干扰已被排除，但三组样例仍都失败在 text roundtrip 后的 mesh point diff：`complex_chr_mesh` 报 `Object001Shape at vertex 0`，后两组都报 `arm_handCoverShape at vertex 0`。
 
 - 当前能力边界：
   - importer / exporter 已覆盖的核心能力：
@@ -189,18 +193,17 @@
   - 复杂样例导入时的 `weight total would have exceeded 1.0` 警告已在 `chr_mesh_body_bin.dmx` 上收敛，但还没有对所有复杂资产做全量重新回归，仍需确认这套 `setWeights()` 前后时序调整能否覆盖 `complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 等样例。
   - `MostComplexSampleSet/chr_mesh` 的“导入即丢蒙皮”问题已经在 importer 侧收敛，但新的 `skincheck` 回归确认 exporter 对复杂样例的 skin roundtrip 仍未完整保真：当前导出的 text/binary DMX 在再导入时会丢失一批使用 transform influence 的 skinCluster，说明 exporter 的 influence 注册 / `jointList` 组织仍需继续补。
   - `chr_mesh_body_bin.dmx` 直接导入后的蒙皮权重现在已能正确落到 Maya `skinCluster`，但针对该样例的 `mayapy` roundtrip 回归仍失败在 `arm_handCoverShape at vertex 0` 的点位失配，说明 exporter 对这类复杂 body 样例的几何/skin 保真仍未完全收口。
+  - 2026-04-07 这轮通过 `C:\Program Files\Autodesk\Maya2022\bin\mayapy.exe` 的干净宿主回归再次确认：`complex_chr_mesh`、`MostComplexSampleSet/chr_mesh`、`chr_mesh_body_bin.dmx` 仍未通过第一优先级回归门槛，失败点分别为 `Object001Shape at vertex 0` 与 `arm_handCoverShape at vertex 0`；当前优先级已经从“先看 skinCluster 警告是否压平”收敛为“继续定位 exporter 在复杂 body / hand cover 样例上的几何或 skin roundtrip 漂移来源”。
   - 材质网络恢复深度仍不足。`AssignFaceSetMaterials()` 虽已改为 API 实现，但当前仍只覆盖基础 shader 图，尚未补 `place2dTexture`、utility 链、分层材质以及更完整的 Valve/Maya 材质语义映射。
   - `exportMetadata=0` 当前只裁掉 Maya 专用 metadata 和材质 inline metadata，不会改写核心 mesh/skin/delta 数据；如果后续希望进一步削减文件大小，还需要继续评估哪些非 `maya*` 字段也可选裁剪而不破坏回读。
   - `SimpleDmx*` 仍是插件定制层，不是通用 DMX DOM/codec。继续扩大 Valve DMX 兼容范围时，未知字段保真、顺序保真和引用语义都会成为重构阻力。
-  - 导入端虽然已经有 file type specific options，但还没有完整的 `performDmxImport.mel` / `doDmxImportArgList.mel` option box 工作流，当前 UI 层仍以导出端更完整。
-  - file type specific options 已通过 `mayapy` 验证 proc 可见与默认选项串返回正常，但尚未在交互 Maya 会话中完成一次人工点检，最终 UI 呈现还缺宿主内确认。
+  - 导入端 MEL option box 工作流虽然已补齐，但还没有在交互 Maya 会话里完成一次从 option box 到 `fileDialog2` 提交导入的人工点检，最终 UI 呈现和提交行为仍缺宿主内确认；后续验证默认直接从 `C:\Program Files\Autodesk\Maya2022\` 下调用 Maya 宿主程序执行。
   - 旧版错误编码产生的历史 batch 文件如果残留在 Maya 用户目录里，`listBatches` 仍可能显示脏名称；新格式已可用，但还缺一次性清理或文件头校验。
 
 - 下一阶段计划：
   - 第一优先级：
-    - 压平复杂样例里的 `skinCluster` 宿主警告，继续收紧 importer 的 influence 选择、max influences 和 bind/setup 细节。
-    - 完善导入端 MEL 工作流脚本，补 `performDmxImport.mel` / `doDmxImportArgList.mel`，把 import option box 也整理到和导出端一致的结构。
-    - 在交互 Maya 会话里手工验证 file type specific options 与 option box 的最终呈现和提交行为。
+    - 针对 `complex_chr_mesh/Object001Shape` 与 `MostComplexSampleSet/chr_mesh`、`chr_mesh_body_bin.dmx` 中 `arm_handCoverShape` 的顶点漂移，继续定位 exporter 在复杂 body 样例上的几何/skin roundtrip 失真来源，并补新的对比日志或最小复现。
+    - 在交互 Maya 会话里手工验证 file type specific options 与 option box 的最终呈现和提交行为；默认从 `C:\Program Files\Autodesk\Maya2022\` 下启动 Maya 宿主程序执行这一步。
   - 第二优先级：
     - 继续补材质网络，扩到 `place2dTexture`、utility 节点链、更多 shader 类型和更稳定的贴图路径还原。
     - 继续补组合型面部控制器和更完整 deformer / rig 元数据，逐步接近 Valve 角色资产的面部工作流。

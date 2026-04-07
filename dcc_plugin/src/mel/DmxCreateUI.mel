@@ -9,6 +9,23 @@ global proc MayaDmxEnsureExportScripts()
     }
 }
 
+global proc MayaDmxEnsureImportScripts()
+{
+    if (!`exists performDmxImport`) {
+        source "performDmxImport.mel";
+    }
+
+    if (!`exists doDmxImportArgList`) {
+        source "doDmxImportArgList.mel";
+    }
+}
+
+global proc MayaDmxShowImportOptions()
+{
+    MayaDmxEnsureImportScripts();
+    performDmxImport 1;
+}
+
 global proc MayaDmxShowExportSelectionOptions()
 {
     MayaDmxEnsureExportScripts();
