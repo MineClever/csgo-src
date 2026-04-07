@@ -1,4 +1,6 @@
 add_library(maya_dmx_import STATIC
+    DmxImportUtils.cpp
+    DmxImportUtils.h
     DmxImportTranslator.cpp
     DmxImportTranslator.h
 )

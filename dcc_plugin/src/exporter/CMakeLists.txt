@@ -1,4 +1,6 @@
 add_library(maya_dmx_export STATIC
+    DmxExportTextModel.cpp
+    DmxExportTextModel.h
     DmxExportTranslator.cpp
     DmxExportTranslator.h
 )

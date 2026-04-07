@@ -1,0 +1,236 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmElement"
+{
+    "id" "elementid" "blendshape-animation-scene"
+    "name" "string" "Scene"
+    "model" "element" "blendshape-animation-model"
+    "skeleton" "element" "blendshape-animation-model"
+    "animationList" "DmeAnimationList"
+    {
+        "id" "elementid" "blendshape-animation-list"
+        "name" "string" "animationList"
+        "animations" "element_array"
+        [
+            "DmeChannelsClip"
+            {
+                "id" "elementid" "blendshape-animation-clip"
+                "name" "string" "blendshape_anim"
+                "channels" "element_array"
+                [
+                    "DmeChannel"
+                    {
+                        "id" "elementid" "blendshape-animation-channel"
+                        "name" "string" "smile_channel"
+                        "toElement" "DmElement"
+                        {
+                            "id" "elementid" "blendshape-animation-control"
+                            "name" "string" "smile"
+                            "flexWeight" "float" "0.0"
+                        }
+                        "toAttribute" "string" "flexWeight"
+                        "log" "DmeFloatLog"
+                        {
+                            "id" "elementid" "blendshape-animation-log"
+                            "name" "string" "smile_log"
+                            "layers" "element_array"
+                            [
+                                "DmeFloatLogLayer"
+                                {
+                                    "id" "elementid" "blendshape-animation-layer"
+                                    "name" "string" "base"
+                                    "times" "time_array"
+                                    [
+                                        "0.0000",
+                                        "0.5000",
+                                        "1.0000"
+                                    ]
+                                    "values" "float_array"
+                                    [
+                                        "0.000000",
+                                        "1.000000",
+                                        "0.250000"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+                "timeFrame" "DmeTimeFrame"
+                {
+                    "id" "elementid" "blendshape-animation-timeframe"
+                    "duration" "time" "1.0000"
+                    "frameRate" "float" "30.0"
+                }
+            }
+        ]
+    }
+    "combinationOperator" "DmeCombinationOperator"
+    {
+        "id" "elementid" "blendshape-animation-combo"
+        "name" "string" "combinationOperator"
+        "controls" "element_array"
+        [
+            "DmeCombinationInputControl"
+            {
+                "id" "elementid" "blendshape-animation-control-input"
+                "name" "string" "smile"
+                "rawControlNames" "string_array"
+                [
+                    "smile"
+                ]
+                "stereo" "bool" "0"
+                "eyelid" "bool" "0"
+                "flexMax" "float" "1.000000"
+                "flexMin" "float" "0.000000"
+                "wrinkleScales" "float_array"
+                [
+                    "0.000000"
+                ]
+            }
+        ]
+        "controlValues" "vector3_array"
+        [
+            "0.000000 0.000000 0.000000"
+        ]
+        "controlValuesLagged" "vector3_array"
+        [
+            "0.000000 0.000000 0.000000"
+        ]
+        "usesLaggedValues" "bool" "0"
+        "dominators" "element_array"
+        [
+        ]
+        "targets" "element_array"
+        [
+            "element" "blendshape-animation-mesh-shape"
+        ]
+    }
+}
+"DmeModel"
+{
+    "id" "elementid" "blendshape-animation-model"
+    "name" "string" "simple_blendshape_animation"
+    "upAxis" "string" "Y"
+    "children" "element_array"
+    [
+        "DmeDag"
+        {
+            "id" "elementid" "blendshape-animation-mesh-dag"
+            "name" "string" "blendshapeAnimMesh"
+            "transform" "DmeTransform"
+            {
+                "id" "elementid" "blendshape-animation-mesh-xform"
+                "position" "vector3" "0 0 0"
+                "orientation" "quaternion" "0 0 0 1"
+                "scale" "vector3" "1 1 1"
+            }
+            "shape" "DmeMesh"
+            {
+                "id" "elementid" "blendshape-animation-mesh-shape"
+                "name" "string" "blendshapeAnimMeshShape"
+                "bindState" "DmeVertexData"
+                {
+                    "id" "elementid" "blendshape-animation-bind"
+                    "name" "string" "bind"
+                    "flipVCoordinates" "bool" "0"
+                    "vertexFormat" "string_array"
+                    [
+                        "positions",
+                        "normals",
+                        "textureCoordinates"
+                    ]
+                    "positions" "vector3_array"
+                    [
+                        "0 0 0",
+                        "1 0 0",
+                        "1 1 0",
+                        "0 1 0"
+                    ]
+                    "positionsIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2",
+                        "0",
+                        "2",
+                        "3"
+                    ]
+                    "normals" "vector3_array"
+                    [
+                        "0 0 1"
+                    ]
+                    "normalsIndices" "int_array"
+                    [
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0"
+                    ]
+                    "textureCoordinates" "vector2_array"
+                    [
+                        "0 0",
+                        "1 0",
+                        "1 1",
+                        "0 1"
+                    ]
+                    "textureCoordinatesIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2",
+                        "0",
+                        "2",
+                        "3"
+                    ]
+                }
+                "deltaStates" "element_array"
+                [
+                    "DmeVertexDeltaData"
+                    {
+                        "id" "elementid" "blendshape-animation-delta-smile"
+                        "name" "string" "smile"
+                        "vertexFormat" "string_array"
+                        [
+                            "positions"
+                        ]
+                        "positions" "vector3_array"
+                        [
+                            "0 0.35 0",
+                            "0 0.20 0"
+                        ]
+                        "positionsIndices" "int_array"
+                        [
+                            "2",
+                            "3"
+                        ]
+                        "mayaDeformerType" "string" "blendShape"
+                        "mayaBlendShapeNode" "string" "blendshapeAnimMeshShape_blendShape"
+                        "mayaWeightIndex" "int" "0"
+                        "mayaTargetName" "string" "smile"
+                    }
+                ]
+                "faceSets" "element_array"
+                [
+                    "DmeFaceSet"
+                    {
+                        "id" "elementid" "blendshape-animation-face-set"
+                        "name" "string" "default_faces"
+                        "faces" "int_array"
+                        [
+                            "0",
+                            "1",
+                            "2",
+                            "-1",
+                            "3",
+                            "4",
+                            "5",
+                            "-1"
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}

@@ -60,3 +60,4 @@ Run_CodeX_AI.bat
 Run_Calude_AI.bat
 build_vpc/*
 dcc_plugin/maya_module/scripts/*
+dcc_plugin/samples/Ellis/DMX/animation/*

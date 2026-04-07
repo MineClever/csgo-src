@@ -1,0 +1,90 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmElement"
+{
+    "id" "elementid" "float-animation-scene"
+    "name" "string" "FloatAnimationScene"
+    "skeleton" "DmeModel"
+    {
+        "id" "elementid" "float-animation-model"
+        "name" "string" "float_anim_root"
+        "children" "element_array"
+        [
+            "DmeJoint"
+            {
+                "id" "elementid" "float-animation-joint"
+                "name" "string" "float_anim_joint"
+                "transform" "DmeTransform"
+                {
+                    "id" "elementid" "float-animation-transform"
+                    "name" "string" "float_anim_joint"
+                    "position" "vector3" "0 0 0"
+                    "orientation" "quaternion" "0 0 0 1"
+                    "scale" "vector3" "1 1 1"
+                }
+            }
+        ]
+        "transform" "DmeTransform"
+        {
+            "id" "elementid" "float-animation-model-transform"
+            "position" "vector3" "0 0 0"
+            "orientation" "quaternion" "0 0 0 1"
+        }
+    }
+    "animationList" "DmeAnimationList"
+    {
+        "id" "elementid" "float-animation-list"
+        "name" "string" "float_anim_root"
+        "animations" "element_array"
+        [
+            "DmeChannelsClip"
+            {
+                "id" "elementid" "float-animation-clip"
+                "name" "string" "float_anim_clip"
+                "timeFrame" "DmeTimeFrame"
+                {
+                    "id" "elementid" "float-animation-timeframe"
+                    "name" "string" "timeframe"
+                    "duration" "time" "1.0000"
+                    "scale" "float" "1.000000"
+                }
+                "frameRate" "int" "24"
+                "channels" "element_array"
+                [
+                    "DmeChannel"
+                    {
+                        "id" "elementid" "float-animation-channel"
+                        "name" "string" "float_anim_joint_sx"
+                        "toAttribute" "string" "scaleX"
+                        "toElement" "element" "float-animation-transform"
+                        "mode" "int" "1"
+                        "log" "DmeFloatLog"
+                        {
+                            "id" "elementid" "float-animation-log"
+                            "name" "string" "Float log"
+                            "layers" "element_array"
+                            [
+                                "DmeFloatLogLayer"
+                                {
+                                    "id" "elementid" "float-animation-layer"
+                                    "name" "string" "Float log"
+                                    "times" "time_array"
+                                    [
+                                        "0.0000",
+                                        "0.5000",
+                                        "1.0000"
+                                    ]
+                                    "values" "float_array"
+                                    [
+                                        "1.000000",
+                                        "1.500000",
+                                        "2.000000"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+}

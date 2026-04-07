@@ -91,6 +91,45 @@ def snapshot_blendshape_bindings(cmds, root_paths):
     return blendshape_snapshots
 
 
+def snapshot_animation_bindings(cmds, root_paths):
+    animation_snapshots = {}
+
+    def record_animated_plug(node_name, node_key, attribute_name):
+        plug_name = f"{node_name}.{attribute_name}"
+        source_connections = cmds.listConnections(plug_name, source=True, destination=False, plugs=True) or []
+        key_count = cmds.keyframe(node_name, attribute=attribute_name, query=True, keyframeCount=True) or 0
+        if not source_connections and not key_count:
+            return
+
+        animation_snapshots[f"{node_key}.{attribute_name}"] = {
+            "key_count": int(key_count),
+            "sources": sorted(source_connections),
+        }
+
+    for root_path in root_paths:
+        descendant_transforms = cmds.listRelatives(root_path, allDescendents=True, fullPath=True, type="transform") or []
+        root_transforms = [root_path]
+        for node_name in root_transforms + descendant_transforms:
+            relative_path = node_name[len(root_path):].lstrip("|")
+            node_key = "<root>" if not relative_path else relative_path
+            for attribute_name in cmds.listAttr(node_name, keyable=True, scalar=True) or []:
+                record_animated_plug(node_name, node_key, attribute_name)
+
+        descendant_meshes = cmds.listRelatives(root_path, allDescendents=True, fullPath=True, type="mesh") or []
+        root_meshes = cmds.listRelatives(root_path, shapes=True, fullPath=True, type="mesh") or []
+        for mesh in root_meshes + descendant_meshes:
+            if cmds.getAttr(mesh + ".intermediateObject"):
+                continue
+
+            history = cmds.listHistory(mesh) or []
+            blendshape_nodes = [node for node in history if cmds.nodeType(node) == "blendShape"]
+            for blendshape_node in blendshape_nodes:
+                for attribute_name in cmds.listAttr(blendshape_node + ".w", multi=True) or []:
+                    record_animated_plug(blendshape_node, blendshape_node, attribute_name)
+
+    return animation_snapshots
+
+
 def snapshot_scene_meshes():
     import maya.api.OpenMaya as om
 
@@ -294,6 +333,69 @@ def compare_blendshape_snapshots(reference_blendshapes, candidate_blendshapes):
     raise last_error
 
 
+def compare_animation_snapshots(reference_animations, candidate_animations):
+    def strip_single_wrapper(nodes):
+        wrapper_names = set()
+        stripped = {}
+        for node_name, node_data in nodes.items():
+            split_index = node_name.rfind(".")
+            path_name = node_name[:split_index]
+            attribute_name = node_name[split_index + 1:]
+            if path_name == "<root>":
+                stripped[node_name] = node_data
+                continue
+
+            parts = path_name.split("|")
+            wrapper_names.add(parts[0])
+            stripped_path = "|".join(parts[1:]) if len(parts) > 1 else ""
+            if stripped_path:
+                stripped[f"{stripped_path}.{attribute_name}"] = node_data
+        if len(wrapper_names) != 1 or not stripped:
+            return None
+        return stripped
+
+    def compare_exact(lhs_animations, rhs_animations):
+        if set(lhs_animations.keys()) != set(rhs_animations.keys()):
+            missing = sorted(set(lhs_animations.keys()) - set(rhs_animations.keys()))
+            extra = sorted(set(rhs_animations.keys()) - set(lhs_animations.keys()))
+            raise RuntimeError(f"Animation set mismatch. Missing={missing} Extra={extra}")
+
+        for animation_key in sorted(lhs_animations.keys()):
+            reference = lhs_animations[animation_key]
+            candidate = rhs_animations[animation_key]
+            if reference["key_count"] != candidate["key_count"]:
+                raise RuntimeError(
+                    f"Animation key count mismatch for {animation_key}. "
+                    f"expected={reference['key_count']} actual={candidate['key_count']}"
+                )
+            if reference["sources"] != candidate["sources"]:
+                raise RuntimeError(
+                    f"Animation source mismatch for {animation_key}. "
+                    f"expected={reference['sources']} actual={candidate['sources']}"
+                )
+
+    candidate_variants = [candidate_animations]
+    stripped_candidate = strip_single_wrapper(candidate_animations)
+    if stripped_candidate:
+        candidate_variants.append(stripped_candidate)
+
+    reference_variants = [reference_animations]
+    stripped_reference = strip_single_wrapper(reference_animations)
+    if stripped_reference:
+        reference_variants.append(stripped_reference)
+
+    last_error = None
+    for reference_variant in reference_variants:
+        for candidate_variant in candidate_variants:
+            try:
+                compare_exact(reference_variant, candidate_variant)
+                return
+            except RuntimeError as exc:
+                last_error = exc
+
+    raise last_error
+
+
 def verify_roundtrip(
     cmds,
     plugin_path,
@@ -302,10 +404,12 @@ def verify_roundtrip(
     reference_node_types,
     reference_skins,
     reference_blendshapes,
+    reference_animations,
     mesh_marker_path,
     type_marker_path,
     skin_marker_path,
     blendshape_marker_path,
+    animation_marker_path,
 ):
     cmds.file(new=True, force=True)
     if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
@@ -318,10 +422,12 @@ def verify_roundtrip(
     candidate_node_types = snapshot_imported_node_types(imported_roots)
     candidate_skins = snapshot_skin_bindings(cmds, imported_roots)
     candidate_blendshapes = snapshot_blendshape_bindings(cmds, imported_roots)
+    candidate_animations = snapshot_animation_bindings(cmds, imported_roots)
     compare_mesh_snapshots(reference_meshes, candidate_meshes)
     compare_node_type_snapshots(reference_node_types, candidate_node_types)
     compare_skin_snapshots(reference_skins, candidate_skins)
     compare_blendshape_snapshots(reference_blendshapes, candidate_blendshapes)
+    compare_animation_snapshots(reference_animations, candidate_animations)
 
     with open(mesh_marker_path, "w", encoding="utf-8") as marker_file:
         marker_file.write("ok\n")
@@ -330,6 +436,8 @@ def verify_roundtrip(
     with open(skin_marker_path, "w", encoding="utf-8") as marker_file:
         marker_file.write("ok\n")
     with open(blendshape_marker_path, "w", encoding="utf-8") as marker_file:
+        marker_file.write("ok\n")
+    with open(animation_marker_path, "w", encoding="utf-8") as marker_file:
         marker_file.write("ok\n")
 
 
@@ -381,6 +489,8 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
     roundtrip_binary_skin_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_skincheck.txt")
     roundtrip_text_blendshape_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_blendshapecheck.txt")
     roundtrip_binary_blendshape_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_blendshapecheck.txt")
+    roundtrip_text_animation_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_animcheck.txt")
+    roundtrip_binary_animation_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_animcheck.txt")
 
     cmds.file(new=True, force=True)
     if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
@@ -398,6 +508,7 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
     original_node_types = snapshot_imported_node_types(imported_roots)
     original_skins = snapshot_skin_bindings(cmds, imported_roots)
     original_blendshapes = snapshot_blendshape_bindings(cmds, imported_roots)
+    original_animations = snapshot_animation_bindings(cmds, imported_roots)
     cmds.file(rename=exported_text)
     cmds.file(force=True, exportSelected=True, type="Valve DMX Export")
 
@@ -412,10 +523,12 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
         original_node_types,
         original_skins,
         original_blendshapes,
+        original_animations,
         roundtrip_text_marker,
         roundtrip_text_type_marker,
         roundtrip_text_skin_marker,
         roundtrip_text_blendshape_marker,
+        roundtrip_text_animation_marker,
     )
     verify_roundtrip(
         cmds,
@@ -425,10 +538,12 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
         original_node_types,
         original_skins,
         original_blendshapes,
+        original_animations,
         roundtrip_binary_marker,
         roundtrip_binary_type_marker,
         roundtrip_binary_skin_marker,
         roundtrip_binary_blendshape_marker,
+        roundtrip_binary_animation_marker,
     )
 
 
@@ -440,6 +555,9 @@ def main():
     parser.add_argument("--cases", nargs="+", required=True)
     args = parser.parse_args()
 
+    args.plugin = os.path.abspath(args.plugin)
+    args.samples = os.path.abspath(args.samples)
+    args.output = os.path.abspath(args.output)
     os.makedirs(args.output, exist_ok=True)
 
     maya.standalone.initialize(name="python")
