@@ -119,6 +119,49 @@ std::string Indent(int level)
     return std::string(level * 4, ' ');
 }
 
+std::vector<std::string> GetOrderedAttributeNames(const Element &element)
+{
+    std::vector<std::string> names;
+    names.reserve(element.attributes.size());
+
+    if (!element.attributeOrder.empty())
+    {
+        std::unordered_set<std::string> seen;
+        seen.reserve(element.attributes.size());
+        for (const std::string &attributeName : element.attributeOrder)
+        {
+            auto it = element.attributes.find(attributeName);
+            if (it == element.attributes.end())
+            {
+                continue;
+            }
+
+            if (seen.insert(attributeName).second)
+            {
+                names.push_back(attributeName);
+            }
+        }
+
+        for (const auto &entry : element.attributes)
+        {
+            if (seen.insert(entry.first).second)
+            {
+                names.push_back(entry.first);
+            }
+        }
+
+        return names;
+    }
+
+    for (const auto &entry : element.attributes)
+    {
+        names.push_back(entry.first);
+    }
+
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
 void CollectReachableElements(
     const Document &document,
     const Element *element,
@@ -133,42 +176,66 @@ void CollectReachableElements(
     visited.insert(element);
     ordered.push_back(element);
 
-    for (const auto &entry : element->attributes)
+    for (const std::string &attributeName : GetOrderedAttributeNames(*element))
     {
-        const Attribute &attribute = entry.second;
+        auto it = element->attributes.find(attributeName);
+        if (it == element->attributes.end())
+        {
+            continue;
+        }
+
+        const Attribute &attribute = it->second;
         if (attribute.kind == Attribute::Kind::Element)
         {
-            CollectReachableElements(document, document.ResolveElement(attribute), ordered, visited);
+            if (!attribute.elementValue.inlineElement)
+            {
+                CollectReachableElements(document, document.ResolveElement(attribute), ordered, visited);
+            }
         }
         else if (attribute.kind == Attribute::Kind::ElementArray)
         {
-            for (const Element *child : document.ResolveElementArray(attribute))
+            bool hasReferencedElement = false;
+            for (const ElementLink &link : attribute.elementArray)
             {
-                CollectReachableElements(document, child, ordered, visited);
+                if (!link.inlineElement)
+                {
+                    hasReferencedElement = true;
+                    break;
+                }
+            }
+
+            if (hasReferencedElement)
+            {
+                auto resolved = document.ResolveElementArray(attribute);
+                for (const Element *child : resolved)
+                {
+                    CollectReachableElements(document, child, ordered, visited);
+                }
             }
         }
     }
 }
 
-void WriteElementText(const Document &document, std::ostringstream &stream, const Element &element)
-{
-    std::vector<std::pair<std::string, const Attribute *>> sortedAttributes;
-    sortedAttributes.reserve(element.attributes.size());
-    for (const auto &entry : element.attributes)
-    {
-        sortedAttributes.emplace_back(entry.first, &entry.second);
-    }
-    std::sort(
-        sortedAttributes.begin(),
-        sortedAttributes.end(),
-        [](const std::pair<std::string, const Attribute *> &lhs, const std::pair<std::string, const Attribute *> &rhs)
-        {
-            return lhs.first < rhs.first;
-        });
+void WriteElementBody(const Document &document, std::ostringstream &stream, const Element &element, int indentLevel);
 
-    WriteQuoted(stream, element.type);
-    stream << "\n{\n";
-    stream << Indent(1);
+void WriteElementText(
+    const Document &document,
+    std::ostringstream &stream,
+    const Element &element,
+    int indentLevel,
+    const std::string *typeOverride = nullptr)
+{
+    stream << Indent(indentLevel);
+    WriteQuoted(stream, typeOverride ? *typeOverride : element.type);
+    stream << "\n";
+    WriteElementBody(document, stream, element, indentLevel);
+}
+
+void WriteElementBody(const Document &document, std::ostringstream &stream, const Element &element, int indentLevel)
+{
+    const std::vector<std::string> orderedAttributeNames = GetOrderedAttributeNames(element);
+    stream << Indent(indentLevel) << "{\n";
+    stream << Indent(indentLevel + 1);
     WriteQuoted(stream, "id");
     stream << " ";
     WriteQuoted(stream, "elementid");
@@ -178,7 +245,7 @@ void WriteElementText(const Document &document, std::ostringstream &stream, cons
 
     if (!element.name.empty())
     {
-        stream << Indent(1);
+        stream << Indent(indentLevel + 1);
         WriteQuoted(stream, "name");
         stream << " ";
         WriteQuoted(stream, "string");
@@ -187,16 +254,21 @@ void WriteElementText(const Document &document, std::ostringstream &stream, cons
         stream << "\n";
     }
 
-    for (const auto &entry : sortedAttributes)
+    for (const std::string &attributeName : orderedAttributeNames)
     {
-        const std::string &attributeName = entry.first;
-        const Attribute &attribute = *entry.second;
+        auto it = element.attributes.find(attributeName);
+        if (it == element.attributes.end())
+        {
+            continue;
+        }
+
+        const Attribute &attribute = it->second;
         if (attributeName == "name")
         {
             continue;
         }
 
-        stream << Indent(1);
+        stream << Indent(indentLevel + 1);
         WriteQuoted(stream, attributeName);
         stream << " ";
 
@@ -211,10 +283,10 @@ void WriteElementText(const Document &document, std::ostringstream &stream, cons
 
         case Attribute::Kind::StringArray:
             WriteQuoted(stream, attribute.declaredType);
-            stream << "\n" << Indent(1) << "[\n";
+            stream << "\n" << Indent(indentLevel + 1) << "[\n";
             for (size_t i = 0; i < attribute.stringArray.size(); ++i)
             {
-                stream << Indent(2);
+                stream << Indent(indentLevel + 2);
                 WriteQuoted(stream, attribute.stringArray[i]);
                 if (i + 1 < attribute.stringArray.size())
                 {
@@ -222,45 +294,60 @@ void WriteElementText(const Document &document, std::ostringstream &stream, cons
                 }
                 stream << "\n";
             }
-            stream << Indent(1) << "]\n";
+            stream << Indent(indentLevel + 1) << "]\n";
             break;
 
         case Attribute::Kind::Element:
         {
-            WriteQuoted(stream, "element");
-            stream << " ";
-            const Element *target = document.ResolveElement(attribute);
-            WriteQuoted(stream, target ? target->id : attribute.elementValue.referenceId);
-            stream << "\n";
+            if (attribute.elementValue.inlineElement)
+            {
+                WriteQuoted(stream, attribute.declaredType.empty() ? attribute.elementValue.inlineElement->type : attribute.declaredType);
+                stream << "\n";
+                WriteElementBody(document, stream, *attribute.elementValue.inlineElement, indentLevel + 1);
+            }
+            else
+            {
+                WriteQuoted(stream, "element");
+                stream << " ";
+                const Element *target = document.ResolveElement(attribute);
+                WriteQuoted(stream, target ? target->id : attribute.elementValue.referenceId);
+                stream << "\n";
+            }
             break;
         }
 
         case Attribute::Kind::ElementArray:
         {
             WriteQuoted(stream, "element_array");
-            stream << "\n" << Indent(1) << "[\n";
-            const std::vector<const Element *> targets = document.ResolveElementArray(attribute);
+            stream << "\n" << Indent(indentLevel + 1) << "[\n";
             for (size_t i = 0; i < attribute.elementArray.size(); ++i)
             {
-                stream << Indent(2);
-                WriteQuoted(stream, "element");
-                stream << " ";
-                const Element *target = i < targets.size() ? targets[i] : nullptr;
-                const std::string referenceId = target ? target->id : attribute.elementArray[i].referenceId;
-                WriteQuoted(stream, referenceId);
+                stream << Indent(indentLevel + 2);
+                if (attribute.elementArray[i].inlineElement)
+                {
+                    WriteQuoted(stream, attribute.elementArray[i].inlineElement->type);
+                    stream << "\n";
+                    WriteElementBody(document, stream, *attribute.elementArray[i].inlineElement, indentLevel + 2);
+                }
+                else
+                {
+                    WriteQuoted(stream, "element");
+                    stream << " ";
+                    WriteQuoted(stream, attribute.elementArray[i].referenceId);
+                }
                 if (i + 1 < attribute.elementArray.size())
                 {
                     stream << ",";
                 }
                 stream << "\n";
             }
-            stream << Indent(1) << "]\n";
+            stream << Indent(indentLevel + 1) << "]\n";
             break;
         }
         }
     }
 
-    stream << "}\n";
+    stream << Indent(indentLevel) << "}\n";
 }
 
 void WriteInt32(std::string &bytes, std::int32_t value)
@@ -356,12 +443,18 @@ public:
             AddString(element->type);
             AddString(element->name);
 
-            for (const auto &entry : element->attributes)
+            for (const std::string &attributeName : GetOrderedAttributeNames(*element))
             {
-                AddString(entry.first);
-                if (entry.second.kind == Attribute::Kind::String && entry.second.declaredType == "string")
+                auto it = element->attributes.find(attributeName);
+                if (it == element->attributes.end())
                 {
-                    AddString(entry.second.stringValue);
+                    continue;
+                }
+
+                AddString(attributeName);
+                if (it->second.kind == Attribute::Kind::String && it->second.declaredType == "string")
+                {
+                    AddString(it->second.stringValue);
                 }
             }
         }
@@ -388,24 +481,25 @@ public:
         for (const Element *element : m_elements)
         {
             int attributeCount = 0;
-            for (const auto &entry : element->attributes)
+            for (const std::string &attributeName : GetOrderedAttributeNames(*element))
             {
-                if (entry.first != "name")
+                if (attributeName != "name" && element->attributes.find(attributeName) != element->attributes.end())
                 {
                     ++attributeCount;
                 }
             }
 
             WriteInt32(output, attributeCount);
-            for (const auto &entry : element->attributes)
+            for (const std::string &attributeName : GetOrderedAttributeNames(*element))
             {
-                if (entry.first == "name")
+                auto it = element->attributes.find(attributeName);
+                if (it == element->attributes.end() || attributeName == "name")
                 {
                     continue;
                 }
 
-                WriteInt32(output, m_stringToIndex[entry.first]);
-                if (!WriteAttribute(document, entry.second, output, errorMessage))
+                WriteInt32(output, m_stringToIndex[attributeName]);
+                if (!WriteAttribute(document, it->second, output, errorMessage))
                 {
                     return false;
                 }
@@ -812,7 +906,7 @@ std::string SerializeDocumentText(const Document &document)
     CollectReachableElements(document, root, ordered, visited);
     for (const Element *element : ordered)
     {
-        WriteElementText(document, stream, *element);
+        WriteElementText(document, stream, *element, 0);
     }
 
     return stream.str();

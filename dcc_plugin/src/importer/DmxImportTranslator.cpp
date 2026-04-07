@@ -2142,6 +2142,15 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
         }
     }
 
+    if (context.importSkin)
+    {
+        status = ApplySkinning(context, vertexData, meshObject, parent);
+        if (!status)
+        {
+            return status;
+        }
+    }
+
     if (context.importDeltaStates)
     {
         status = ApplyDeltaStates(document, meshElement, meshObject, parent, points);
@@ -2149,11 +2158,6 @@ MStatus CreateMeshShape(const ImportContext &context, const simple_dmx::Element 
         {
             return status;
         }
-    }
-
-    if (context.importSkin)
-    {
-        return ApplySkinning(context, vertexData, meshObject, parent);
     }
 
     return MS::kSuccess;

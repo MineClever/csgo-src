@@ -61,6 +61,36 @@ def snapshot_skin_bindings(cmds, root_paths):
     return skin_snapshots
 
 
+def snapshot_blendshape_bindings(cmds, root_paths):
+    blendshape_snapshots = {}
+    for root_path in root_paths:
+        descendant_meshes = cmds.listRelatives(root_path, allDescendents=True, fullPath=True, type="mesh") or []
+        root_meshes = cmds.listRelatives(root_path, shapes=True, fullPath=True, type="mesh") or []
+        for mesh in root_meshes + descendant_meshes:
+            if cmds.getAttr(mesh + ".intermediateObject"):
+                continue
+
+            parents = cmds.listRelatives(mesh, parent=True, fullPath=True) or []
+            if not parents:
+                continue
+
+            mesh_parent = parents[0]
+            relative_parent = mesh_parent[len(root_path):].lstrip("|")
+            mesh_key = "<root>" if not relative_parent else relative_parent
+            history = cmds.listHistory(mesh) or []
+            blendshape_nodes = [node for node in history if cmds.nodeType(node) == "blendShape"]
+            if not blendshape_nodes:
+                continue
+
+            weight_aliases = cmds.listAttr(blendshape_nodes[0] + ".w", multi=True) or []
+            blendshape_snapshots[mesh_key] = {
+                "blendshape": blendshape_nodes[0],
+                "target_count": len(weight_aliases),
+            }
+
+    return blendshape_snapshots
+
+
 def snapshot_scene_meshes():
     import maya.api.OpenMaya as om
 
@@ -235,6 +265,35 @@ def compare_skin_snapshots(reference_skins, candidate_skins):
     raise last_error
 
 
+def compare_blendshape_snapshots(reference_blendshapes, candidate_blendshapes):
+    def compare_exact(lhs_blendshapes, rhs_blendshapes):
+        if set(lhs_blendshapes.keys()) != set(rhs_blendshapes.keys()):
+            missing = sorted(set(lhs_blendshapes.keys()) - set(rhs_blendshapes.keys()))
+            extra = sorted(set(rhs_blendshapes.keys()) - set(lhs_blendshapes.keys()))
+            raise RuntimeError(f"BlendShape set mismatch. Missing={missing} Extra={extra}")
+
+    candidate_variants = [candidate_blendshapes]
+    stripped_candidate = strip_single_wrapper_snapshot(candidate_blendshapes)
+    if stripped_candidate:
+        candidate_variants.append(stripped_candidate)
+
+    reference_variants = [reference_blendshapes]
+    stripped_reference = strip_single_wrapper_snapshot(reference_blendshapes)
+    if stripped_reference:
+        reference_variants.append(stripped_reference)
+
+    last_error = None
+    for reference_variant in reference_variants:
+        for candidate_variant in candidate_variants:
+            try:
+                compare_exact(reference_variant, candidate_variant)
+                return
+            except RuntimeError as exc:
+                last_error = exc
+
+    raise last_error
+
+
 def verify_roundtrip(
     cmds,
     plugin_path,
@@ -242,9 +301,11 @@ def verify_roundtrip(
     reference_meshes,
     reference_node_types,
     reference_skins,
+    reference_blendshapes,
     mesh_marker_path,
     type_marker_path,
     skin_marker_path,
+    blendshape_marker_path,
 ):
     cmds.file(new=True, force=True)
     if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
@@ -256,15 +317,19 @@ def verify_roundtrip(
     candidate_meshes = snapshot_scene_meshes()
     candidate_node_types = snapshot_imported_node_types(imported_roots)
     candidate_skins = snapshot_skin_bindings(cmds, imported_roots)
+    candidate_blendshapes = snapshot_blendshape_bindings(cmds, imported_roots)
     compare_mesh_snapshots(reference_meshes, candidate_meshes)
     compare_node_type_snapshots(reference_node_types, candidate_node_types)
     compare_skin_snapshots(reference_skins, candidate_skins)
+    compare_blendshape_snapshots(reference_blendshapes, candidate_blendshapes)
 
     with open(mesh_marker_path, "w", encoding="utf-8") as marker_file:
         marker_file.write("ok\n")
     with open(type_marker_path, "w", encoding="utf-8") as marker_file:
         marker_file.write("ok\n")
     with open(skin_marker_path, "w", encoding="utf-8") as marker_file:
+        marker_file.write("ok\n")
+    with open(blendshape_marker_path, "w", encoding="utf-8") as marker_file:
         marker_file.write("ok\n")
 
 
@@ -314,6 +379,8 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
     roundtrip_binary_type_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_typecheck.txt")
     roundtrip_text_skin_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_skincheck.txt")
     roundtrip_binary_skin_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_skincheck.txt")
+    roundtrip_text_blendshape_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_blendshapecheck.txt")
+    roundtrip_binary_blendshape_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_blendshapecheck.txt")
 
     cmds.file(new=True, force=True)
     if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
@@ -330,6 +397,7 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
     original_meshes = snapshot_scene_meshes()
     original_node_types = snapshot_imported_node_types(imported_roots)
     original_skins = snapshot_skin_bindings(cmds, imported_roots)
+    original_blendshapes = snapshot_blendshape_bindings(cmds, imported_roots)
     cmds.file(rename=exported_text)
     cmds.file(force=True, exportSelected=True, type="Valve DMX Export")
 
@@ -343,9 +411,11 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
         original_meshes,
         original_node_types,
         original_skins,
+        original_blendshapes,
         roundtrip_text_marker,
         roundtrip_text_type_marker,
         roundtrip_text_skin_marker,
+        roundtrip_text_blendshape_marker,
     )
     verify_roundtrip(
         cmds,
@@ -354,9 +424,11 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
         original_meshes,
         original_node_types,
         original_skins,
+        original_blendshapes,
         roundtrip_binary_marker,
         roundtrip_binary_type_marker,
         roundtrip_binary_skin_marker,
+        roundtrip_binary_blendshape_marker,
     )
 
 

@@ -1,0 +1,27 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmeModel"
+{
+    "id" "elementid" "simple_unknown_order_model"
+    "name" "string" "simple_unknown_order"
+    "z_customScalar" "mystery_type" "alpha beta"
+    "a_inlineCustom" "DmeCustomData"
+    {
+        "id" "elementid" "simple_unknown_order_inline"
+        "name" "string" "inline_payload"
+        "payload" "mystery_payload" "kept_as_string"
+    }
+    "m_customArray" "mystery_array"
+    [
+        "first",
+        "second"
+    ]
+    "children" "element_array"
+    [
+        "DmeDag"
+        {
+            "id" "elementid" "simple_unknown_order_child"
+            "name" "string" "child_node"
+        }
+    ]
+    "upAxis" "string" "Y"
+}

@@ -44,6 +44,14 @@ public:
     }
 
 private:
+    void RecordAttributeOrder(Element &element, const std::string &attributeName) const
+    {
+        if (element.attributes.find(attributeName) == element.attributes.end())
+        {
+            element.attributeOrder.push_back(attributeName);
+        }
+    }
+
     bool ParseElement(std::shared_ptr<Element> &element, std::string &errorMessage, const std::string *forcedType = nullptr)
     {
         std::string typeName;
@@ -141,9 +149,40 @@ private:
             }
             else
             {
-                attribute.kind = Attribute::Kind::Element;
-                if (!ParseElement(attribute.elementValue.inlineElement, errorMessage, &attributeType))
+                SkipWhitespaceAndComments();
+                if (IsAtEnd())
                 {
+                    errorMessage = "Unexpected end of file while reading unknown attribute type.";
+                    return false;
+                }
+
+                if (Peek() == '"')
+                {
+                    attribute.kind = Attribute::Kind::String;
+                    if (!ParseQuotedString(attribute.stringValue, errorMessage))
+                    {
+                        return false;
+                    }
+                }
+                else if (Peek() == '[')
+                {
+                    attribute.kind = Attribute::Kind::StringArray;
+                    if (!ParseStringArray(attribute.stringArray, errorMessage))
+                    {
+                        return false;
+                    }
+                }
+                else if (Peek() == '{')
+                {
+                    attribute.kind = Attribute::Kind::Element;
+                    if (!ParseElement(attribute.elementValue.inlineElement, errorMessage, &attributeType))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    errorMessage = "Unsupported attribute payload for unknown DMX attribute type.";
                     return false;
                 }
             }
@@ -153,6 +192,7 @@ private:
                 element->name = attribute.stringValue;
             }
 
+            RecordAttributeOrder(*element, attributeName);
             element->attributes.emplace(attributeName, std::move(attribute));
         }
 

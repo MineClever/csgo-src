@@ -40,6 +40,7 @@ struct Element
     std::string id;
     std::string name;
     std::unordered_map<std::string, Attribute> attributes;
+    std::vector<std::string> attributeOrder;
 };
 
 class Document

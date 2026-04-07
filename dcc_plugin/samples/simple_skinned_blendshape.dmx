@@ -1,0 +1,160 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmeModel"
+{
+    "id" "elementid" "skinned-blendshape-model-root"
+    "name" "string" "simple_skinned_blendshape"
+    "upAxis" "string" "Y"
+    "jointList" "element_array"
+    [
+        "element" "skinned-blendshape-joint-root"
+    ]
+    "children" "element_array"
+    [
+        "DmeJoint"
+        {
+            "id" "elementid" "skinned-blendshape-joint-root"
+            "name" "string" "root_joint"
+            "transform" "DmeTransform"
+            {
+                "id" "elementid" "skinned-blendshape-joint-root-xform"
+                "position" "vector3" "0 0 0"
+                "orientation" "quaternion" "0 0 0 1"
+            }
+        },
+        "DmeDag"
+        {
+            "id" "elementid" "skinned-blendshape-mesh-dag"
+            "name" "string" "skinnedBlendshapeMesh"
+            "transform" "DmeTransform"
+            {
+                "id" "elementid" "skinned-blendshape-mesh-xform"
+                "position" "vector3" "0 0 0"
+                "orientation" "quaternion" "0 0 0 1"
+            }
+            "shape" "DmeMesh"
+            {
+                "id" "elementid" "skinned-blendshape-mesh-shape"
+                "name" "string" "skinnedBlendshapeMeshShape"
+                "bindState" "DmeVertexData"
+                {
+                    "id" "elementid" "skinned-blendshape-bind"
+                    "name" "string" "bind"
+                    "jointCount" "int" "1"
+                    "flipVCoordinates" "bool" "0"
+                    "vertexFormat" "string_array"
+                    [
+                        "positions",
+                        "normals",
+                        "textureCoordinates",
+                        "jointWeights",
+                        "jointIndices"
+                    ]
+                    "positions" "vector3_array"
+                    [
+                        "0 0 0",
+                        "1 0 0",
+                        "1 1 0",
+                        "0 1 0"
+                    ]
+                    "positionsIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2",
+                        "0",
+                        "2",
+                        "3"
+                    ]
+                    "normals" "vector3_array"
+                    [
+                        "0 0 1"
+                    ]
+                    "normalsIndices" "int_array"
+                    [
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0"
+                    ]
+                    "textureCoordinates" "vector2_array"
+                    [
+                        "0 0",
+                        "1 0",
+                        "1 1",
+                        "0 1"
+                    ]
+                    "textureCoordinatesIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2",
+                        "0",
+                        "2",
+                        "3"
+                    ]
+                    "jointWeights" "float_array"
+                    [
+                        "1.0",
+                        "1.0",
+                        "1.0",
+                        "1.0"
+                    ]
+                    "jointIndices" "int_array"
+                    [
+                        "0",
+                        "0",
+                        "0",
+                        "0"
+                    ]
+                }
+                "deltaStates" "element_array"
+                [
+                    "DmeVertexDeltaData"
+                    {
+                        "id" "elementid" "skinned-blendshape-delta-smile"
+                        "name" "string" "smile"
+                        "vertexFormat" "string_array"
+                        [
+                            "positions"
+                        ]
+                        "positions" "vector3_array"
+                        [
+                            "0 0.35 0",
+                            "0 0.20 0"
+                        ]
+                        "positionsIndices" "int_array"
+                        [
+                            "2",
+                            "3"
+                        ]
+                        "mayaDeformerType" "string" "blendShape"
+                        "mayaBlendShapeNode" "string" "skinnedBlendshapeMesh_blendShape"
+                        "mayaWeightIndex" "int" "0"
+                        "mayaTargetName" "string" "smile"
+                    }
+                ]
+                "faceSets" "element_array"
+                [
+                    "DmeFaceSet"
+                    {
+                        "id" "elementid" "skinned-blendshape-face-set"
+                        "name" "string" "default_faces"
+                        "faces" "int_array"
+                        [
+                            "0",
+                            "1",
+                            "2",
+                            "-1",
+                            "3",
+                            "4",
+                            "5",
+                            "-1"
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}

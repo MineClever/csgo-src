@@ -6,7 +6,7 @@
 
 namespace maya_dmx
 {
-inline constexpr const char *kPluginVendor = "csgo-src";
+inline constexpr const char *kPluginVendor = "MineClever";
 inline constexpr const char *kPluginVersion = "0.1.0";
 inline constexpr const char *kImporterTranslatorName = "Valve DMX Import";
 inline constexpr const char *kExporterTranslatorName = "Valve DMX Export";

@@ -654,6 +654,7 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
         nameAttribute.kind = Attribute::Kind::String;
         nameAttribute.declaredType = "string";
         nameAttribute.stringValue = element->name;
+        element->attributeOrder.push_back("name");
         element->attributes.emplace("name", std::move(nameAttribute));
 
         document.m_ownedElements.push_back(element);
@@ -807,6 +808,10 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
                 element->name = attribute.stringValue;
             }
 
+            if (element->attributes.find(*attributeName) == element->attributes.end())
+            {
+                element->attributeOrder.push_back(*attributeName);
+            }
             element->attributes[*attributeName] = std::move(attribute);
         }
     }
