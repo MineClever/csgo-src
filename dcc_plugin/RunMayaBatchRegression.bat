@@ -55,7 +55,7 @@ set MAYA_SKIP_USERSETUP_PY=1
     --plugin "%PLUGIN_BINARY%" ^
     --samples "%SAMPLE_DIR%" ^
     --output "%OUTPUT_DIR%" ^
-    --cases simple_hierarchy simple_blendshape simple_mesh simple_skinned_mesh complex_chr_mesh MostComplexSampleSet/chr_mesh
+    --cases simple_hierarchy simple_blendshape simple_mesh simple_skinned_mesh complex_chr_mesh MostComplexSampleSet/chr_mesh simple_ngon_mesh
 if errorlevel 1 (
     echo.
     echo Maya batch regression failed.

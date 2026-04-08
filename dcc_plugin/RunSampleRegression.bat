@@ -48,6 +48,9 @@ if errorlevel 1 goto :fail
 call :RunCase MostComplexSampleSet/chr_mesh
 if errorlevel 1 goto :fail
 
+call :RunCase simple_ngon_mesh
+if errorlevel 1 goto :fail
+
 echo.
 echo Sample regression passed.
 echo Output directory: "%OUTPUT_DIR%"

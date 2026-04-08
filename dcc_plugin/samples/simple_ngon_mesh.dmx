@@ -1,0 +1,107 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmeModel"
+{
+    "id" "elementid" "ngon-model-root"
+    "name" "string" "simple_ngon_model"
+    "upAxis" "string" "Y"
+    "children" "element_array"
+    [
+        "DmeDag"
+        {
+            "id" "elementid" "ngon-dag"
+            "name" "string" "ngon_node"
+            "transform" "DmeTransform"
+            {
+                "id" "elementid" "ngon-xform"
+                "position" "vector3" "0 0 0"
+                "orientation" "quaternion" "0 0 0 1"
+            }
+            "shape" "DmeMesh"
+            {
+                "id" "elementid" "ngon-shape"
+                "name" "string" "ngon_mesh"
+                "bindState" "DmeVertexData"
+                {
+                    "id" "elementid" "ngon-bind"
+                    "name" "string" "bind"
+                    "flipVCoordinates" "bool" "0"
+                    "vertexFormat" "string_array"
+                    [
+                        "positions",
+                        "normals"
+                    ]
+                    "positions" "vector3_array"
+                    [
+                        "0 0 0",
+                        "1 0 0",
+                        "1.5 0.5 0",
+                        "1 1 0",
+                        "0 1 0",
+                        "2 0 0",
+                        "3 0 0",
+                        "3 1 0",
+                        "2 1 0"
+                    ]
+                    "positionsIndices" "int_array"
+                    [
+                        "0",
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                        "5",
+                        "6",
+                        "7",
+                        "8"
+                    ]
+                    "normals" "vector3_array"
+                    [
+                        "0 0 1"
+                    ]
+                    "normalsIndices" "int_array"
+                    [
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0"
+                    ]
+                }
+                "faceSets" "element_array"
+                [
+                    "DmeFaceSet"
+                    {
+                        "id" "elementid" "ngon-faceset-zzz"
+                        "name" "string" "zzz_mat"
+                        "faces" "int_array"
+                        [
+                            "0",
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "-1"
+                        ]
+                    },
+                    "DmeFaceSet"
+                    {
+                        "id" "elementid" "ngon-faceset-aaa"
+                        "name" "string" "aaa_mat"
+                        "faces" "int_array"
+                        [
+                            "5",
+                            "6",
+                            "7",
+                            "8",
+                            "-1"
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}

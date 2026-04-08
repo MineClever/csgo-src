@@ -3,6 +3,8 @@
 #include "DmxExportDeformers.h"
 #include "DmxExportMeshMaterial.h"
 
+#include <algorithm>
+#include <climits>
 #include <string>
 #include <sstream>
 #include <unordered_map>
@@ -292,6 +294,7 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
         std::vector<int> polygonIndices;
         MeshMaterialData materialData;
     };
+    std::vector<SetMembership> perFaceComponentSets;
     std::vector<SetMembership> deferredWholeObjectSets;
     MObjectArray connectedSets;
     MObjectArray setComponents;
@@ -323,9 +326,31 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
                 continue;
             }
 
-            polygonIndices = FilterUncoveredPolygons(polygonIndices, coveredPolygons);
-            const MeshMaterialData materialData = BuildMaterialData(connectedSets[setIndex], setFn.name().asChar());
-            AppendFaceSetElement(builder, setFn.name().asChar(), polygonIndices, polygonFaceIndices, &materialData, context.exportMetadata, faceSetElements);
+            std::sort(polygonIndices.begin(), polygonIndices.end());
+            perFaceComponentSets.push_back(
+                SetMembership{
+                    setFn.name().asChar(),
+                    std::move(polygonIndices),
+                    BuildMaterialData(connectedSets[setIndex], setFn.name().asChar())});
+        }
+
+        // Sort per-face sets by minimum polygon index so the exported face set order matches
+        // MItMeshPolygon iteration order. This ensures roundtrip polygon ordering is stable
+        // regardless of the order getConnectedSetsAndMembers() returns shading groups.
+        std::sort(
+            perFaceComponentSets.begin(),
+            perFaceComponentSets.end(),
+            [](const SetMembership &a, const SetMembership &b)
+            {
+                const int minA = a.polygonIndices.empty() ? INT_MAX : *std::min_element(a.polygonIndices.begin(), a.polygonIndices.end());
+                const int minB = b.polygonIndices.empty() ? INT_MAX : *std::min_element(b.polygonIndices.begin(), b.polygonIndices.end());
+                return minA < minB;
+            });
+
+        for (SetMembership &membership : perFaceComponentSets)
+        {
+            std::vector<int> filteredIndices = FilterUncoveredPolygons(membership.polygonIndices, coveredPolygons);
+            AppendFaceSetElement(builder, membership.name.c_str(), filteredIndices, polygonFaceIndices, &membership.materialData, context.exportMetadata, faceSetElements);
         }
 
         for (const SetMembership &membership : deferredWholeObjectSets)

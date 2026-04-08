@@ -255,10 +255,10 @@
   - 第一优先级：
     - ✅ ~~`complex_chr_mesh` 与 `MostComplexSampleSet/chr_mesh` 顶点漂移~~（已修复，2026-04-09）
     - ✅ ~~把 Ellis/DMX 纳入回归门槛并运行~~（已运行，2026-04-09，结果见上）
-    - **修复含 n-gon 的网格拓扑不匹配**（影响两个 keyvalues2 生产模型）：
-      - 先制作最小 n-gon 复现样例（含 5-verts polygon 的简单 Maya 网格）
-      - 在 exporter 端打印 `polygonFaceIndices` 调试信息，定位 quad→tri 发生的具体位置
-      - 修复后补回归用例，确保混合三角/四边/n-gon 网格 roundtrip 不改变拓扑
+    - ✅ ~~**修复含 n-gon 的网格拓扑不匹配**~~（已修复，2026-04-09）：
+      - 根本原因：`getConnectedSetsAndMembers()` 返回 shading group 的顺序由 Maya 决定（可能是字母序），与原始 DMX face set 顺序不同，导致 roundtrip 后多边形 index 错位，比较时出现假阳性 quad→tri。
+      - 修复：[DmxExportMesh.cpp](dcc_plugin/src/exporter/DmxExportMesh.cpp) — 收集所有 per-face face set 后，按各自最小 polygon index 排序再输出；同时对每个 face set 内部的 polygon 索引也做升序排序，保证 roundtrip 拓扑稳定性与原始 face set 顺序无关。
+      - 已新增 [simple_ngon_mesh.dmx](dcc_plugin/samples/simple_ngon_mesh.dmx) 样例（5-vertex n-gon + quad，face set 名称倒序 zzz_mat → aaa_mat 覆盖字母序问题）并加入 RunMayaBatchRegression.bat / RunSampleRegression.bat。
     - 补独立动画宿主回归，避免后续改 importer 时 [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx)、[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx)、[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 退回”只导骨架不导关键帧”。
   - 第二优先级（技术债务，修复 n-gon 问题后再做）：
     - **修复 binary v3/v4 解析**：
