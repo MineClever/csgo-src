@@ -44,6 +44,7 @@ std::string FormatTimeSeconds(double value);
 std::vector<double> ParseNumberList(const std::string &text);
 
 // --- Plug / node helpers ---
+std::string ReadStringPlugValue(const MPlug &plug);
 std::string ReadMatrixPlugValue(const MPlug &plug);
 bool ReadVector3PlugValue(const MPlug &plug, std::string &formattedValue);
 MObject FindConnectedSourceNode(const MPlug &destinationPlug);

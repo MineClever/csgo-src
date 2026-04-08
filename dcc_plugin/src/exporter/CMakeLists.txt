@@ -1,9 +1,14 @@
 add_library(maya_dmx_export STATIC
     DmxExportAnimation.cpp
     DmxExportAnimation.h
+    DmxExportDag.cpp
+    DmxExportDag.h
     DmxExportDeformers.cpp
     DmxExportDeformers.h
+    DmxExportInternals.cpp
     DmxExportInternals.h
+    DmxExportMesh.cpp
+    DmxExportMesh.h
     DmxExportMeshMaterial.cpp
     DmxExportMeshMaterial.h
     DmxExportTextModel.cpp
