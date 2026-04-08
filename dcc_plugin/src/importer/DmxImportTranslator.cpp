@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <maya/MEulerRotation.h>
+#include <maya/MQuaternion.h>
 #include <maya/MFileObject.h>
 #include <maya/MFnTransform.h>
 #include <maya/MGlobal.h>
@@ -238,7 +239,7 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
 
     if (needsAxisCorrection)
     {
-        status = rootTransformFn.setRotation(rootAxisCorrection);
+        status = rootTransformFn.setRotation(rootAxisCorrection.asQuaternion());
         if (!status)
         {
             return status;
