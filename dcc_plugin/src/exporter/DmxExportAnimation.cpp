@@ -10,10 +10,10 @@
 
 #include <maya/MDagPath.h>
 #include <maya/MFnAnimCurve.h>
+#include <maya/MFnAttribute.h>
 #include <maya/MFnBlendShapeDeformer.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
-#include <maya/MGlobal.h>
 #include <maya/MItDependencyGraph.h>
 #include <maya/MObject.h>
 #include <maya/MPlug.h>
@@ -21,7 +21,6 @@
 #include <maya/MEulerRotation.h>
 #include <maya/MSelectionList.h>
 #include <maya/MStatus.h>
-#include <maya/MStringArray.h>
 #include <maya/MTime.h>
 
 namespace dmx_export_impl
@@ -313,18 +312,29 @@ static void AppendControlAnimationChannels(
         return;
     }
 
-    MStringArray keyableAttributes;
-    MString command = "listAttr -k -scalar \"";
-    command += nodeFn.name();
-    command += "\"";
-    if (MGlobal::executeCommand(command, keyableAttributes, false, false) != MS::kSuccess)
+    const unsigned int attributeCount = nodeFn.attributeCount(&status);
+    if (!status)
     {
         return;
     }
 
-    for (unsigned int attributeIndex = 0; attributeIndex < keyableAttributes.length(); ++attributeIndex)
+    for (unsigned int attrIdx = 0; attrIdx < attributeCount; ++attrIdx)
     {
-        const std::string attributeName = keyableAttributes[attributeIndex].asChar();
+        MObject attrObj = nodeFn.attribute(attrIdx, &status);
+        if (!status || attrObj.isNull())
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        MFnAttribute attrFn(attrObj);
+        if (!attrFn.isKeyable() || attrObj.hasFn(MFn::kCompoundAttribute) || attrFn.isArray() ||
+            (!attrObj.hasFn(MFn::kNumericAttribute) && !attrObj.hasFn(MFn::kUnitAttribute) && !attrObj.hasFn(MFn::kEnumAttribute)))
+        {
+            continue;
+        }
+
+        const std::string attributeName = attrFn.name().asChar();
         if (attributeName == "translateX" || attributeName == "translateY" || attributeName == "translateZ" ||
             attributeName == "rotateX" || attributeName == "rotateY" || attributeName == "rotateZ" ||
             attributeName == "scaleX" || attributeName == "scaleY" || attributeName == "scaleZ" ||
@@ -387,27 +397,38 @@ static void AppendBlendShapeAnimationChannels(
             continue;
         }
 
-        MStringArray weightAliases;
-        MString command = "listAttr -m \"";
-        command += blendShapeNodeFn.name();
-        command += ".w\"";
-        if (MGlobal::executeCommand(command, weightAliases, false, false) != MS::kSuccess)
+        MPlug weightArrayPlug = blendShapeNodeFn.findPlug("weight", true, &status);
+        if (!status || weightArrayPlug.isNull())
         {
+            status = MS::kSuccess;
             continue;
         }
 
-        for (unsigned int aliasIndex = 0; aliasIndex < weightAliases.length(); ++aliasIndex)
+        const unsigned int weightCount = weightArrayPlug.numElements(&status);
+        if (!status)
         {
-            const std::string aliasName = weightAliases[aliasIndex].asChar();
-            if (exportedFlexTargets.find(aliasName) != exportedFlexTargets.end())
+            status = MS::kSuccess;
+            continue;
+        }
+
+        for (unsigned int weightIdx = 0; weightIdx < weightCount; ++weightIdx)
+        {
+            MPlug weightPlug = weightArrayPlug.elementByPhysicalIndex(weightIdx, &status);
+            if (!status || weightPlug.isNull())
+            {
+                status = MS::kSuccess;
+                continue;
+            }
+
+            MString alias = blendShapeNodeFn.plugsAlias(weightPlug);
+            if (alias.length() == 0)
             {
                 continue;
             }
 
-            MPlug weightPlug = blendShapeNodeFn.findPlug(aliasName.c_str(), true, &status);
-            if (!status || weightPlug.isNull())
+            const std::string aliasName = alias.asChar();
+            if (exportedFlexTargets.find(aliasName) != exportedFlexTargets.end())
             {
-                status = MS::kSuccess;
                 continue;
             }
 

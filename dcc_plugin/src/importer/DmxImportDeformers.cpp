@@ -198,6 +198,22 @@ static MStatus CreateSkinClusterWithApi(
 
     const std::vector<std::string> bindPreMatrixStrings = FindAttributeStringArray(vertexData, "mayaBindPreMatrix");
     const std::vector<std::string> influencePathStrings = FindAttributeStringArray(vertexData, "mayaInfluencePaths");
+
+    // Build a map from joint name suffix to stored bindPreMatrix index for path-based matching.
+    // The stored arrays are ordered by Maya's influence order from the export scene, which may
+    // differ from the current DMX joint index order. Matching by name avoids index misalignment.
+    std::unordered_map<std::string, size_t> storedPathNameToIndex;
+    for (size_t storedIndex = 0; storedIndex < influencePathStrings.size(); ++storedIndex)
+    {
+        const std::string &storedPath = influencePathStrings[storedIndex];
+        const size_t lastSep = storedPath.rfind('|');
+        const std::string jointName = (lastSep != std::string::npos) ? storedPath.substr(lastSep + 1) : storedPath;
+        if (!jointName.empty())
+        {
+            storedPathNameToIndex[jointName] = storedIndex;
+        }
+    }
+
     for (unsigned int influenceIndex = 0; influenceIndex < influencePaths.length(); ++influenceIndex)
     {
         status = connectArrayPlug(influencePaths[influenceIndex].node(), "worldMatrix", 0, skinClusterObject, "matrix", influenceIndex);
@@ -219,18 +235,20 @@ static MStatus CreateSkinClusterWithApi(
 
         MFnMatrixData matrixDataFn;
         MMatrix bindPreMatrix = influencePaths[influenceIndex].inclusiveMatrixInverse();
-        if (influenceIndex < bindPreMatrixStrings.size())
+        if (!bindPreMatrixStrings.empty())
         {
-            MMatrix parsedMatrix;
-            if (ParseMatrixString(bindPreMatrixStrings[influenceIndex], parsedMatrix))
+            const std::string fullPath = influencePaths[influenceIndex].fullPathName().asChar();
+            const size_t lastSep = fullPath.rfind('|');
+            const std::string jointName = (lastSep != std::string::npos) ? fullPath.substr(lastSep + 1) : fullPath;
+            auto it = storedPathNameToIndex.find(jointName);
+            if (it != storedPathNameToIndex.end() && it->second < bindPreMatrixStrings.size())
             {
-                bindPreMatrix = parsedMatrix;
+                MMatrix parsedMatrix;
+                if (ParseMatrixString(bindPreMatrixStrings[it->second], parsedMatrix))
+                {
+                    bindPreMatrix = parsedMatrix;
+                }
             }
-        }
-        else if (influenceIndex < influencePathStrings.size() &&
-            influencePathStrings[influenceIndex] != influencePaths[influenceIndex].fullPathName().asChar())
-        {
-            AppendImportDebugLog("skinning: influence path order mismatch while restoring bindPreMatrix");
         }
 
         MObject bindPreMatrixObject = matrixDataFn.create(bindPreMatrix, &status);
@@ -785,16 +803,21 @@ MStatus ApplyDeltaStates(
             }
         }
 
+        MStatus weightPlugStatus;
+        MPlug weightArrayPlug = blendShapeDependency.findPlug("weight", true, &weightPlugStatus);
+        const bool hasWeightPlug = weightPlugStatus && !weightArrayPlug.isNull();
         for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
         {
-            MString aliasCommand("aliasAttr \"");
-            aliasCommand += targetNames[targetIndex].c_str();
-            aliasCommand += "\" \"";
-            aliasCommand += blendShapeNodeName;
-            aliasCommand += ".w[";
-            aliasCommand += static_cast<int>(targetIndex);
-            aliasCommand += "]\"";
-            MGlobal::executeCommand(aliasCommand, false, false);
+            if (hasWeightPlug)
+            {
+                MStatus elemStatus;
+                MPlug weightElemPlug = weightArrayPlug.elementByLogicalIndex(targetIndex, &elemStatus);
+                if (elemStatus)
+                {
+                    MString attrName = weightElemPlug.partialName();
+                    blendShapeDependency.setAlias(targetNames[targetIndex].c_str(), attrName, weightElemPlug, true);
+                }
+            }
             context.importedBlendShapeTargets[targetNames[targetIndex]].push_back(
                 BlendShapeTargetBinding{blendShapeObject, targetIndex});
 

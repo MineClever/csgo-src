@@ -10,6 +10,6 @@
 namespace dmx_export_impl
 {
 
-DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, ExportContext &context);
+DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, ExportContext &context, const MDagPath *bindShapeMeshPath = nullptr);
 
 } // namespace dmx_export_impl

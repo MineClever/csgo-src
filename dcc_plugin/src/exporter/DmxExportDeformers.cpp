@@ -15,6 +15,7 @@
 #include <maya/MFnMesh.h>
 #include <maya/MFnSingleIndexedComponent.h>
 #include <maya/MFnSkinCluster.h>
+#include <maya/MDoubleArray.h>
 #include <maya/MGlobal.h>
 #include <maya/MIntArray.h>
 #include <maya/MItDependencyGraph.h>
@@ -25,33 +26,28 @@
 #include <maya/MSelectionList.h>
 #include <maya/MStatus.h>
 #include <maya/MString.h>
-#include <maya/MStringArray.h>
 
 namespace dmx_export_impl
 {
 
 void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement, ExportContext &context)
 {
-    MString skinClusterNodeName;
-    const MString command = MString("findRelatedSkinCluster \"") + meshPath.fullPathName() + "\"";
-    if (MGlobal::executeCommand(command, skinClusterNodeName) != MS::kSuccess || skinClusterNodeName.length() == 0)
-    {
-        return;
-    }
-
-    MSelectionList selectionList;
-    if (selectionList.add(skinClusterNodeName) != MS::kSuccess)
-    {
-        return;
-    }
-
-    MObject skinClusterObject;
-    if (selectionList.getDependNode(0, skinClusterObject) != MS::kSuccess)
-    {
-        return;
-    }
-
     MStatus status;
+    MObject meshNodeCopy(meshPath.node());
+    MItDependencyGraph dgIt(meshNodeCopy, MFn::kSkinClusterFilter,
+        MItDependencyGraph::kUpstream, MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel, &status);
+    if (!status || dgIt.isDone())
+    {
+        return;
+    }
+
+    MObject skinClusterObject = dgIt.currentItem(&status);
+    if (!status || skinClusterObject.isNull())
+    {
+        return;
+    }
+
     MFnSkinCluster skinClusterFn(skinClusterObject, &status);
     if (!status)
     {
@@ -203,7 +199,7 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
 
         while (vertexWeights.size() < jointCount)
         {
-            vertexWeights.push_back({0, 0.0});
+            vertexWeights.push_back({-1, 0.0});
         }
 
         for (const auto &entry : vertexWeights)
@@ -431,10 +427,15 @@ void AppendBlendShapeDeltaStates(
             {
                 if (temporaryTargetTransform.length() > 0)
                 {
-                    MString deleteCommand("delete \"");
-                    deleteCommand += temporaryTargetTransform;
-                    deleteCommand += "\"";
-                    MGlobal::executeCommand(deleteCommand, false, false);
+                    MSelectionList deleteList;
+                    MObject deleteObject;
+                    if (deleteList.add(temporaryTargetTransform) == MS::kSuccess &&
+                        deleteList.getDependNode(0, deleteObject) == MS::kSuccess)
+                    {
+                        MDGModifier dgModifier;
+                        dgModifier.deleteNode(deleteObject);
+                        dgModifier.doIt();
+                    }
                 }
                 continue;
             }
@@ -445,10 +446,15 @@ void AppendBlendShapeDeltaStates(
             {
                 if (temporaryTargetTransform.length() > 0)
                 {
-                    MString deleteCommand("delete \"");
-                    deleteCommand += temporaryTargetTransform;
-                    deleteCommand += "\"";
-                    MGlobal::executeCommand(deleteCommand, false, false);
+                    MSelectionList deleteList;
+                    MObject deleteObject;
+                    if (deleteList.add(temporaryTargetTransform) == MS::kSuccess &&
+                        deleteList.getDependNode(0, deleteObject) == MS::kSuccess)
+                    {
+                        MDGModifier dgModifier;
+                        dgModifier.deleteNode(deleteObject);
+                        dgModifier.doIt();
+                    }
                 }
                 continue;
             }
@@ -475,10 +481,15 @@ void AppendBlendShapeDeltaStates(
             {
                 if (temporaryTargetTransform.length() > 0)
                 {
-                    MString deleteCommand("delete \"");
-                    deleteCommand += temporaryTargetTransform;
-                    deleteCommand += "\"";
-                    MGlobal::executeCommand(deleteCommand, false, false);
+                    MSelectionList deleteList;
+                    MObject deleteObject;
+                    if (deleteList.add(temporaryTargetTransform) == MS::kSuccess &&
+                        deleteList.getDependNode(0, deleteObject) == MS::kSuccess)
+                    {
+                        MDGModifier dgModifier;
+                        dgModifier.deleteNode(deleteObject);
+                        dgModifier.doIt();
+                    }
                 }
                 continue;
             }
@@ -487,15 +498,10 @@ void AppendBlendShapeDeltaStates(
             MPlug weightPlug = weightArrayPlug.elementByLogicalIndex(weightIndex, &status);
             if (status)
             {
-                MStringArray weightAliases;
-                MString command = "listAttr -m \"";
-                command += blendShapeNodeFn.name();
-                command += ".w\"";
-                if (MGlobal::executeCommand(command, weightAliases, false, false) == MS::kSuccess &&
-                    weightSlot < weightAliases.length() &&
-                    weightAliases[weightSlot].length() > 0)
+                MString alias = blendShapeNodeFn.plugsAlias(weightPlug);
+                if (alias.length() > 0)
                 {
-                    deltaName = weightAliases[weightSlot].asChar();
+                    deltaName = alias.asChar();
                 }
             }
 

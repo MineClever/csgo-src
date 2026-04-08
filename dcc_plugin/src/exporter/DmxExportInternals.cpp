@@ -347,31 +347,13 @@ MObject FindAnimationCurveForPlug(const MPlug &plug)
         return MObject::kNullObj;
     }
 
-    MStringArray sourceConnections;
-    MString command = "listConnections -s true -d false -plugs true \"";
-    command += plug.name();
-    command += "\"";
-    if (MGlobal::executeCommand(command, sourceConnections, false, false) != MS::kSuccess)
+    MPlugArray sourcePlugs;
+    plug.connectedTo(sourcePlugs, true, false);
+
+    for (unsigned int i = 0; i < sourcePlugs.length(); ++i)
     {
-        return MObject::kNullObj;
-    }
-
-    for (unsigned int connectionIndex = 0; connectionIndex < sourceConnections.length(); ++connectionIndex)
-    {
-        MSelectionList selectionList;
-        if (selectionList.add(sourceConnections[connectionIndex]) != MS::kSuccess)
-        {
-            continue;
-        }
-
-        MPlug sourcePlug;
-        if (selectionList.getPlug(0, sourcePlug) != MS::kSuccess)
-        {
-            continue;
-        }
-
         MStatus status;
-        const MObject node = sourcePlug.node(&status);
+        const MObject node = sourcePlugs[i].node(&status);
         if (status && !node.isNull() && node.hasFn(MFn::kAnimCurve))
         {
             return node;

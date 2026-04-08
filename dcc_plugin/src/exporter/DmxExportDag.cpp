@@ -12,7 +12,6 @@
 #include <maya/MItDag.h>
 #include <maya/MSelectionList.h>
 #include <maya/MStatus.h>
-#include <maya/MStringArray.h>
 
 namespace dmx_export_impl
 {
@@ -117,19 +116,13 @@ std::vector<MDagPath> CollectExportRoots(MPxFileTranslator::FileAccessMode mode)
 
     if (mode == MPxFileTranslator::kExportActiveAccessMode)
     {
-        MStringArray selectedPaths;
-        if (MGlobal::executeCommand("ls -sl -long", selectedPaths) == MS::kSuccess)
+        MSelectionList activeSelection;
+        if (MGlobal::getActiveSelectionList(activeSelection) == MS::kSuccess)
         {
-            for (unsigned int i = 0; i < selectedPaths.length(); ++i)
+            for (unsigned int i = 0; i < activeSelection.length(); ++i)
             {
-                MSelectionList selectionList;
-                if (selectionList.add(selectedPaths[i]) != MS::kSuccess)
-                {
-                    continue;
-                }
-
                 MDagPath dagPath;
-                if (selectionList.getDagPath(0, dagPath) != MS::kSuccess)
+                if (activeSelection.getDagPath(i, dagPath) != MS::kSuccess)
                 {
                     continue;
                 }
@@ -222,28 +215,51 @@ DmxElement *BuildDagElement(DmxTextBuilder &builder, const MDagPath &dagPath, Ex
         dagElement->attributes.push_back(MakeInlineElementAttribute("transform", transformElement));
     }
 
-    for (unsigned int childIndex = 0; childIndex < dagNode.childCount(); ++childIndex)
     {
-        MObject childObject = dagNode.child(childIndex, &status);
-        if (!status)
+        MDagPath outputMeshPath;
+        MDagPath bindShapeMeshPath;
+        bool foundOutputMesh = false;
+        bool foundBindShapeMesh = false;
+        for (unsigned int childIndex = 0; childIndex < dagNode.childCount(); ++childIndex)
         {
-            continue;
-        }
-
-        if (childObject.hasFn(MFn::kMesh))
-        {
-            MDagPath meshPath = dagPath;
-            meshPath.push(childObject);
-            MFnDagNode meshDagNode(meshPath, &status);
-            if (!status || meshDagNode.isIntermediateObject())
+            MObject childObject = dagNode.child(childIndex, &status);
+            if (!status || !childObject.hasFn(MFn::kMesh))
             {
                 continue;
             }
 
-            if (DmxElement *meshElement = BuildMeshElement(builder, meshPath, context))
+            MDagPath meshPath = dagPath;
+            meshPath.push(childObject);
+            MFnDagNode meshDagNode(meshPath, &status);
+            if (!status)
+            {
+                continue;
+            }
+
+            if (meshDagNode.isIntermediateObject())
+            {
+                if (!foundBindShapeMesh)
+                {
+                    bindShapeMeshPath = meshPath;
+                    foundBindShapeMesh = true;
+                }
+            }
+            else
+            {
+                if (!foundOutputMesh)
+                {
+                    outputMeshPath = meshPath;
+                    foundOutputMesh = true;
+                }
+            }
+        }
+
+        if (foundOutputMesh)
+        {
+            const MDagPath *bindShapePtr = foundBindShapeMesh ? &bindShapeMeshPath : nullptr;
+            if (DmxElement *meshElement = BuildMeshElement(builder, outputMeshPath, context, bindShapePtr))
             {
                 dagElement->attributes.push_back(MakeInlineElementAttribute("shape", meshElement));
-                break;
             }
         }
     }

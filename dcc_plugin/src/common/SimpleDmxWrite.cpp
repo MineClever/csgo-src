@@ -187,30 +187,14 @@ void CollectReachableElements(
         const Attribute &attribute = it->second;
         if (attribute.kind == Attribute::Kind::Element)
         {
-            if (!attribute.elementValue.inlineElement)
-            {
-                CollectReachableElements(document, document.ResolveElement(attribute), ordered, visited);
-            }
+            CollectReachableElements(document, document.ResolveElement(attribute), ordered, visited);
         }
         else if (attribute.kind == Attribute::Kind::ElementArray)
         {
-            bool hasReferencedElement = false;
-            for (const ElementLink &link : attribute.elementArray)
+            auto resolved = document.ResolveElementArray(attribute);
+            for (const Element *child : resolved)
             {
-                if (!link.inlineElement)
-                {
-                    hasReferencedElement = true;
-                    break;
-                }
-            }
-
-            if (hasReferencedElement)
-            {
-                auto resolved = document.ResolveElementArray(attribute);
-                for (const Element *child : resolved)
-                {
-                    CollectReachableElements(document, child, ordered, visited);
-                }
+                CollectReachableElements(document, child, ordered, visited);
             }
         }
     }

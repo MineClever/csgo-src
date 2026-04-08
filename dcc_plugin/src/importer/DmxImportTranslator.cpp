@@ -228,7 +228,15 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
     const std::string upAxis = FindAttributeString(importRoot, "upAxis");
     MEulerRotation rootAxisCorrection;
     MString rootAxisWarning;
-    if (ComputeRootAxisCorrection(upAxis, rootAxisCorrection, rootAxisWarning))
+    const bool needsAxisCorrection = ComputeRootAxisCorrection(upAxis, rootAxisCorrection, rootAxisWarning);
+
+    status = ApplyTransform(document, importRoot, sceneRoot);
+    if (!status)
+    {
+        return status;
+    }
+
+    if (needsAxisCorrection)
     {
         status = rootTransformFn.setRotation(rootAxisCorrection);
         if (!status)
@@ -236,12 +244,6 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
             return status;
         }
         maya_dmx::ReportWarning(rootAxisWarning);
-    }
-
-    status = ApplyTransform(document, importRoot, sceneRoot);
-    if (!status)
-    {
-        return status;
     }
 
     for (const simple_dmx::Element *child : FindAttributeElementArray(document, importRoot, "children"))

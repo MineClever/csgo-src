@@ -55,7 +55,7 @@ static std::string ReadDynamicStringAttribute(const MObject &nodeObject, const c
     return ReadStringPlugValue(attributePlug);
 }
 
-DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, ExportContext &context)
+DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, ExportContext &context, const MDagPath *bindShapeMeshPath)
 {
     MStatus status;
     MFnMesh meshFn(meshPath, &status);
@@ -65,7 +65,22 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
     }
 
     MPointArray meshPoints;
-    status = meshFn.getPoints(meshPoints, MSpace::kObject);
+    if (bindShapeMeshPath)
+    {
+        MFnMesh bindShapeMeshFn(*bindShapeMeshPath, &status);
+        if (status)
+        {
+            status = bindShapeMeshFn.getPoints(meshPoints, MSpace::kObject);
+        }
+        if (!status)
+        {
+            status = meshFn.getPoints(meshPoints, MSpace::kObject);
+        }
+    }
+    else
+    {
+        status = meshFn.getPoints(meshPoints, MSpace::kObject);
+    }
     if (!status)
     {
         return nullptr;
