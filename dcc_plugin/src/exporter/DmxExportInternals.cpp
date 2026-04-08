@@ -85,31 +85,6 @@ static void AppendUniqueTime(std::vector<double> &times, double value)
     times.insert(it, value);
 }
 
-// --- Parsing ---
-
-std::vector<double> ParseNumberList(const std::string &text)
-{
-    std::string normalized = text;
-    std::replace_if(
-        normalized.begin(),
-        normalized.end(),
-        [](char c)
-        {
-            return c == ',' || c == '(' || c == ')' || c == '[' || c == ']';
-        },
-        ' ');
-
-    std::vector<double> values;
-    std::istringstream stream(normalized);
-    double value = 0.0;
-    while (stream >> value)
-    {
-        values.push_back(value);
-    }
-
-    return values;
-}
-
 // --- Formatting ---
 
 std::string FormatFloat(double value)

@@ -52,6 +52,8 @@ inline Element *CloneElement(DocumentBuilder &builder, const Element &source)
     return clone;
 }
 
+using simple_dmx::ParseNumberList;
+
 // --- Formatting helpers (implemented in DmxExportInternals.cpp) ---
 std::string FormatFloat(double value);
 std::string FormatVector2(double x, double y);
@@ -60,7 +62,6 @@ std::string FormatVector4(double x, double y, double z, double w);
 std::string FormatQuaternion(double x, double y, double z, double w);
 std::string FormatMatrix(const MMatrix &matrix);
 std::string FormatTimeSeconds(double value);
-std::vector<double> ParseNumberList(const std::string &text);
 
 // --- Plug / node helpers ---
 std::string ReadStringPlugValue(const MPlug &plug);

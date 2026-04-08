@@ -78,6 +78,23 @@ void SetAttr(Element &element, std::string name, Attribute attr);
 // Clear all attributes from an element (map + order).
 void ClearAttrs(Element &element);
 
+// --- DOM query helpers ---
+
+// Parse a whitespace/comma/bracket-delimited list of numbers into a double vector.
+std::vector<double> ParseNumberList(const std::string &text);
+
+// Return the single Element referenced by a named attribute, or nullptr.
+const Element *FindAttributeElement(const Document &document, const Element *element, const char *attributeName);
+
+// Return all Elements referenced by a named element-array attribute.
+std::vector<const Element *> FindAttributeElementArray(const Document &document, const Element *element, const char *attributeName);
+
+// Return the string value of a named scalar attribute, or empty string.
+std::string FindAttributeString(const Element *element, const char *attributeName);
+
+// Return the string array of a named array attribute, or empty vector.
+std::vector<std::string> FindAttributeStringArray(const Element *element, const char *attributeName);
+
 // --- DocumentBuilder ---
 // Builds a Document programmatically without parsing text/binary.
 // All element links use inlineElement so SerializeDocumentText produces the

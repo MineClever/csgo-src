@@ -1,5 +1,7 @@
 #include "SimpleDmxDocument.h"
 
+#include <algorithm>
+#include <sstream>
 #include <utility>
 
 namespace simple_dmx
@@ -36,6 +38,84 @@ void ClearAttrs(Element &element)
 {
     element.attributes.clear();
     element.attributeOrder.clear();
+}
+
+std::vector<double> ParseNumberList(const std::string &text)
+{
+    std::string normalized = text;
+    std::replace_if(
+        normalized.begin(),
+        normalized.end(),
+        [](char c)
+        {
+            return c == ',' || c == '(' || c == ')' || c == '[' || c == ']';
+        },
+        ' ');
+
+    std::vector<double> values;
+    std::istringstream stream(normalized);
+    double value = 0.0;
+    while (stream >> value)
+    {
+        values.push_back(value);
+    }
+    return values;
+}
+
+const Element *FindAttributeElement(const Document &document, const Element *element, const char *attributeName)
+{
+    if (!element)
+    {
+        return nullptr;
+    }
+    auto it = element->attributes.find(attributeName);
+    if (it == element->attributes.end())
+    {
+        return nullptr;
+    }
+    return document.ResolveElement(it->second);
+}
+
+std::vector<const Element *> FindAttributeElementArray(const Document &document, const Element *element, const char *attributeName)
+{
+    if (!element)
+    {
+        return {};
+    }
+    auto it = element->attributes.find(attributeName);
+    if (it == element->attributes.end())
+    {
+        return {};
+    }
+    return document.ResolveElementArray(it->second);
+}
+
+std::string FindAttributeString(const Element *element, const char *attributeName)
+{
+    if (!element)
+    {
+        return {};
+    }
+    auto it = element->attributes.find(attributeName);
+    if (it == element->attributes.end() || it->second.kind != Attribute::Kind::String)
+    {
+        return {};
+    }
+    return it->second.stringValue;
+}
+
+std::vector<std::string> FindAttributeStringArray(const Element *element, const char *attributeName)
+{
+    if (!element)
+    {
+        return {};
+    }
+    auto it = element->attributes.find(attributeName);
+    if (it == element->attributes.end() || it->second.kind != Attribute::Kind::StringArray)
+    {
+        return {};
+    }
+    return it->second.stringArray;
 }
 
 Element *DocumentBuilder::CreateElement(const std::string &type, const std::string &name)

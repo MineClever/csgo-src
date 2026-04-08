@@ -134,7 +134,7 @@
 ## DCC / Maya 插件计划
 
 ### 9. 为 Maya 2022.5 开发 DMX 导入导出插件
-- 状态：进行中（基础回归全通过；Ellis/DMX 项目级回归已运行，发现两类新问题）
+- 状态：进行中（基础回归全通过；exporter 私有 DOM 已并入公共 codec；binary v3/v4 解析待修）
 - 优先级：中
 - 最新回归结果（2026-04-09）：
   - 基础样例（6/6）：`simple_hierarchy` ✅ `simple_blendshape` ✅ `simple_mesh` ✅ `simple_skinned_mesh` ✅ `complex_chr_mesh` ✅ `MostComplexSampleSet/chr_mesh` ✅
@@ -190,7 +190,7 @@
     - importer 已支持基础 `DmeFloatLog` 标量动画；[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx) 已验证在 `|float_anim_root|float_anim_joint.scaleX` 上生成 3 个关键帧。
     - importer 已支持最小 `flexWeight` facial 通道：同一条 `DmeFloatLog` 现在可同时驱动已导入 `blendShape` 权重与最小 `DmeCombinationOperator` 控制节点属性；[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 已验证会同时生成 `combinationOperator_controls.smile` 与 `blendshapeAnimMeshShape_blendShape.smile` 两条 3 帧动画曲线。
     - exporter 已开始补最小动画导出。当前 [DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 已支持导出单个 `animationList`，覆盖 `position`、`orientation`、transform 标量通道以及最小 `flexWeight` 通道；私有 binary serializer 也已补上 `time/time_array`。用 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 实测时，[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx) 的 text/binary 动画 roundtrip 已通过。
-    - translator 结构拆分已开始：已把 exporter 文本 DOM helper 拆到 [DmxExportTextModel.h](dcc_plugin/src/exporter/DmxExportTextModel.h) / [DmxExportTextModel.cpp](dcc_plugin/src/exporter/DmxExportTextModel.cpp)，把 importer 的 DMX 查询、数值解析和命名清洗 helper 拆到 [DmxImportUtils.h](dcc_plugin/src/importer/DmxImportUtils.h) / [DmxImportUtils.cpp](dcc_plugin/src/importer/DmxImportUtils.cpp)，为后续继续拆 animation / mesh / material / skin 逻辑打基础。
+    - translator 结构拆分已开始：（旧 DmxExportTextModel 已删除，见下）把 importer 的 DMX 查询、数值解析和命名清洗 helper 拆到 [DmxImportUtils.h](dcc_plugin/src/importer/DmxImportUtils.h) / [DmxImportUtils.cpp](dcc_plugin/src/importer/DmxImportUtils.cpp)，为后续继续拆 animation / mesh / material / skin 逻辑打基础。
     - 第二轮 translator 拆分已把 animation 相关 context/option 结构与 helper 群从主文件移出：新增 [DmxExportTranslatorTypes.h](dcc_plugin/src/exporter/DmxExportTranslatorTypes.h)、[DmxExportAnimation.hpp](dcc_plugin/src/exporter/DmxExportAnimation.hpp)、[DmxImportTranslatorTypes.h](dcc_plugin/src/importer/DmxImportTranslatorTypes.h)、[DmxImportAnimation.hpp](dcc_plugin/src/importer/DmxImportAnimation.hpp)，当前主 translator 已明显收缩，动画导入导出逻辑可在不触碰 mesh/skin 主流程的前提下继续迭代。
     - 第三轮 translator 拆分已把 deformer 相关 helper 从主文件移出：新增 [DmxExportDeformers.hpp](dcc_plugin/src/exporter/DmxExportDeformers.hpp) 与 [DmxImportDeformers.hpp](dcc_plugin/src/importer/DmxImportDeformers.hpp)，集中收纳 `skinCluster`、`deltaStates`、`blendShape` 恢复/导出相关逻辑；当前 [DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 与 [DmxImportTranslator.cpp](dcc_plugin/src/importer/DmxImportTranslator.cpp) 已主要保留主流程与 mesh/material 逻辑，复杂样例相关 deformer 代码可以在更小的边界内继续调试。
     - 第四轮 translator 拆分已开始把 mesh/material helper 从主文件移出：新增 [DmxExportMeshMaterial.hpp](dcc_plugin/src/exporter/DmxExportMeshMaterial.hpp) 与 [DmxImportMeshMaterial.hpp](dcc_plugin/src/importer/DmxImportMeshMaterial.hpp)，exporter 侧已收拢 face set 与基础材质提取逻辑，importer 侧已收拢 UV 集解析、mesh vertexData 选择与 face set 材质恢复逻辑；`cmake --build build\maya_dmx --config Release --target maya_dmx` 复编通过，后续可继续把 `CreateMeshShape()` 等更大的 mesh 主路径从 translator 主文件中移出。
@@ -228,7 +228,7 @@
   - 材质网络恢复深度仍不足。`AssignFaceSetMaterials()` 虽已改为 API 实现，但当前仍只覆盖基础 shader 图，尚未补 `place2dTexture`、utility 链、分层材质以及更完整的 Valve/Maya 材质语义映射。
   - `exportMetadata=0` 当前只裁掉 Maya 专用 metadata 和材质 inline metadata，不会改写核心 mesh/skin/delta 数据；如果后续希望进一步削减文件大小，还需要继续评估哪些非 `maya*` 字段也可选裁剪而不破坏回读。
   - `SimpleDmx*` 仍是插件定制层，不是通用 DMX DOM/codec。继续扩大 Valve DMX 兼容范围时，未知字段保真、顺序保真和引用语义都会成为重构阻力。
-  - `SimpleDmx*` 虽然已经拆出公共 DOM 和 type 映射，exporter 侧 type code 也已切到公共映射，但 [DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 仍保留一套独立的 binary serializer 结构；如果不继续把这层往公共 codec 收，后续补 unknown field / 顺序保真时仍会存在实现分叉。
+  - ✅ ~~exporter 私有 DOM / binary serializer 已并入公共 codec（2026-04-09）~~：`DmxExportTextModel.h/.cpp` 已删除；`DmxTextBuilder` 已替换为 `simple_dmx::DocumentBuilder`；`DmxElement*` 全部改为 `simple_dmx::Element*`；binary export 已消除 text→parse→binary 中转，直接走 `SerializeDocumentBinary(builder.Build())`；`SerializeDocumentText` 已修复 inline element 二次输出 bug（`CollectInlineDescendants`）。
   - 当前 `SimpleDmx*` 已能在 text 路径上保留 unknown field 与属性顺序，但“未知 declared type 的 text -> binary” 仍不成立：例如 [simple_unknown_order.dmx](dcc_plugin/samples/simple_unknown_order.dmx) 中的 `mystery_type` / `mystery_array` 目前仍会在 binary 写出阶段被拒绝，因为标准 binary DMX 没有可直接承载这类未知自定义类型名的 type code。
   - 未知 declared type 的 binary 保真目前不存在低成本“原样写回”方案。根据 [dmattributetypes.h](src/public/datamodel/dmattributetypes.h) 的 `DmAttributeType_t`，binary DMX 只有固定 type code 集，没有用于任意自定义 declared type 名的扩展槽位；因此现阶段如果继续要求 Valve 兼容的 binary DMX，未知类型只能选择显式报错、导出时强制回退 text、或引入插件私有旁带保真方案，不能像 text DMX 那样无损直接写出。
   - [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx) 并不是“带蒙皮和 BlendShape 的模型样例”，而是纯 `skeleton + channels/logs` 动画样例；当前它更适合作为动画支持回归入口，而不是 `skin + blendShape` 组合回归入口。
@@ -255,12 +255,10 @@
   - 第一优先级：
     - ✅ ~~`complex_chr_mesh` 与 `MostComplexSampleSet/chr_mesh` 顶点漂移~~（已修复，2026-04-09）
     - ✅ ~~把 Ellis/DMX 纳入回归门槛并运行~~（已运行，2026-04-09，结果见上）
-    - ✅ ~~**修复含 n-gon 的网格拓扑不匹配**~~（已修复，2026-04-09）：
-      - 根本原因：`getConnectedSetsAndMembers()` 返回 shading group 的顺序由 Maya 决定（可能是字母序），与原始 DMX face set 顺序不同，导致 roundtrip 后多边形 index 错位，比较时出现假阳性 quad→tri。
-      - 修复：[DmxExportMesh.cpp](dcc_plugin/src/exporter/DmxExportMesh.cpp) — 收集所有 per-face face set 后，按各自最小 polygon index 排序再输出；同时对每个 face set 内部的 polygon 索引也做升序排序，保证 roundtrip 拓扑稳定性与原始 face set 顺序无关。
-      - 已新增 [simple_ngon_mesh.dmx](dcc_plugin/samples/simple_ngon_mesh.dmx) 样例（5-vertex n-gon + quad，face set 名称倒序 zzz_mat → aaa_mat 覆盖字母序问题）并加入 RunMayaBatchRegression.bat / RunSampleRegression.bat。
+    - ✅ ~~**修复含 n-gon 的网格拓扑不匹配**~~（已修复，2026-04-09）：根本原因：`getConnectedSetsAndMembers()` 返回顺序由 Maya 决定；修复：按最小 polygon index 排序 per-face face set 再输出。
+    - ✅ ~~**exporter 私有 DOM 并入公共 codec**~~（已完成，2026-04-09）：删除 `DmxExportTextModel`，迁移到 `DocumentBuilder`，binary export 消除 text→parse 中转。
     - 补独立动画宿主回归，避免后续改 importer 时 [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx)、[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx)、[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 退回”只导骨架不导关键帧”。
-  - 第二优先级（技术债务，修复 n-gon 问题后再做）：
+  - 第二优先级（技术债务）：
     - **修复 binary v3/v4 解析**：
       - 在 `SimpleDmxBinary.cpp` 按 `version` 分叉 `ParseDocument` 逻辑
       - v3：element count 为 int16，element dict 内联字符串，无 string table
@@ -273,18 +271,26 @@
     - **代码规范约束（强制执行）**：
       - 禁止使用 `.hpp` 文件；所有声明放 `.h`，所有实现放 `.cpp`，不得保留或新增 `.hpp`。
       - 禁止匿名 namespace（`namespace { ... }`）；需要限制符号可见性时，改用具名 namespace 或 `static` 修饰符。
-    - **`.hpp` 拆分与 common 头文件整理**：
-      - 将现有 `.hpp`（[DmxExportAnimation.hpp](dcc_plugin/src/exporter/DmxExportAnimation.hpp)、[DmxExportDeformers.hpp](dcc_plugin/src/exporter/DmxExportDeformers.hpp)、[DmxExportMeshMaterial.hpp](dcc_plugin/src/exporter/DmxExportMeshMaterial.hpp)、[DmxImportAnimation.hpp](dcc_plugin/src/importer/DmxImportAnimation.hpp)、[DmxImportDeformers.hpp](dcc_plugin/src/importer/DmxImportDeformers.hpp)、[DmxImportMeshMaterial.hpp](dcc_plugin/src/importer/DmxImportMeshMaterial.hpp)）各自拆分为同名 `.h` + `.cpp`。
+    - **`.hpp` 拆分与 common 头文件整理**（与下一条合并做）：
+      - 将现有 `.hpp`（`DmxExportAnimation.hpp`、`DmxExportDeformers.hpp`、`DmxExportMeshMaterial.hpp`、`DmxImportAnimation.hpp`、`DmxImportDeformers.hpp`、`DmxImportMeshMaterial.hpp`）各自拆分为同名 `.h` + `.cpp`。
       - 识别 importer/exporter 双侧共用的类型、工具函数和辅助结构，统一移入 [dcc_plugin/src/common](dcc_plugin/src/common)，避免跨侧重复声明。
       - 完成后同步更新 CMakeLists.txt，确保新增 `.cpp` 文件纳入编译。
+    - ✅ ~~**importer DOM 查询 helper 并入公共 codec**~~（已完成，2026-04-09）：`FindAttributeElement/Array/String/StringArray` 和 `ParseNumberList` 已搬入 `SimpleDmxDocument.h/.cpp`；importer/exporter 两侧改为 `using simple_dmx::`；`DmxImportUtils` 只保留 `SanitizeNodeName`。
     - 继续拆分 [DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 与 [DmxImportTranslator.cpp](dcc_plugin/src/importer/DmxImportTranslator.cpp) 中 namespace 里的数据结构和方法，优先抽离 animation、mesh、material、skin 等子模块到更小的 `.h/.cpp` 文件，减少单文件耦合并提高复用性。
-    - 在 [SimpleDmxDocument.h](dcc_plugin/src/common/SimpleDmxDocument.h) 与 [SimpleDmxTypes.h](dcc_plugin/src/common/SimpleDmxTypes.h) 这一层稳定后，继续把 `SimpleDmx*` 从插件定制实现逐步拆成更通用的 DOM/codec 层，优先补完整 attribute type、未知字段保真和 text/binary 对称。
+    - 在 [SimpleDmxDocument.h](dcc_plugin/src/common/SimpleDmxDocument.h) 与 [SimpleDmxTypes.h](dcc_plugin/src/common/SimpleDmxTypes.h) 这一层稳定后，继续补完整 attribute type、未知字段保真和 text/binary 对称。
     - 在 text 路径的 unknown field / 顺序保真已落地后，继续评估未知 declared type 的 text -> binary 降级策略、旁带保真或显式能力边界，避免 binary exporter 对自定义类型直接硬失败。
-    - 在 type code 已统一后，继续把 exporter 私有 serializer 往公共 codec 收，减少 `SimpleDmx*` 与 [DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 的双份维护。
     - 为动画 DMX 单独补 importer/exporter 路线图，优先支持 `DmeAnimationList / DmeChannelsClip / DmeChannel / DmeTimeFrame / DmeVector3Log / DmeQuaternionLog` 这条骨骼变换动画主干，并明确它与现有静态 mesh / skin translator 的关系。
     - 在最小骨骼变换动画 importer 已落地后，继续评估 `DmeFloatLog`、vertex animation list、flex / facial animation 和动画导出，确认是沿现有 translator 扩展还是单独拆动画工作流。
     - 在最小 `skin + deltaStates` 样例已通过后，继续找更接近 Valve 角色资产的复合样例，确认 `sculptTarget -regenerate` 这条 fallback 在复杂 blendShape / 多 target / 多 mesh history 下是否仍稳定。
     - 在通用 DMX 层稳定后，再扩主干类型覆盖范围，最后再评估更大范围的 Valve DMX rig / animation 兼容。
+
+- importer 并入公共 codec 评估（2026-04-09）：
+  - **结论：importer 不存在”私有 DOM”问题，已直接消费 `simple_dmx::Document`，不需要对称的整体迁移。**
+  - exporter 迁移的核心价值在于删除了整套私有 `DmxTextBuilder/DmxElement` DOM 并消除 text→parse→binary 中转；importer 从一开始就直接在 `document.Parse()` 后遍历 `simple_dmx::Element*`，没有这层独立 DOM。
+  - 仍有两处轻量改进值得与”`.hpp` 拆分”一轮合并做：
+    1. **`FindAttribute*` 并入公共层**：`DmxImportUtils` 中的 `FindAttributeElement/Array/String/StringArray` 本质上是 DOM 便捷访问器，搬入 `SimpleDmxDocument.h/.cpp` 后对未来新消费者可见。工作量极小，风险低。
+    2. **`ParseNumberList` 去重**：importer（`DmxImportUtils`）与 exporter（`DmxExportInternals`）各自实现了同名函数，合并到公共层消除重复。
+  - **不并入**：`SanitizeNodeName`、`SetVector3Plug`、`EnsureDependencyNode` 等 Maya API 调用，以及 `ImportContext/ImportOptions`——这些是插件专用逻辑，与 codec 无关。
 
 ## 环境与工具链说明
 

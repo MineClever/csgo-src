@@ -20,11 +20,11 @@
 
 namespace dmx_import_impl
 {
-using dmx_import_utils::FindAttributeElement;
-using dmx_import_utils::FindAttributeElementArray;
-using dmx_import_utils::FindAttributeString;
-using dmx_import_utils::FindAttributeStringArray;
-using dmx_import_utils::ParseNumberList;
+using simple_dmx::FindAttributeElement;
+using simple_dmx::FindAttributeElementArray;
+using simple_dmx::FindAttributeString;
+using simple_dmx::FindAttributeStringArray;
+using simple_dmx::ParseNumberList;
 using dmx_import_utils::SanitizeNodeName;
 
 using dmx_import_translator::BlendShapeTargetBinding;
