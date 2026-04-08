@@ -134,8 +134,20 @@
 ## DCC / Maya 插件计划
 
 ### 9. 为 Maya 2022.5 开发 DMX 导入导出插件
-- 状态：进行中
+- 状态：进行中（基础回归全通过；Ellis/DMX 项目级回归已运行，发现两类新问题）
 - 优先级：中
+- 最新回归结果（2026-04-09）：
+  - 基础样例（6/6）：`simple_hierarchy` ✅ `simple_blendshape` ✅ `simple_mesh` ✅ `simple_skinned_mesh` ✅ `complex_chr_mesh` ✅ `MostComplexSampleSet/chr_mesh` ✅
+  - Ellis/DMX 项目级（2/9）：
+    - `head_morphs_sfm.dmx` ✅（keyvalues2，无蒙皮）
+    - `mechanic_morphs_sfm.dmx` ✅（keyvalues2，无蒙皮）
+    - `upper_teeth.dmx` ❌ binary v3 解析失败（"unexpected end of string table"）
+    - `lower_teeth.dmx` ❌ binary v3 解析失败
+    - `teeth_sfm.dmx` ❌ binary v4 解析失败（"element dictionary referenced an invalid string"）
+    - `mechanic_model.dmx` ❌ binary v4 解析失败
+    - `head_morphs.dmx` ❌ binary v4 解析失败
+    - `mechanic_model_merged.dmx` ❌ 网格拓扑不匹配（poly 2247: quad→tri，含 n-gon）
+    - `head_morphs_game.dmx` ❌ 网格拓扑不匹配（poly 2247: quad→tri，含 n-gon）
 - 目标目录：[dcc_plugin](dcc_plugin)
 - 开发环境：
   - Maya 2022.5 DevKit：`D:\_Code_Here\Maya\Autodesk_Maya_2022_5_Update_DEVKIT_Windows\devkitBase`
@@ -203,11 +215,16 @@
     - 更大范围的 Valve 历史 DMX 兼容、未知字段保真、通用 DOM/codec。
     - UFE、USD、代理节点等非 DAG 混合场景对象的完整支持。
 
+- 已修复问题（2026-04-09 本轮完成）：
+  - **Maya 2022 API 兼容性**：`getAlias` → `plugsAlias`；`MFn::kSkinCluster` → `MFn::kSkinClusterFilter`；补充 `#include <maya/MDoubleArray.h>`；`setAlias` 参数类型错误修正。受影响文件：`DmxExportAnimation.cpp`、`DmxExportDeformers.cpp`、`DmxImportDeformers.cpp`。
+  - **MDGModifier 崩溃**：将 blendShape target 临时节点删除从 `MDGModifier::deleteNode`（析构时触发回调崩溃）回退为 MEL `delete` 命令。受影响文件：`DmxExportDeformers.cpp`、`DmxImportDeformers.cpp`。
+  - **二进制 DMX 导出**：`CollectReachableElements` 跳过 inline 元素导致 `WriteElementRef` 无法解析索引，已移除 inline 判断，遍历所有元素。受影响文件：`SimpleDmxWrite.cpp`。
+  - **坐标系修正顺序**：Z-up 导入时轴修正旋转被 `ApplyTransform` 覆盖，改为将轴修正置于 `ApplyTransform` 之后执行。受影响文件：`DmxImportTranslator.cpp`。
+  - **Bind Shape 顶点位置**：exporter 从 output mesh（变形后）取顶点位置，改为优先从 intermediate mesh（bind shape）取位置。受影响文件：`DmxExportDag.cpp`、`DmxExportMesh.cpp`。
+  - **bindPreMatrix 顺序错位**：存储的 `mayaBindPreMatrix` 按 Maya 导出顺序排列，而导入时按 DMX 关节索引顺序分配，导致矩阵错位。改为按关节名称路径匹配查找对应矩阵。受影响文件：`DmxImportDeformers.cpp`。
+  - **零权重填充索引污染**：导出时用 `{0, 0.0}` 填充空槽，导致关节 0 被误判为活跃影响，改为 `{-1, 0.0}`（负数索引由导入器忽略）。受影响文件：`DmxExportDeformers.cpp`。
+
 - 已确认剩余问题：
-  - 复杂样例导入时的 `weight total would have exceeded 1.0` 警告已在 `chr_mesh_body_bin.dmx` 上收敛，但还没有对所有复杂资产做全量重新回归，仍需确认这套 `setWeights()` 前后时序调整能否覆盖 `complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 等样例。
-  - `MostComplexSampleSet/chr_mesh` 的“导入即丢蒙皮”问题已经在 importer 侧收敛，但新的 `skincheck` 回归确认 exporter 对复杂样例的 skin roundtrip 仍未完整保真：当前导出的 text/binary DMX 在再导入时会丢失一批使用 transform influence 的 skinCluster，说明 exporter 的 influence 注册 / `jointList` 组织仍需继续补。
-  - `chr_mesh_body_bin.dmx` 直接导入后的蒙皮权重现在已能正确落到 Maya `skinCluster`，但针对该样例的 `mayapy` roundtrip 回归仍失败在 `arm_handCoverShape at vertex 0` 的点位失配，说明 exporter 对这类复杂 body 样例的几何/skin 保真仍未完全收口。
-  - 2026-04-07 这轮通过 `C:\Program Files\Autodesk\Maya2022\bin\mayapy.exe` 的干净宿主回归再次确认：`complex_chr_mesh`、`MostComplexSampleSet/chr_mesh`、`chr_mesh_body_bin.dmx` 仍未通过第一优先级回归门槛，失败点分别为 `Object001Shape at vertex 0` 与 `arm_handCoverShape at vertex 0`；当前优先级已经从“先看 skinCluster 警告是否压平”收敛为“继续定位 exporter 在复杂 body / hand cover 样例上的几何或 skin roundtrip 漂移来源”。
   - 材质网络恢复深度仍不足。`AssignFaceSetMaterials()` 虽已改为 API 实现，但当前仍只覆盖基础 shader 图，尚未补 `place2dTexture`、utility 链、分层材质以及更完整的 Valve/Maya 材质语义映射。
   - `exportMetadata=0` 当前只裁掉 Maya 专用 metadata 和材质 inline metadata，不会改写核心 mesh/skin/delta 数据；如果后续希望进一步削减文件大小，还需要继续评估哪些非 `maya*` 字段也可选裁剪而不破坏回读。
   - `SimpleDmx*` 仍是插件定制层，不是通用 DMX DOM/codec。继续扩大 Valve DMX 兼容范围时，未知字段保真、顺序保真和引用语义都会成为重构阻力。
@@ -220,12 +237,35 @@
   - “蒙皮 + blendShape 同时存在”的最小闭环问题已完成一轮收敛。当前 [DmxImportTranslator.cpp](dcc_plugin/src/importer/DmxImportTranslator.cpp) 已改成先 `ApplySkinning()` 再 `ApplyDeltaStates()`，修复了 `skinCluster API creation failed`；[DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 也已在 `blendShapeFn.getTargets()` 拿不到 live target DAG 时，通过 `sculptTarget -regenerate` 临时重建 target 再提取 `DmeVertexDeltaData`，因此最小 `skin + deltaStates` 样例的 text/binary roundtrip 已能保住 `blendShape`。
   - 旧版错误编码产生的历史 batch 文件如果残留在 Maya 用户目录里，`listBatches` 仍可能显示脏名称；新格式已可用，但还缺一次性清理或文件头校验。
 
+- 已确认的新问题（Ellis/DMX 回归，2026-04-09）：
+  - **Binary v3/v4 解析不兼容**：
+    - 现象：插件 parser 假设 v5 风格（先 int32 string count → string table → element dict 用索引引用字符串），但 v3/v4 在 element dict 内联字符串，无独立 string table。
+    - v3 错误路径：读 int16 element count（如 `0x004e = 78`），解析器当成 int32 string count，尝试读 78 个字符串条目，遇到非字符串数据 → “unexpected end of string table”。
+    - v4 错误路径：读 int32（251）作为 string count，读 251 条内联字符串成功，再尝试解析 element dict 时字符串索引越界 → “element dictionary referenced an invalid string”。
+    - 修复难度：**高**。需要在 `SimpleDmxBinary.cpp` 按 encoding version 分叉解析路径；v3/v4 的 element dict 格式与 v5 差异显著，需要单独实现并做好单元测试。
+    - 影响文件：`upper_teeth.dmx`、`lower_teeth.dmx`（v3）；`teeth_sfm.dmx`、`mechanic_model.dmx`、`head_morphs.dmx`（v4）
+  - **含 n-gon 网格拓扑不匹配**：
+    - 现象：keyvalues2 格式的生产级模型（含 5 顶点 n-gon polygon），roundtrip 后 poly 2247 的顶点数从 4 变为 3（quad → tri）。
+    - 已确认：原始 poly 2255 为 5-verts n-gon；poly 2247 原为 quad `[7,6,10,12]`，roundtrip 后顶点数变为 3。
+    - 怀疑方向：exporter 端 `MItMeshPolygon` 导出混合多边形时可能发生隐式三角化或面集合分割；或 importer 端面集恢复时 face count 误差导致拓扑移位。
+    - 修复难度：**中**。需要在 exporter 端加 n-gon 覆盖测试样例，逐步定位 `polygonFaceIndices` 中的错误条目来源。
+    - 影响文件：`mechanic_model_merged.dmx`、`head_morphs_game.dmx`
+
 - 下一阶段计划：
   - 第一优先级：
-    - 针对 `complex_chr_mesh/Object001Shape` 与 `MostComplexSampleSet/chr_mesh`、`chr_mesh_body_bin.dmx` 中 `arm_handCoverShape` 的顶点漂移，继续定位 exporter 在复杂 body 样例上的几何/skin roundtrip 失真来源，并补新的对比日志或最小复现。
-    - 在最小 transform animation import、基础 `DmeFloatLog`、最小 `flexWeight -> blendShape weight` 和最小 `DmeCombinationOperator` 控制器属性已通过后，继续把动画支持扩到更贴近 Valve 资产的 controls/controlValues 组合驱动语义，并补独立的动画宿主回归，避免后续改 importer 时把 [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx)、[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx) 或 [simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 再退回成“只导骨架不导关键帧”。
-    - 在最小样例和中等复杂样例稳定后，把 [dcc_plugin/samples/Ellis/DMX](dcc_plugin/samples/Ellis/DMX) 纳入最终回归门槛，优先覆盖 `mechanic_model*`、`head_morphs*` 与 `animation/` 中的代表性资产，作为项目级 importer/exporter/facial/animation 综合验证样本。
-  - 第二优先级：
+    - ✅ ~~`complex_chr_mesh` 与 `MostComplexSampleSet/chr_mesh` 顶点漂移~~（已修复，2026-04-09）
+    - ✅ ~~把 Ellis/DMX 纳入回归门槛并运行~~（已运行，2026-04-09，结果见上）
+    - **修复含 n-gon 的网格拓扑不匹配**（影响两个 keyvalues2 生产模型）：
+      - 先制作最小 n-gon 复现样例（含 5-verts polygon 的简单 Maya 网格）
+      - 在 exporter 端打印 `polygonFaceIndices` 调试信息，定位 quad→tri 发生的具体位置
+      - 修复后补回归用例，确保混合三角/四边/n-gon 网格 roundtrip 不改变拓扑
+    - 补独立动画宿主回归，避免后续改 importer 时 [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx)、[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx)、[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 退回”只导骨架不导关键帧”。
+  - 第二优先级（技术债务，修复 n-gon 问题后再做）：
+    - **修复 binary v3/v4 解析**：
+      - 在 `SimpleDmxBinary.cpp` 按 `version` 分叉 `ParseDocument` 逻辑
+      - v3：element count 为 int16，element dict 内联字符串，无 string table
+      - v4：element count 为 int32，element dict 内联字符串，无独立 string table
+      - 修复后可覆盖 `upper_teeth`、`lower_teeth`（v3）和 `teeth_sfm`、`mechanic_model`、`head_morphs`（v4）
     - 继续补材质网络，扩到 `place2dTexture`、utility 节点链、更多 shader 类型和更稳定的贴图路径还原。
     - 继续补组合型面部控制器和更完整 deformer / rig 元数据，逐步接近 Valve 角色资产的面部工作流。
     - 为 workflow 增加旧 batch 文件清理、格式校验和更明确的错误提示。
