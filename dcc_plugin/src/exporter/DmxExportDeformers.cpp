@@ -1,3 +1,35 @@
+#include "DmxExportDeformers.h"
+#include "DmxExportInternals.h"
+
+#include <algorithm>
+#include <cmath>
+#include <string>
+#include <vector>
+
+#include <maya/MDagPath.h>
+#include <maya/MDagPathArray.h>
+#include <maya/MFnBlendShapeDeformer.h>
+#include <maya/MFnDagNode.h>
+#include <maya/MFnDependencyNode.h>
+#include <maya/MFnMatrixData.h>
+#include <maya/MFnMesh.h>
+#include <maya/MFnSingleIndexedComponent.h>
+#include <maya/MFnSkinCluster.h>
+#include <maya/MGlobal.h>
+#include <maya/MIntArray.h>
+#include <maya/MItDependencyGraph.h>
+#include <maya/MMatrix.h>
+#include <maya/MObjectArray.h>
+#include <maya/MPlug.h>
+#include <maya/MPointArray.h>
+#include <maya/MSelectionList.h>
+#include <maya/MStatus.h>
+#include <maya/MString.h>
+#include <maya/MStringArray.h>
+
+namespace dmx_export_impl
+{
+
 void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement, ExportContext &context)
 {
     MString skinClusterNodeName;
@@ -510,3 +542,5 @@ void AppendBlendShapeDeltaStates(
         }
     }
 }
+
+} // namespace dmx_export_impl

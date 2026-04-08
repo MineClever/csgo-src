@@ -1,4 +1,11 @@
 add_library(maya_dmx_import STATIC
+    DmxImportAnimation.cpp
+    DmxImportAnimation.h
+    DmxImportDeformers.cpp
+    DmxImportDeformers.h
+    DmxImportInternals.h
+    DmxImportMeshMaterial.cpp
+    DmxImportMeshMaterial.h
     DmxImportUtils.cpp
     DmxImportUtils.h
     DmxImportTranslator.cpp

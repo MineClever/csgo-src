@@ -1,4 +1,42 @@
-MObject FindPrimaryMeshChild(const MObject &transformObject)
+#include "DmxImportDeformers.h"
+#include "DmxImportInternals.h"
+
+#include "../common/MayaDmxCommon.h"
+
+#include <algorithm>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include <maya/MDagPath.h>
+#include <maya/MDagPathArray.h>
+#include <maya/MDGModifier.h>
+#include <maya/MFnBlendShapeDeformer.h>
+#include <maya/MFnDagNode.h>
+#include <maya/MFnDependencyNode.h>
+#include <maya/MFnMatrixData.h>
+#include <maya/MFnMesh.h>
+#include <maya/MFnSet.h>
+#include <maya/MFnSingleIndexedComponent.h>
+#include <maya/MFnSkinCluster.h>
+#include <maya/MFnTransform.h>
+#include <maya/MFloatArray.h>
+#include <maya/MGlobal.h>
+#include <maya/MIntArray.h>
+#include <maya/MItDependencyGraph.h>
+#include <maya/MMatrix.h>
+#include <maya/MObject.h>
+#include <maya/MPlug.h>
+#include <maya/MPointArray.h>
+#include <maya/MSelectionList.h>
+#include <maya/MStatus.h>
+#include <maya/MString.h>
+#include <maya/MStringArray.h>
+
+namespace dmx_import_impl
+{
+
+static MObject FindPrimaryMeshChildForDeformers(const MObject &transformObject)
 {
     MStatus status;
     MFnDagNode dagNode(transformObject, &status);
@@ -25,35 +63,7 @@ MObject FindPrimaryMeshChild(const MObject &transformObject)
     return MObject::kNullObj;
 }
 
-MObject FindSkinClusterForMesh(const MObject &meshObject)
-{
-    MStatus status;
-    MObject meshObjectCopy(meshObject);
-    MItDependencyGraph iterator(
-        meshObjectCopy,
-        MFn::kSkinClusterFilter,
-        MItDependencyGraph::kUpstream,
-        MItDependencyGraph::kDepthFirst,
-        MItDependencyGraph::kNodeLevel,
-        &status);
-    if (!status)
-    {
-        return MObject::kNullObj;
-    }
-
-    for (; !iterator.isDone(); iterator.next())
-    {
-        MObject current = iterator.currentItem(&status);
-        if (status && !current.isNull() && current.hasFn(MFn::kSkinClusterFilter))
-        {
-            return current;
-        }
-    }
-
-    return MObject::kNullObj;
-}
-
-MStatus CreateSkinClusterWithApi(
+static MStatus CreateSkinClusterWithApi(
     const simple_dmx::Element *vertexData,
     const MDagPathArray &influencePaths,
     const MDagPath &meshDagPath,
@@ -261,7 +271,7 @@ MStatus CreateSkinClusterWithApi(
     return dgModifier.doIt();
 }
 
-MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData, const MObject &skinClusterObject)
+static MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData, const MObject &skinClusterObject)
 {
     MStatus status;
     MFnDependencyNode skinClusterNode(skinClusterObject, &status);
@@ -327,7 +337,11 @@ MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData, const 
     return MS::kSuccess;
 }
 
-MStatus ApplySkinning(const ImportContext &context, const simple_dmx::Element *vertexData, const MObject &meshObject, const MObject &meshParentObject)
+MStatus ApplySkinning(
+    const ImportContext &context,
+    const simple_dmx::Element *vertexData,
+    const MObject &meshObject,
+    const MObject &meshParentObject)
 {
     AppendImportDebugLog("skinning: begin");
     const std::vector<std::string> weightStrings = FindAttributeStringArray(vertexData, "jointWeights");
@@ -673,7 +687,7 @@ MStatus ApplyDeltaStates(
                 return status;
             }
 
-            const MObject duplicateMeshObject = FindPrimaryMeshChild(duplicateTransformObject);
+            const MObject duplicateMeshObject = FindPrimaryMeshChildForDeformers(duplicateTransformObject);
             if (duplicateMeshObject.isNull())
             {
                 return maya_dmx::ReportWarning(MString("maya_dmx: delta target duplicate had no mesh shape: ") + duplicateResult[0]);
@@ -793,3 +807,5 @@ MStatus ApplyDeltaStates(
 
     return MS::kSuccess;
 }
+
+} // namespace dmx_import_impl

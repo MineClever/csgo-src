@@ -15,6 +15,11 @@
 
 #include <Windows.h>
 
+#include "DmxImportInternals.h"
+#include "DmxImportAnimation.h"
+#include "DmxImportDeformers.h"
+#include "DmxImportMeshMaterial.h"
+
 #include <maya/MDagPath.h>
 #include <maya/MDagPathArray.h>
 #include <maya/MDagModifier.h>
@@ -49,7 +54,7 @@
 #include <maya/MVectorArray.h>
 #include <maya/MVector.h>
 
-namespace
+namespace dmx_import_impl
 {
 using dmx_import_utils::FindAttributeElement;
 using dmx_import_utils::FindAttributeElementArray;
@@ -78,12 +83,6 @@ void AppendImportDebugLog(const char *message)
 
     logFile << message << "\n";
 }
-
-struct DeltaStateGroup
-{
-    std::string nodeName;
-    std::vector<const simple_dmx::Element *> states;
-};
 
 using dmx_import_translator::BlendShapeTargetBinding;
 using dmx_import_translator::ImportContext;
@@ -301,9 +300,6 @@ bool ParseMatrixString(const std::string &text, MMatrix &matrix)
     return true;
 }
 
-#include "DmxImportAnimation.hpp"
-#include "DmxImportDeformers.hpp"
-
 MObject FindNodeByName(const std::string &nodeName, MStatus *outStatus = nullptr)
 {
     MStatus status;
@@ -506,8 +502,6 @@ MStatus AssignTextureToShader(
 
     return ConnectPlugs(outputPlug, destinationPlug);
 }
-
-#include "DmxImportMeshMaterial.hpp"
 
 MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::Element *dagElement, MObject object)
 {
@@ -1073,7 +1067,9 @@ const simple_dmx::Element *FindImportRoot(const simple_dmx::Document &document)
 
     return root;
 }
-}
+} // namespace dmx_import_impl
+
+using namespace dmx_import_impl;
 
 void *DmxImportTranslator::Create()
 {

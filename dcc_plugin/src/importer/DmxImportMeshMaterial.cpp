@@ -1,30 +1,23 @@
-struct FaceSetAssignment
-{
-    std::string shadingGroupName;
-    std::string materialName;
-    std::string shaderName;
-    std::string shaderType;
-    std::string color;
-    std::string transparency;
-    std::string diffuseTexture;
-    std::string normalTexture;
-    std::string bumpTexture;
-    int polygonStart = 0;
-    int polygonCount = 0;
-};
+#include "DmxImportMeshMaterial.h"
+#include "DmxImportInternals.h"
 
-struct UvSetData
-{
-    int channelIndex = 0;
-    std::string attributeName;
-    std::string indexAttributeName;
-    std::string mayaSetName;
-    std::vector<std::string> values;
-    std::vector<int> indices;
-    MIntArray polygonVertexIndices;
-};
+#include <algorithm>
+#include <string>
+#include <vector>
 
-int ParseUvChannelIndex(const std::string &attributeName)
+#include <maya/MFnDependencyNode.h>
+#include <maya/MFnMesh.h>
+#include <maya/MFnSet.h>
+#include <maya/MFnSingleIndexedComponent.h>
+#include <maya/MIntArray.h>
+#include <maya/MObject.h>
+#include <maya/MPlug.h>
+#include <maya/MStatus.h>
+
+namespace dmx_import_impl
+{
+
+static int ParseUvChannelIndex(const std::string &attributeName)
 {
     if (attributeName == "textureCoordinates")
     {
@@ -306,3 +299,5 @@ MStatus AssignFaceSetMaterials(
 
     return MS::kSuccess;
 }
+
+} // namespace dmx_import_impl

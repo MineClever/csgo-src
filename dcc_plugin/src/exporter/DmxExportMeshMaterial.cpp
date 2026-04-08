@@ -1,3 +1,15 @@
+#include "DmxExportMeshMaterial.h"
+#include "DmxExportInternals.h"
+
+#include <maya/MFnDependencyNode.h>
+#include <maya/MFnSingleIndexedComponent.h>
+#include <maya/MIntArray.h>
+#include <maya/MPlug.h>
+#include <maya/MStatus.h>
+
+namespace dmx_export_impl
+{
+
 std::vector<int> BuildPolygonRange(int polygonCount)
 {
     std::vector<int> polygonIndices;
@@ -218,3 +230,5 @@ MeshMaterialData BuildMaterialData(const MObject &setObject, const std::string &
 
     return materialData;
 }
+
+} // namespace dmx_export_impl

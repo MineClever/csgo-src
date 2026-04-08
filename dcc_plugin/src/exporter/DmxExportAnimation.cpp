@@ -1,4 +1,33 @@
-DmxElement *FindOrCreateFloatTargetElement(DmxTextBuilder &builder, ExportContext &context, const std::string &targetName)
+#include "DmxExportAnimation.h"
+#include "DmxExportInternals.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
+#include <maya/MDagPath.h>
+#include <maya/MFnAnimCurve.h>
+#include <maya/MFnBlendShapeDeformer.h>
+#include <maya/MFnDagNode.h>
+#include <maya/MFnDependencyNode.h>
+#include <maya/MGlobal.h>
+#include <maya/MItDependencyGraph.h>
+#include <maya/MObject.h>
+#include <maya/MPlug.h>
+#include <maya/MQuaternion.h>
+#include <maya/MEulerRotation.h>
+#include <maya/MSelectionList.h>
+#include <maya/MStatus.h>
+#include <maya/MStringArray.h>
+#include <maya/MTime.h>
+
+namespace dmx_export_impl
+{
+
+static DmxElement *FindOrCreateFloatTargetElement(DmxTextBuilder &builder, ExportContext &context, const std::string &targetName)
 {
     auto targetIt = context.floatTargetElementByName.find(targetName);
     if (targetIt != context.floatTargetElementByName.end())
@@ -13,7 +42,7 @@ DmxElement *FindOrCreateFloatTargetElement(DmxTextBuilder &builder, ExportContex
     return targetElement;
 }
 
-DmxElement *BuildFloatLog(
+static DmxElement *BuildFloatLog(
     DmxTextBuilder &builder,
     const std::string &logName,
     const std::vector<double> &times,
@@ -45,7 +74,7 @@ DmxElement *BuildFloatLog(
     return logElement;
 }
 
-DmxElement *BuildVector3Log(
+static DmxElement *BuildVector3Log(
     DmxTextBuilder &builder,
     const std::string &logName,
     const std::vector<double> &times,
@@ -77,7 +106,7 @@ DmxElement *BuildVector3Log(
     return logElement;
 }
 
-DmxElement *BuildQuaternionLog(
+static DmxElement *BuildQuaternionLog(
     DmxTextBuilder &builder,
     const std::string &logName,
     const std::vector<double> &times,
@@ -109,7 +138,7 @@ DmxElement *BuildQuaternionLog(
     return logElement;
 }
 
-DmxElement *BuildFloatChannel(DmxTextBuilder &builder, const std::string &name, DmxElement *targetElement, const std::string &attributeName, DmxElement *logElement)
+static DmxElement *BuildFloatChannel(DmxTextBuilder &builder, const std::string &name, DmxElement *targetElement, const std::string &attributeName, DmxElement *logElement)
 {
     if (!targetElement || !logElement)
     {
@@ -124,7 +153,7 @@ DmxElement *BuildFloatChannel(DmxTextBuilder &builder, const std::string &name, 
     return channelElement;
 }
 
-void AppendScalarAnimationChannel(
+static void AppendScalarAnimationChannel(
     DmxTextBuilder &builder,
     const MPlug &plug,
     DmxElement *targetElement,
@@ -171,7 +200,7 @@ void AppendScalarAnimationChannel(
     }
 }
 
-void AppendTransformAnimationChannels(
+static void AppendTransformAnimationChannels(
     DmxTextBuilder &builder,
     const MDagPath &dagPath,
     ExportContext &context,
@@ -263,7 +292,7 @@ void AppendTransformAnimationChannels(
     AppendScalarAnimationChannel(builder, findPlug("scaleZ"), transformIt->second, "scaleZ", std::string(dagPath.partialPathName().asChar()) + "_scaleZ_channel", channels, clipDurationSeconds);
 }
 
-void AppendControlAnimationChannels(
+static void AppendControlAnimationChannels(
     DmxTextBuilder &builder,
     const MDagPath &dagPath,
     ExportContext &context,
@@ -321,7 +350,7 @@ void AppendControlAnimationChannels(
     }
 }
 
-void AppendBlendShapeAnimationChannels(
+static void AppendBlendShapeAnimationChannels(
     DmxTextBuilder &builder,
     const MDagPath &meshPath,
     ExportContext &context,
@@ -393,7 +422,7 @@ void AppendBlendShapeAnimationChannels(
     }
 }
 
-void AppendAnimationChannelsRecursive(
+static void AppendAnimationChannelsRecursive(
     DmxTextBuilder &builder,
     const MDagPath &dagPath,
     ExportContext &context,
@@ -479,3 +508,5 @@ DmxElement *BuildAnimationListElement(DmxTextBuilder &builder, const std::vector
     animationListElement->attributes.push_back(MakeElementArrayAttribute("animations", {clipElement}));
     return animationListElement;
 }
+
+} // namespace dmx_export_impl

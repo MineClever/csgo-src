@@ -53,7 +53,12 @@
 
 #include <Windows.h>
 
-namespace
+#include "DmxExportInternals.h"
+#include "DmxExportMeshMaterial.h"
+#include "DmxExportAnimation.h"
+#include "DmxExportDeformers.h"
+
+namespace dmx_export_impl
 {
 using dmx_export::CloneElement;
 using dmx_export::DmxAttribute;
@@ -343,8 +348,6 @@ std::string FindTexturePathFromPlug(const MPlug &plug)
 
     return std::string();
 }
-
-#include "DmxExportMeshMaterial.hpp"
 
 void WriteInt32(std::string &bytes, std::int32_t value)
 {
@@ -1285,9 +1288,6 @@ double EvaluateCurveOrValue(const MObject &curveObject, const MPlug &plug, doubl
     return value;
 }
 
-#include "DmxExportAnimation.hpp"
-#include "DmxExportDeformers.hpp"
-
 DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, ExportContext &context)
 {
     MStatus status;
@@ -1671,7 +1671,9 @@ DmxElement *BuildDagElement(DmxTextBuilder &builder, const MDagPath &dagPath, Ex
 
     return dagElement;
 }
-}
+} // namespace dmx_export_impl
+
+using namespace dmx_export_impl;
 
 void *DmxExportTranslator::Create()
 {

@@ -1,28 +1,29 @@
-const simple_dmx::Element *FindAnimationList(
-    const simple_dmx::Document &document,
-    const simple_dmx::Element *documentRoot,
-    const simple_dmx::Element *importRoot,
-    const simple_dmx::Element *modelRoot)
+#include "DmxImportAnimation.h"
+#include "DmxImportInternals.h"
+
+#include <algorithm>
+#include <string>
+#include <vector>
+
+#include <maya/MAnimControl.h>
+#include <maya/MEulerRotation.h>
+#include <maya/MFnAnimCurve.h>
+#include <maya/MFnDependencyNode.h>
+#include <maya/MFnNumericAttribute.h>
+#include <maya/MFnTransform.h>
+#include <maya/MGlobal.h>
+#include <maya/MObject.h>
+#include <maya/MPlug.h>
+#include <maya/MQuaternion.h>
+#include <maya/MSelectionList.h>
+#include <maya/MStatus.h>
+#include <maya/MStringArray.h>
+#include <maya/MTime.h>
+
+namespace dmx_import_impl
 {
-    if (const simple_dmx::Element *animationList = FindAttributeElement(document, documentRoot, "animationList"))
-    {
-        return animationList;
-    }
 
-    if (const simple_dmx::Element *animationList = FindAttributeElement(document, importRoot, "animationList"))
-    {
-        return animationList;
-    }
-
-    if (const simple_dmx::Element *animationList = FindAttributeElement(document, modelRoot, "animationList"))
-    {
-        return animationList;
-    }
-
-    return nullptr;
-}
-
-const simple_dmx::Element *FindFirstLogLayer(const simple_dmx::Document &document, const simple_dmx::Element *logElement)
+static const simple_dmx::Element *FindFirstLogLayer(const simple_dmx::Document &document, const simple_dmx::Element *logElement)
 {
     if (!logElement)
     {
@@ -33,31 +34,7 @@ const simple_dmx::Element *FindFirstLogLayer(const simple_dmx::Document &documen
     return layers.empty() ? nullptr : layers.front();
 }
 
-const simple_dmx::Element *FindCombinationOperator(
-    const simple_dmx::Document &document,
-    const simple_dmx::Element *documentRoot,
-    const simple_dmx::Element *importRoot,
-    const simple_dmx::Element *modelRoot)
-{
-    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(document, documentRoot, "combinationOperator"))
-    {
-        return combinationOperator;
-    }
-
-    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(document, importRoot, "combinationOperator"))
-    {
-        return combinationOperator;
-    }
-
-    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(document, modelRoot, "combinationOperator"))
-    {
-        return combinationOperator;
-    }
-
-    return nullptr;
-}
-
-MStatus SetCurveKeys(const MPlug &plug, const std::vector<double> &times, const std::vector<double> &values, MFnAnimCurve::AnimCurveType curveType)
+static MStatus SetCurveKeys(const MPlug &plug, const std::vector<double> &times, const std::vector<double> &values, MFnAnimCurve::AnimCurveType curveType)
 {
     if (times.empty() || values.empty() || times.size() != values.size())
     {
@@ -90,7 +67,7 @@ MStatus SetCurveKeys(const MPlug &plug, const std::vector<double> &times, const 
     return MS::kSuccess;
 }
 
-MStatus SetCurveKeysAuto(const MPlug &plug, const std::vector<double> &times, const std::vector<double> &values)
+static MStatus SetCurveKeysAuto(const MPlug &plug, const std::vector<double> &times, const std::vector<double> &values)
 {
     if (times.empty() || values.empty() || times.size() != values.size())
     {
@@ -123,7 +100,7 @@ MStatus SetCurveKeysAuto(const MPlug &plug, const std::vector<double> &times, co
     return MS::kSuccess;
 }
 
-MStatus ApplyVector3Animation(const MDagPath &targetPath, const simple_dmx::Element *logLayer)
+static MStatus ApplyVector3Animation(const MDagPath &targetPath, const simple_dmx::Element *logLayer)
 {
     if (!logLayer)
     {
@@ -202,7 +179,7 @@ MStatus ApplyVector3Animation(const MDagPath &targetPath, const simple_dmx::Elem
     return SetCurveKeys(translateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTL);
 }
 
-MStatus ApplyQuaternionAnimation(const MDagPath &targetPath, const simple_dmx::Element *logLayer)
+static MStatus ApplyQuaternionAnimation(const MDagPath &targetPath, const simple_dmx::Element *logLayer)
 {
     if (!logLayer)
     {
@@ -287,7 +264,7 @@ MStatus ApplyQuaternionAnimation(const MDagPath &targetPath, const simple_dmx::E
     return SetCurveKeys(rotateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTA);
 }
 
-MStatus AddScalarAnimationTarget(std::vector<MPlug> &targets, const MObject &nodeObject, const std::string &attributeName)
+static MStatus AddScalarAnimationTarget(std::vector<MPlug> &targets, const MObject &nodeObject, const std::string &attributeName)
 {
     if (nodeObject.isNull() || attributeName.empty())
     {
@@ -320,7 +297,7 @@ MStatus AddScalarAnimationTarget(std::vector<MPlug> &targets, const MObject &nod
     return MS::kSuccess;
 }
 
-MStatus EnsureControlAttributeTargets(
+static MStatus EnsureControlAttributeTargets(
     ImportContext &context,
     const std::string &targetName)
 {
@@ -376,7 +353,7 @@ MStatus EnsureControlAttributeTargets(
     return MS::kSuccess;
 }
 
-MStatus CollectFloatAnimationTargets(
+static MStatus CollectFloatAnimationTargets(
     ImportContext &context,
     const simple_dmx::Element *targetElement,
     const std::string &attributeName,
@@ -464,7 +441,7 @@ MStatus CollectFloatAnimationTargets(
     return MS::kSuccess;
 }
 
-MStatus ApplyFloatAnimation(const MPlug &targetPlug, const simple_dmx::Element *logLayer)
+static MStatus ApplyFloatAnimation(const MPlug &targetPlug, const simple_dmx::Element *logLayer)
 {
     if (!logLayer || targetPlug.isNull())
     {
@@ -503,7 +480,7 @@ MStatus ApplyFloatAnimation(const MPlug &targetPlug, const simple_dmx::Element *
     return SetCurveKeysAuto(targetPlug, times, values);
 }
 
-MStatus ApplyFloatAnimation(const std::vector<MPlug> &targetPlugs, const simple_dmx::Element *logLayer)
+static MStatus ApplyFloatAnimation(const std::vector<MPlug> &targetPlugs, const simple_dmx::Element *logLayer)
 {
     for (const MPlug &targetPlug : targetPlugs)
     {
@@ -515,6 +492,54 @@ MStatus ApplyFloatAnimation(const std::vector<MPlug> &targetPlugs, const simple_
     }
 
     return MS::kSuccess;
+}
+
+const simple_dmx::Element *FindAnimationList(
+    const simple_dmx::Document &document,
+    const simple_dmx::Element *documentRoot,
+    const simple_dmx::Element *importRoot,
+    const simple_dmx::Element *modelRoot)
+{
+    if (const simple_dmx::Element *animationList = FindAttributeElement(document, documentRoot, "animationList"))
+    {
+        return animationList;
+    }
+
+    if (const simple_dmx::Element *animationList = FindAttributeElement(document, importRoot, "animationList"))
+    {
+        return animationList;
+    }
+
+    if (const simple_dmx::Element *animationList = FindAttributeElement(document, modelRoot, "animationList"))
+    {
+        return animationList;
+    }
+
+    return nullptr;
+}
+
+const simple_dmx::Element *FindCombinationOperator(
+    const simple_dmx::Document &document,
+    const simple_dmx::Element *documentRoot,
+    const simple_dmx::Element *importRoot,
+    const simple_dmx::Element *modelRoot)
+{
+    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(document, documentRoot, "combinationOperator"))
+    {
+        return combinationOperator;
+    }
+
+    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(document, importRoot, "combinationOperator"))
+    {
+        return combinationOperator;
+    }
+
+    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(document, modelRoot, "combinationOperator"))
+    {
+        return combinationOperator;
+    }
+
+    return nullptr;
 }
 
 MStatus ApplyChannelsClipAnimation(ImportContext &context, const simple_dmx::Element *channelsClip)
@@ -701,3 +726,5 @@ MStatus CreateCombinationControls(
 
     return MS::kSuccess;
 }
+
+} // namespace dmx_import_impl
