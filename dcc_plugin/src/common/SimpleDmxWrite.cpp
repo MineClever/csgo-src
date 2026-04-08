@@ -200,6 +200,41 @@ void CollectReachableElements(
     }
 }
 
+// Collect all elements that are referenced as inline children of 'element' or its
+// descendants.  These must not be emitted at the top level by SerializeDocumentText
+// because they will be emitted inline within their parent's attribute body.
+void CollectInlineDescendants(
+    const Element *element,
+    std::unordered_set<const Element *> &inlineDescendants)
+{
+    for (const auto &entry : element->attributes)
+    {
+        const Attribute &attr = entry.second;
+        if (attr.kind == Attribute::Kind::Element && attr.elementValue.inlineElement)
+        {
+            const Element *child = attr.elementValue.inlineElement.get();
+            if (inlineDescendants.insert(child).second)
+            {
+                CollectInlineDescendants(child, inlineDescendants);
+            }
+        }
+        else if (attr.kind == Attribute::Kind::ElementArray)
+        {
+            for (const ElementLink &link : attr.elementArray)
+            {
+                if (link.inlineElement)
+                {
+                    const Element *child = link.inlineElement.get();
+                    if (inlineDescendants.insert(child).second)
+                    {
+                        CollectInlineDescendants(child, inlineDescendants);
+                    }
+                }
+            }
+        }
+    }
+}
+
 void WriteElementBody(const Document &document, std::ostringstream &stream, const Element &element, int indentLevel);
 
 void WriteElementText(
@@ -888,9 +923,21 @@ std::string SerializeDocumentText(const Document &document)
     std::vector<const Element *> ordered;
     std::unordered_set<const Element *> visited;
     CollectReachableElements(document, root, ordered, visited);
+
+    // Elements that appear as inline children must not be emitted at the top level;
+    // they are emitted recursively inside their parent's attribute body.
+    std::unordered_set<const Element *> inlineDescendants;
     for (const Element *element : ordered)
     {
-        WriteElementText(document, stream, *element, 0);
+        CollectInlineDescendants(element, inlineDescendants);
+    }
+
+    for (const Element *element : ordered)
+    {
+        if (inlineDescendants.find(element) == inlineDescendants.end())
+        {
+            WriteElementText(document, stream, *element, 0);
+        }
     }
 
     return stream.str();

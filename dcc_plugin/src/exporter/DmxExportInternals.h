@@ -3,7 +3,7 @@
 // Internal use only — included exclusively by sub-module .cpp files in the exporter.
 // Do NOT include this header from other .h files.
 
-#include "DmxExportTextModel.h"
+#include "../common/SimpleDmxDocument.h"
 #include "DmxExportTranslatorTypes.h"
 
 #include <array>
@@ -18,22 +18,41 @@
 
 namespace dmx_export_impl
 {
-using dmx_export::CloneElement;
-using dmx_export::DmxAttribute;
-using dmx_export::DmxElement;
-using dmx_export::DmxTextBuilder;
-using dmx_export::FindAttribute;
-using dmx_export::GetElementName;
-using dmx_export::MakeElementArrayAttribute;
-using dmx_export::MakeInlineElementAttribute;
-using dmx_export::MakeScalarArrayAttribute;
-using dmx_export::MakeScalarAttribute;
+using simple_dmx::Attribute;
+using simple_dmx::ClearAttrs;
+using simple_dmx::DocumentBuilder;
+using simple_dmx::Element;
+using simple_dmx::ScalarAttr;
+using simple_dmx::ScalarArrayAttr;
+using simple_dmx::SetAttr;
 using dmx_export_translator::ExportContext;
 using dmx_export_translator::ExportOptions;
 using dmx_export_translator::IndexedChannel;
 using dmx_export_translator::MeshMaterialData;
 
-// --- Formatting helpers (implemented in DmxExportTranslator.cpp) ---
+// Find a named attribute; returns nullptr if not present.
+inline const Attribute *FindAttribute(const Element &element, const char *attributeName)
+{
+    auto it = element.attributes.find(attributeName);
+    return it != element.attributes.end() ? &it->second : nullptr;
+}
+
+// Return element.name directly (stored as a field in simple_dmx::Element).
+inline std::string GetElementName(const Element &element)
+{
+    return element.name;
+}
+
+// Shallow-clone an element: same type, same name, copy all attributes.
+inline Element *CloneElement(DocumentBuilder &builder, const Element &source)
+{
+    Element *clone = builder.CreateElement(source.type, source.name);
+    clone->attributes = source.attributes;
+    clone->attributeOrder = source.attributeOrder;
+    return clone;
+}
+
+// --- Formatting helpers (implemented in DmxExportInternals.cpp) ---
 std::string FormatFloat(double value);
 std::string FormatVector2(double x, double y);
 std::string FormatVector3(double x, double y, double z);

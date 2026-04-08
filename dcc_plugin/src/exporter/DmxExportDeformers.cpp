@@ -30,7 +30,7 @@
 namespace dmx_export_impl
 {
 
-void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement, ExportContext &context)
+void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, ExportContext &context)
 {
     MStatus status;
     MObject meshNodeCopy(meshPath.node());
@@ -209,9 +209,9 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
         }
     }
 
-    vertexDataElement.attributes.push_back(MakeScalarAttribute("jointCount", "int", std::to_string(jointCount)));
-    vertexDataElement.attributes.push_back(MakeScalarArrayAttribute("jointIndices", "int_array", std::move(jointIndexValues)));
-    vertexDataElement.attributes.push_back(MakeScalarArrayAttribute("jointWeights", "float_array", std::move(jointWeightValues)));
+    SetAttr(vertexDataElement, "jointCount", ScalarAttr("int", std::to_string(jointCount)));
+    SetAttr(vertexDataElement, "jointIndices", ScalarArrayAttr("int_array", std::move(jointIndexValues)));
+    SetAttr(vertexDataElement, "jointWeights", ScalarArrayAttr("float_array", std::move(jointWeightValues)));
 
     MFnDependencyNode skinClusterNodeFn(skinClusterObject, &status);
     if (!status)
@@ -224,8 +224,8 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
         return;
     }
 
-    vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaDeformerType", "string", "skinCluster"));
-    vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaSkinClusterName", "string", skinClusterNodeFn.name().asChar()));
+    SetAttr(vertexDataElement, "mayaDeformerType", ScalarAttr("string", "skinCluster"));
+    SetAttr(vertexDataElement, "mayaSkinClusterName", ScalarAttr("string", skinClusterNodeFn.name().asChar()));
 
     MPlug skinningMethodPlug = skinClusterNodeFn.findPlug("skinningMethod", true, &status);
     if (status)
@@ -233,7 +233,7 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
         short skinningMethod = 0;
         if (skinningMethodPlug.getValue(skinningMethod) == MS::kSuccess)
         {
-            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaSkinningMethod", "int", std::to_string(static_cast<int>(skinningMethod))));
+            SetAttr(vertexDataElement, "mayaSkinningMethod", ScalarAttr("int", std::to_string(static_cast<int>(skinningMethod))));
         }
     }
 
@@ -243,7 +243,7 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
         int maxInfluences = 0;
         if (maxInfluencesPlug.getValue(maxInfluences) == MS::kSuccess)
         {
-            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaMaxInfluences", "int", std::to_string(maxInfluences)));
+            SetAttr(vertexDataElement, "mayaMaxInfluences", ScalarAttr("int", std::to_string(maxInfluences)));
         }
     }
 
@@ -253,7 +253,7 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
         bool maintainMaxInfluences = false;
         if (maintainMaxInfluencesPlug.getValue(maintainMaxInfluences) == MS::kSuccess)
         {
-            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaMaintainMaxInfluences", "bool", maintainMaxInfluences ? "1" : "0"));
+            SetAttr(vertexDataElement, "mayaMaintainMaxInfluences", ScalarAttr("bool", maintainMaxInfluences ? "1" : "0"));
         }
     }
 
@@ -263,7 +263,7 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
         short normalizeWeights = 0;
         if (normalizeWeightsPlug.getValue(normalizeWeights) == MS::kSuccess)
         {
-            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaNormalizeWeights", "int", std::to_string(static_cast<int>(normalizeWeights))));
+            SetAttr(vertexDataElement, "mayaNormalizeWeights", ScalarAttr("int", std::to_string(static_cast<int>(normalizeWeights))));
         }
     }
 
@@ -273,7 +273,7 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
         bool useComponents = false;
         if (useComponentsPlug.getValue(useComponents) == MS::kSuccess)
         {
-            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaUseComponents", "bool", useComponents ? "1" : "0"));
+            SetAttr(vertexDataElement, "mayaUseComponents", ScalarAttr("bool", useComponents ? "1" : "0"));
         }
     }
 
@@ -283,7 +283,7 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
         const std::string geomMatrixValue = ReadMatrixPlugValue(geomMatrixPlug);
         if (!geomMatrixValue.empty())
         {
-            vertexDataElement.attributes.push_back(MakeScalarAttribute("mayaGeomMatrix", "string", geomMatrixValue));
+            SetAttr(vertexDataElement, "mayaGeomMatrix", ScalarAttr("string", geomMatrixValue));
         }
     }
 
@@ -316,20 +316,20 @@ void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement,
 
     if (!influencePathValues.empty())
     {
-        vertexDataElement.attributes.push_back(MakeScalarArrayAttribute("mayaInfluencePaths", "string_array", std::move(influencePathValues)));
+        SetAttr(vertexDataElement, "mayaInfluencePaths", ScalarArrayAttr("string_array", std::move(influencePathValues)));
     }
     if (!bindPreMatrixValues.empty())
     {
-        vertexDataElement.attributes.push_back(MakeScalarArrayAttribute("mayaBindPreMatrix", "string_array", std::move(bindPreMatrixValues)));
+        SetAttr(vertexDataElement, "mayaBindPreMatrix", ScalarArrayAttr("string_array", std::move(bindPreMatrixValues)));
     }
 }
 
 void AppendBlendShapeDeltaStates(
-    DmxTextBuilder &builder,
+    DocumentBuilder &builder,
     const MDagPath &meshPath,
     const MPointArray &meshPoints,
     ExportContext &context,
-    std::vector<DmxElement *> &deltaStateElements)
+    std::vector<Element *> &deltaStateElements)
 {
     MStatus status;
     MObject meshNodeObject = meshPath.node();
@@ -505,24 +505,23 @@ void AppendBlendShapeDeltaStates(
                 }
             }
 
-            DmxElement *deltaElement = builder.CreateElement("DmeVertexDeltaData");
-            deltaElement->attributes.push_back(MakeScalarAttribute("name", "string", deltaName));
-            deltaElement->attributes.push_back(MakeScalarArrayAttribute("vertexFormat", "string_array", {"positions"}));
-            deltaElement->attributes.push_back(MakeScalarArrayAttribute("positions", "vector3_array", std::move(deltaPositions)));
-            deltaElement->attributes.push_back(MakeScalarArrayAttribute("positionsIndices", "int_array", std::move(deltaPositionIndices)));
+            Element *deltaElement = builder.CreateElement("DmeVertexDeltaData", deltaName);
+            SetAttr(*deltaElement, "vertexFormat", ScalarArrayAttr("string_array", {"positions"}));
+            SetAttr(*deltaElement, "positions", ScalarArrayAttr("vector3_array", std::move(deltaPositions)));
+            SetAttr(*deltaElement, "positionsIndices", ScalarArrayAttr("int_array", std::move(deltaPositionIndices)));
             if (context.exportMetadata)
             {
-                deltaElement->attributes.push_back(MakeScalarAttribute("mayaDeformerType", "string", "blendShape"));
-                deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeNode", "string", blendShapeNodeFn.name().asChar()));
-                deltaElement->attributes.push_back(MakeScalarAttribute("mayaWeightIndex", "int", std::to_string(weightIndex)));
-                deltaElement->attributes.push_back(MakeScalarAttribute("mayaTargetName", "string", targetNodeName.asChar()));
+                SetAttr(*deltaElement, "mayaDeformerType", ScalarAttr("string", "blendShape"));
+                SetAttr(*deltaElement, "mayaBlendShapeNode", ScalarAttr("string", blendShapeNodeFn.name().asChar()));
+                SetAttr(*deltaElement, "mayaWeightIndex", ScalarAttr("int", std::to_string(weightIndex)));
+                SetAttr(*deltaElement, "mayaTargetName", ScalarAttr("string", targetNodeName.asChar()));
                 MPlug envelopePlug = blendShapeNodeFn.findPlug("envelope", true, &status);
                 if (status)
                 {
                     float envelope = 1.0f;
                     if (envelopePlug.getValue(envelope) == MS::kSuccess)
                     {
-                        deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeEnvelope", "float", FormatFloat(envelope)));
+                        SetAttr(*deltaElement, "mayaBlendShapeEnvelope", ScalarAttr("float", FormatFloat(envelope)));
                     }
                 }
                 MPlug originPlug = blendShapeNodeFn.findPlug("origin", true, &status);
@@ -531,7 +530,7 @@ void AppendBlendShapeDeltaStates(
                     short origin = 0;
                     if (originPlug.getValue(origin) == MS::kSuccess)
                     {
-                        deltaElement->attributes.push_back(MakeScalarAttribute("mayaBlendShapeOrigin", "int", std::to_string(static_cast<int>(origin))));
+                        SetAttr(*deltaElement, "mayaBlendShapeOrigin", ScalarAttr("int", std::to_string(static_cast<int>(origin))));
                     }
                 }
             }

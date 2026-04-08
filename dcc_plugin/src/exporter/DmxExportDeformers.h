@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DmxExportTextModel.h"
+#include "../common/SimpleDmxDocument.h"
 #include "DmxExportTranslatorTypes.h"
 
 #include <vector>
@@ -10,16 +10,14 @@
 
 namespace dmx_export_impl
 {
-using dmx_export::DmxElement;
-using dmx_export::DmxTextBuilder;
 using dmx_export_translator::ExportContext;
 
-void AppendSkinningData(const MDagPath &meshPath, DmxElement &vertexDataElement, ExportContext &context);
+void AppendSkinningData(const MDagPath &meshPath, simple_dmx::Element &vertexDataElement, ExportContext &context);
 void AppendBlendShapeDeltaStates(
-    DmxTextBuilder &builder,
+    simple_dmx::DocumentBuilder &builder,
     const MDagPath &meshPath,
     const MPointArray &meshPoints,
     ExportContext &context,
-    std::vector<DmxElement *> &deltaStateElements);
+    std::vector<simple_dmx::Element *> &deltaStateElements);
 
 } // namespace dmx_export_impl

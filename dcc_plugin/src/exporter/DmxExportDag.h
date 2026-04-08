@@ -13,9 +13,9 @@
 namespace dmx_export_impl
 {
 
-DmxElement *BuildTransformElement(DmxTextBuilder &builder, const MDagPath &dagPath);
-DmxElement *BuildDagElement(DmxTextBuilder &builder, const MDagPath &dagPath, ExportContext &context);
-void RegisterDagElementsRecursive(DmxTextBuilder &builder, const MDagPath &dagPath, ExportContext &context);
+simple_dmx::Element *BuildTransformElement(simple_dmx::DocumentBuilder &builder, const MDagPath &dagPath);
+simple_dmx::Element *BuildDagElement(simple_dmx::DocumentBuilder &builder, const MDagPath &dagPath, ExportContext &context);
+void RegisterDagElementsRecursive(simple_dmx::DocumentBuilder &builder, const MDagPath &dagPath, ExportContext &context);
 std::vector<MDagPath> CollectExportRoots(MPxFileTranslator::FileAccessMode mode);
 
 } // namespace dmx_export_impl

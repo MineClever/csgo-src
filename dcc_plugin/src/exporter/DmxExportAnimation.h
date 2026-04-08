@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DmxExportTextModel.h"
+#include "../common/SimpleDmxDocument.h"
 #include "DmxExportTranslatorTypes.h"
 
 #include <string>
@@ -10,12 +10,10 @@
 
 namespace dmx_export_impl
 {
-using dmx_export::DmxElement;
-using dmx_export::DmxTextBuilder;
 using dmx_export_translator::ExportContext;
 
-DmxElement *BuildAnimationListElement(
-    DmxTextBuilder &builder,
+simple_dmx::Element *BuildAnimationListElement(
+    simple_dmx::DocumentBuilder &builder,
     const std::vector<MDagPath> &exportRoots,
     ExportContext &context);
 

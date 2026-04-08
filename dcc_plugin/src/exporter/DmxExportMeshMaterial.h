@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DmxExportTextModel.h"
+#include "../common/SimpleDmxDocument.h"
 #include "DmxExportTranslatorTypes.h"
 
 #include <vector>
@@ -9,8 +9,6 @@
 
 namespace dmx_export_impl
 {
-using dmx_export::DmxElement;
-using dmx_export::DmxTextBuilder;
 using dmx_export_translator::MeshMaterialData;
 
 std::vector<int> BuildPolygonRange(int polygonCount);
@@ -20,13 +18,13 @@ std::vector<std::string> BuildFaceValues(
     const std::vector<int> &polygonIndices,
     const std::vector<std::vector<int>> &polygonFaceIndices);
 void AppendFaceSetElement(
-    DmxTextBuilder &builder,
+    simple_dmx::DocumentBuilder &builder,
     const char *faceSetName,
     const std::vector<int> &polygonIndices,
     const std::vector<std::vector<int>> &polygonFaceIndices,
     const MeshMaterialData *materialData,
     bool exportMetadata,
-    std::vector<DmxElement *> &faceSetElements);
+    std::vector<simple_dmx::Element *> &faceSetElements);
 MeshMaterialData BuildMaterialData(const MObject &setObject, const std::string &fallbackName);
 
 } // namespace dmx_export_impl

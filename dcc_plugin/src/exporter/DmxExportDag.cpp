@@ -32,7 +32,7 @@ static bool ShouldExportRoot(const MDagPath &dagPath)
     return dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint);
 }
 
-DmxElement *BuildTransformElement(DmxTextBuilder &builder, const MDagPath &dagPath)
+Element *BuildTransformElement(DocumentBuilder &builder, const MDagPath &dagPath)
 {
     MStatus status;
     MFnTransform transformFn(dagPath, &status);
@@ -57,13 +57,13 @@ DmxElement *BuildTransformElement(DmxTextBuilder &builder, const MDagPath &dagPa
         return nullptr;
     }
 
-    DmxElement *transformElement = builder.CreateElement("DmeTransform");
-    transformElement->attributes.push_back(MakeScalarAttribute("position", "vector3", FormatVector3(translation.x, translation.y, translation.z)));
-    transformElement->attributes.push_back(MakeScalarAttribute("orientation", "quaternion", FormatQuaternion(qx, qy, qz, qw)));
+    Element *transformElement = builder.CreateElement("DmeTransform");
+    SetAttr(*transformElement, "position", ScalarAttr("vector3", FormatVector3(translation.x, translation.y, translation.z)));
+    SetAttr(*transformElement, "orientation", ScalarAttr("quaternion", FormatQuaternion(qx, qy, qz, qw)));
     return transformElement;
 }
 
-void RegisterDagElementsRecursive(DmxTextBuilder &builder, const MDagPath &dagPath, ExportContext &context)
+void RegisterDagElementsRecursive(DocumentBuilder &builder, const MDagPath &dagPath, ExportContext &context)
 {
     if (!dagPath.isValid())
     {
@@ -87,7 +87,7 @@ void RegisterDagElementsRecursive(DmxTextBuilder &builder, const MDagPath &dagPa
     if (dagElementIt == context.dagElementByPath.end())
     {
         const std::string elementType = dagPath.hasFn(MFn::kJoint) ? "DmeJoint" : "DmeDag";
-        DmxElement *dagElement = builder.CreateElement(elementType);
+        Element *dagElement = builder.CreateElement(elementType);
         context.dagElementByPath[pathKey] = dagElement;
         if (dagPath.hasFn(MFn::kJoint))
         {
@@ -187,7 +187,7 @@ std::vector<MDagPath> CollectExportRoots(MPxFileTranslator::FileAccessMode mode)
     return filteredRoots;
 }
 
-DmxElement *BuildDagElement(DmxTextBuilder &builder, const MDagPath &dagPath, ExportContext &context)
+Element *BuildDagElement(DocumentBuilder &builder, const MDagPath &dagPath, ExportContext &context)
 {
     MStatus status;
     MFnDagNode dagNode(dagPath, &status);
@@ -204,15 +204,15 @@ DmxElement *BuildDagElement(DmxTextBuilder &builder, const MDagPath &dagPath, Ex
     }
 
     const std::string elementType = dagPath.hasFn(MFn::kJoint) ? "DmeJoint" : "DmeDag";
-    DmxElement *dagElement = dagElementIt->second;
+    Element *dagElement = dagElementIt->second;
     dagElement->type = elementType;
-    dagElement->attributes.clear();
-    dagElement->attributes.push_back(MakeScalarAttribute("name", "string", dagNode.name().asChar()));
+    ClearAttrs(*dagElement);
+    dagElement->name = dagNode.name().asChar();
 
-    if (DmxElement *transformElement = BuildTransformElement(builder, dagPath))
+    if (Element *transformElement = BuildTransformElement(builder, dagPath))
     {
         context.transformElementByPath[pathKey] = transformElement;
-        dagElement->attributes.push_back(MakeInlineElementAttribute("transform", transformElement));
+        SetAttr(*dagElement, "transform", builder.ElementRef(transformElement));
     }
 
     {
@@ -257,14 +257,14 @@ DmxElement *BuildDagElement(DmxTextBuilder &builder, const MDagPath &dagPath, Ex
         if (foundOutputMesh)
         {
             const MDagPath *bindShapePtr = foundBindShapeMesh ? &bindShapeMeshPath : nullptr;
-            if (DmxElement *meshElement = BuildMeshElement(builder, outputMeshPath, context, bindShapePtr))
+            if (Element *meshElement = BuildMeshElement(builder, outputMeshPath, context, bindShapePtr))
             {
-                dagElement->attributes.push_back(MakeInlineElementAttribute("shape", meshElement));
+                SetAttr(*dagElement, "shape", builder.ElementRef(meshElement));
             }
         }
     }
 
-    std::vector<DmxElement *> childElements;
+    std::vector<Element *> childElements;
     for (unsigned int childIndex = 0; childIndex < dagNode.childCount(); ++childIndex)
     {
         MObject childObject = dagNode.child(childIndex, &status);
@@ -275,7 +275,7 @@ DmxElement *BuildDagElement(DmxTextBuilder &builder, const MDagPath &dagPath, Ex
 
         MDagPath childPath = dagPath;
         childPath.push(childObject);
-        if (DmxElement *childElement = BuildDagElement(builder, childPath, context))
+        if (Element *childElement = BuildDagElement(builder, childPath, context))
         {
             childElements.push_back(childElement);
         }
@@ -283,7 +283,7 @@ DmxElement *BuildDagElement(DmxTextBuilder &builder, const MDagPath &dagPath, Ex
 
     if (!childElements.empty())
     {
-        dagElement->attributes.push_back(MakeElementArrayAttribute("children", childElements));
+        SetAttr(*dagElement, "children", builder.ElementRefArray(childElements));
     }
 
     return dagElement;

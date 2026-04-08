@@ -1,5 +1,4 @@
 #include "DmxExportTranslator.h"
-#include "DmxExportTextModel.h"
 #include "DmxExportTranslatorTypes.h"
 
 #include "../common/MayaDmxCommon.h"
@@ -26,16 +25,6 @@
 
 namespace dmx_export_impl
 {
-using dmx_export::CloneElement;
-using dmx_export::DmxAttribute;
-using dmx_export::DmxElement;
-using dmx_export::DmxTextBuilder;
-using dmx_export::FindAttribute;
-using dmx_export::GetElementName;
-using dmx_export::MakeElementArrayAttribute;
-using dmx_export::MakeInlineElementAttribute;
-using dmx_export::MakeScalarArrayAttribute;
-using dmx_export::MakeScalarAttribute;
 using dmx_export_translator::ExportContext;
 using dmx_export_translator::ExportOptions;
 using dmx_export_translator::IndexedChannel;
@@ -196,28 +185,28 @@ MStatus DmxExportTranslator::writer(const MFileObject &fileObject, const MString
             return maya_dmx::ReportError("maya_dmx: nothing to export.");
         }
 
-        DmxTextBuilder builder;
+        simple_dmx::DocumentBuilder builder;
         ExportContext context;
         context.exportSkin = exportOptions.exportSkin;
         context.exportDeltaStates = exportOptions.exportDeltaStates;
         context.exportMetadata = exportOptions.exportMetadata;
         context.materialRoot = exportOptions.materialRoot;
-        DmxElement *modelElement = builder.CreateElement("DmeModel");
-        modelElement->attributes.push_back(MakeScalarAttribute("name", "string", "maya_export"));
-        modelElement->attributes.push_back(MakeScalarAttribute("upAxis", "string", exportOptions.upAxis));
+
+        simple_dmx::Element *modelElement = builder.CreateElement("DmeModel", "maya_export");
+        SetAttr(*modelElement, "upAxis", ScalarAttr("string", exportOptions.upAxis));
         if (exportOptions.exportMetadata && !exportOptions.materialRoot.empty())
         {
-            modelElement->attributes.push_back(MakeScalarAttribute("mayaMaterialRoot", "string", exportOptions.materialRoot));
+            SetAttr(*modelElement, "mayaMaterialRoot", ScalarAttr("string", exportOptions.materialRoot));
         }
 
-        std::vector<DmxElement *> rootChildren;
+        std::vector<simple_dmx::Element *> rootChildren;
         for (const MDagPath &rootPath : exportRoots)
         {
             RegisterDagElementsRecursive(builder, rootPath, context);
         }
         for (const MDagPath &rootPath : exportRoots)
         {
-            if (DmxElement *child = BuildDagElement(builder, rootPath, context))
+            if (simple_dmx::Element *child = BuildDagElement(builder, rootPath, context))
             {
                 rootChildren.push_back(child);
             }
@@ -226,16 +215,19 @@ MStatus DmxExportTranslator::writer(const MFileObject &fileObject, const MString
 
         if (!rootChildren.empty())
         {
-            modelElement->attributes.push_back(MakeElementArrayAttribute("children", rootChildren));
+            SetAttr(*modelElement, "children", builder.ElementRefArray(rootChildren));
         }
         if (!context.jointElements.empty())
         {
-            modelElement->attributes.push_back(MakeElementArrayAttribute("jointList", context.jointElements));
+            SetAttr(*modelElement, "jointList", builder.ElementRefArray(context.jointElements));
         }
-        if (DmxElement *animationListElement = BuildAnimationListElement(builder, exportRoots, context))
+        if (simple_dmx::Element *animationListElement = BuildAnimationListElement(builder, exportRoots, context))
         {
-            modelElement->attributes.push_back(MakeInlineElementAttribute("animationList", animationListElement));
+            SetAttr(*modelElement, "animationList", builder.ElementRef(animationListElement));
         }
+
+        builder.SetRoot(modelElement);
+        simple_dmx::Document document = builder.Build();
 
         const bool binaryExport = exportOptions.binary;
 
@@ -243,13 +235,6 @@ MStatus DmxExportTranslator::writer(const MFileObject &fileObject, const MString
         std::string serializeError;
         if (binaryExport)
         {
-            const std::string textContent = builder.Serialize(*modelElement);
-            simple_dmx::Document document;
-            std::string parseError;
-            if (!document.Parse(textContent, parseError))
-            {
-                return maya_dmx::ReportError(("maya_dmx: internal error preparing binary export: " + parseError).c_str());
-            }
             if (!simple_dmx::SerializeDocumentBinary(document, serialized, serializeError))
             {
                 AppendDebugLog("writer: binary serialize failed");
@@ -258,7 +243,7 @@ MStatus DmxExportTranslator::writer(const MFileObject &fileObject, const MString
         }
         else
         {
-            serialized = builder.Serialize(*modelElement);
+            serialized = simple_dmx::SerializeDocumentText(document);
         }
         AppendDebugLog("writer: serialized");
 

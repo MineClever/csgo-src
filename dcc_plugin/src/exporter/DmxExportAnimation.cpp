@@ -26,7 +26,7 @@
 namespace dmx_export_impl
 {
 
-static DmxElement *FindOrCreateFloatTargetElement(DmxTextBuilder &builder, ExportContext &context, const std::string &targetName)
+static Element *FindOrCreateFloatTargetElement(DocumentBuilder &builder, ExportContext &context, const std::string &targetName)
 {
     auto targetIt = context.floatTargetElementByName.find(targetName);
     if (targetIt != context.floatTargetElementByName.end())
@@ -34,15 +34,14 @@ static DmxElement *FindOrCreateFloatTargetElement(DmxTextBuilder &builder, Expor
         return targetIt->second;
     }
 
-    DmxElement *targetElement = builder.CreateElement("DmElement");
-    targetElement->attributes.push_back(MakeScalarAttribute("name", "string", targetName));
-    targetElement->attributes.push_back(MakeScalarAttribute("flexWeight", "float", "0.000000"));
+    Element *targetElement = builder.CreateElement("DmElement", targetName);
+    SetAttr(*targetElement, "flexWeight", ScalarAttr("float", "0.000000"));
     context.floatTargetElementByName[targetName] = targetElement;
     return targetElement;
 }
 
-static DmxElement *BuildFloatLog(
-    DmxTextBuilder &builder,
+static Element *BuildFloatLog(
+    DocumentBuilder &builder,
     const std::string &logName,
     const std::vector<double> &times,
     const std::vector<double> &values)
@@ -62,19 +61,17 @@ static DmxElement *BuildFloatLog(
         valueStrings.push_back(FormatFloat(values[keyIndex]));
     }
 
-    DmxElement *logLayer = builder.CreateElement("DmeFloatLogLayer");
-    logLayer->attributes.push_back(MakeScalarAttribute("name", "string", "base"));
-    logLayer->attributes.push_back(MakeScalarArrayAttribute("times", "time_array", std::move(timeStrings)));
-    logLayer->attributes.push_back(MakeScalarArrayAttribute("values", "float_array", std::move(valueStrings)));
+    Element *logLayer = builder.CreateElement("DmeFloatLogLayer", "base");
+    SetAttr(*logLayer, "times", ScalarArrayAttr("time_array", std::move(timeStrings)));
+    SetAttr(*logLayer, "values", ScalarArrayAttr("float_array", std::move(valueStrings)));
 
-    DmxElement *logElement = builder.CreateElement("DmeFloatLog");
-    logElement->attributes.push_back(MakeScalarAttribute("name", "string", logName));
-    logElement->attributes.push_back(MakeElementArrayAttribute("layers", {logLayer}));
+    Element *logElement = builder.CreateElement("DmeFloatLog", logName);
+    SetAttr(*logElement, "layers", builder.ElementRefArray({logLayer}));
     return logElement;
 }
 
-static DmxElement *BuildVector3Log(
-    DmxTextBuilder &builder,
+static Element *BuildVector3Log(
+    DocumentBuilder &builder,
     const std::string &logName,
     const std::vector<double> &times,
     const std::vector<std::array<double, 3>> &values)
@@ -94,19 +91,17 @@ static DmxElement *BuildVector3Log(
         valueStrings.push_back(FormatVector3(values[keyIndex][0], values[keyIndex][1], values[keyIndex][2]));
     }
 
-    DmxElement *logLayer = builder.CreateElement("DmeVector3LogLayer");
-    logLayer->attributes.push_back(MakeScalarAttribute("name", "string", "base"));
-    logLayer->attributes.push_back(MakeScalarArrayAttribute("times", "time_array", std::move(timeStrings)));
-    logLayer->attributes.push_back(MakeScalarArrayAttribute("values", "vector3_array", std::move(valueStrings)));
+    Element *logLayer = builder.CreateElement("DmeVector3LogLayer", "base");
+    SetAttr(*logLayer, "times", ScalarArrayAttr("time_array", std::move(timeStrings)));
+    SetAttr(*logLayer, "values", ScalarArrayAttr("vector3_array", std::move(valueStrings)));
 
-    DmxElement *logElement = builder.CreateElement("DmeVector3Log");
-    logElement->attributes.push_back(MakeScalarAttribute("name", "string", logName));
-    logElement->attributes.push_back(MakeElementArrayAttribute("layers", {logLayer}));
+    Element *logElement = builder.CreateElement("DmeVector3Log", logName);
+    SetAttr(*logElement, "layers", builder.ElementRefArray({logLayer}));
     return logElement;
 }
 
-static DmxElement *BuildQuaternionLog(
-    DmxTextBuilder &builder,
+static Element *BuildQuaternionLog(
+    DocumentBuilder &builder,
     const std::string &logName,
     const std::vector<double> &times,
     const std::vector<MQuaternion> &values)
@@ -126,39 +121,36 @@ static DmxElement *BuildQuaternionLog(
         valueStrings.push_back(FormatQuaternion(values[keyIndex].x, values[keyIndex].y, values[keyIndex].z, values[keyIndex].w));
     }
 
-    DmxElement *logLayer = builder.CreateElement("DmeQuaternionLogLayer");
-    logLayer->attributes.push_back(MakeScalarAttribute("name", "string", "base"));
-    logLayer->attributes.push_back(MakeScalarArrayAttribute("times", "time_array", std::move(timeStrings)));
-    logLayer->attributes.push_back(MakeScalarArrayAttribute("values", "quaternion_array", std::move(valueStrings)));
+    Element *logLayer = builder.CreateElement("DmeQuaternionLogLayer", "base");
+    SetAttr(*logLayer, "times", ScalarArrayAttr("time_array", std::move(timeStrings)));
+    SetAttr(*logLayer, "values", ScalarArrayAttr("quaternion_array", std::move(valueStrings)));
 
-    DmxElement *logElement = builder.CreateElement("DmeQuaternionLog");
-    logElement->attributes.push_back(MakeScalarAttribute("name", "string", logName));
-    logElement->attributes.push_back(MakeElementArrayAttribute("layers", {logLayer}));
+    Element *logElement = builder.CreateElement("DmeQuaternionLog", logName);
+    SetAttr(*logElement, "layers", builder.ElementRefArray({logLayer}));
     return logElement;
 }
 
-static DmxElement *BuildFloatChannel(DmxTextBuilder &builder, const std::string &name, DmxElement *targetElement, const std::string &attributeName, DmxElement *logElement)
+static Element *BuildFloatChannel(DocumentBuilder &builder, const std::string &name, Element *targetElement, const std::string &attributeName, Element *logElement)
 {
     if (!targetElement || !logElement)
     {
         return nullptr;
     }
 
-    DmxElement *channelElement = builder.CreateElement("DmeChannel");
-    channelElement->attributes.push_back(MakeScalarAttribute("name", "string", name));
-    channelElement->attributes.push_back(MakeInlineElementAttribute("toElement", targetElement));
-    channelElement->attributes.push_back(MakeScalarAttribute("toAttribute", "string", attributeName));
-    channelElement->attributes.push_back(MakeInlineElementAttribute("log", logElement));
+    Element *channelElement = builder.CreateElement("DmeChannel", name);
+    SetAttr(*channelElement, "toElement", builder.ElementRef(targetElement));
+    SetAttr(*channelElement, "toAttribute", ScalarAttr("string", attributeName));
+    SetAttr(*channelElement, "log", builder.ElementRef(logElement));
     return channelElement;
 }
 
 static void AppendScalarAnimationChannel(
-    DmxTextBuilder &builder,
+    DocumentBuilder &builder,
     const MPlug &plug,
-    DmxElement *targetElement,
+    Element *targetElement,
     const std::string &attributeName,
     const std::string &channelName,
-    std::vector<DmxElement *> &channels,
+    std::vector<Element *> &channels,
     double &clipDurationSeconds)
 {
     if (plug.isNull() || !targetElement)
@@ -187,23 +179,23 @@ static void AppendScalarAnimationChannel(
         clipDurationSeconds = std::max(clipDurationSeconds, timeSeconds);
     }
 
-    DmxElement *logElement = BuildFloatLog(builder, channelName + "_log", times, values);
+    Element *logElement = BuildFloatLog(builder, channelName + "_log", times, values);
     if (!logElement)
     {
         return;
     }
 
-    if (DmxElement *channelElement = BuildFloatChannel(builder, channelName, targetElement, attributeName, logElement))
+    if (Element *channelElement = BuildFloatChannel(builder, channelName, targetElement, attributeName, logElement))
     {
         channels.push_back(channelElement);
     }
 }
 
 static void AppendTransformAnimationChannels(
-    DmxTextBuilder &builder,
+    DocumentBuilder &builder,
     const MDagPath &dagPath,
     ExportContext &context,
-    std::vector<DmxElement *> &channels,
+    std::vector<Element *> &channels,
     double &clipDurationSeconds)
 {
     const auto transformIt = context.transformElementByPath.find(DagPathKey(dagPath));
@@ -246,7 +238,7 @@ static void AppendTransformAnimationChannels(
             clipDurationSeconds = std::max(clipDurationSeconds, timeSeconds);
         }
 
-        DmxElement *logElement = BuildVector3Log(builder, std::string(dagPath.partialPathName().asChar()) + "_position", positionTimes, positionValues);
+        Element *logElement = BuildVector3Log(builder, std::string(dagPath.partialPathName().asChar()) + "_position", positionTimes, positionValues);
         if (logElement)
         {
             channels.push_back(BuildFloatChannel(builder, std::string(dagPath.partialPathName().asChar()) + "_position_channel", transformIt->second, "position", logElement));
@@ -276,10 +268,10 @@ static void AppendTransformAnimationChannels(
             clipDurationSeconds = std::max(clipDurationSeconds, timeSeconds);
         }
 
-        DmxElement *logElement = BuildQuaternionLog(builder, std::string(dagPath.partialPathName().asChar()) + "_orientation", rotationTimes, rotationValues);
+        Element *logElement = BuildQuaternionLog(builder, std::string(dagPath.partialPathName().asChar()) + "_orientation", rotationTimes, rotationValues);
         if (logElement)
         {
-            if (DmxElement *channelElement = BuildFloatChannel(builder, std::string(dagPath.partialPathName().asChar()) + "_orientation_channel", transformIt->second, "orientation", logElement))
+            if (Element *channelElement = BuildFloatChannel(builder, std::string(dagPath.partialPathName().asChar()) + "_orientation_channel", transformIt->second, "orientation", logElement))
             {
                 channels.push_back(channelElement);
             }
@@ -292,11 +284,11 @@ static void AppendTransformAnimationChannels(
 }
 
 static void AppendControlAnimationChannels(
-    DmxTextBuilder &builder,
+    DocumentBuilder &builder,
     const MDagPath &dagPath,
     ExportContext &context,
     std::unordered_set<std::string> &exportedFlexTargets,
-    std::vector<DmxElement *> &channels,
+    std::vector<Element *> &channels,
     double &clipDurationSeconds)
 {
     MStatus status;
@@ -350,7 +342,7 @@ static void AppendControlAnimationChannels(
             continue;
         }
 
-        DmxElement *targetElement = FindOrCreateFloatTargetElement(builder, context, attributeName);
+        Element *targetElement = FindOrCreateFloatTargetElement(builder, context, attributeName);
         const size_t beforeChannelCount = channels.size();
         AppendScalarAnimationChannel(builder, plug, targetElement, "flexWeight", attributeName + "_flex_channel", channels, clipDurationSeconds);
         if (channels.size() != beforeChannelCount)
@@ -361,11 +353,11 @@ static void AppendControlAnimationChannels(
 }
 
 static void AppendBlendShapeAnimationChannels(
-    DmxTextBuilder &builder,
+    DocumentBuilder &builder,
     const MDagPath &meshPath,
     ExportContext &context,
     std::unordered_set<std::string> &exportedFlexTargets,
-    std::vector<DmxElement *> &channels,
+    std::vector<Element *> &channels,
     double &clipDurationSeconds)
 {
     MStatus status;
@@ -432,7 +424,7 @@ static void AppendBlendShapeAnimationChannels(
                 continue;
             }
 
-            DmxElement *targetElement = FindOrCreateFloatTargetElement(builder, context, aliasName);
+            Element *targetElement = FindOrCreateFloatTargetElement(builder, context, aliasName);
             const size_t beforeChannelCount = channels.size();
             AppendScalarAnimationChannel(builder, weightPlug, targetElement, "flexWeight", aliasName + "_flex_channel", channels, clipDurationSeconds);
             if (channels.size() != beforeChannelCount)
@@ -444,11 +436,11 @@ static void AppendBlendShapeAnimationChannels(
 }
 
 static void AppendAnimationChannelsRecursive(
-    DmxTextBuilder &builder,
+    DocumentBuilder &builder,
     const MDagPath &dagPath,
     ExportContext &context,
     std::unordered_set<std::string> &exportedFlexTargets,
-    std::vector<DmxElement *> &channels,
+    std::vector<Element *> &channels,
     double &clipDurationSeconds)
 {
     if (!dagPath.isValid())
@@ -499,9 +491,9 @@ static void AppendAnimationChannelsRecursive(
     }
 }
 
-DmxElement *BuildAnimationListElement(DmxTextBuilder &builder, const std::vector<MDagPath> &exportRoots, ExportContext &context)
+Element *BuildAnimationListElement(DocumentBuilder &builder, const std::vector<MDagPath> &exportRoots, ExportContext &context)
 {
-    std::vector<DmxElement *> channels;
+    std::vector<Element *> channels;
     std::unordered_set<std::string> exportedFlexTargets;
     double clipDurationSeconds = 0.0;
 
@@ -515,18 +507,16 @@ DmxElement *BuildAnimationListElement(DmxTextBuilder &builder, const std::vector
         return nullptr;
     }
 
-    DmxElement *timeFrameElement = builder.CreateElement("DmeTimeFrame");
-    timeFrameElement->attributes.push_back(MakeScalarAttribute("duration", "time", FormatTimeSeconds(clipDurationSeconds)));
-    timeFrameElement->attributes.push_back(MakeScalarAttribute("frameRate", "float", "30.0"));
+    Element *timeFrameElement = builder.CreateElement("DmeTimeFrame");
+    SetAttr(*timeFrameElement, "duration", ScalarAttr("time", FormatTimeSeconds(clipDurationSeconds)));
+    SetAttr(*timeFrameElement, "frameRate", ScalarAttr("float", "30.0"));
 
-    DmxElement *clipElement = builder.CreateElement("DmeChannelsClip");
-    clipElement->attributes.push_back(MakeScalarAttribute("name", "string", "maya_export_animation"));
-    clipElement->attributes.push_back(MakeElementArrayAttribute("channels", channels));
-    clipElement->attributes.push_back(MakeInlineElementAttribute("timeFrame", timeFrameElement));
+    Element *clipElement = builder.CreateElement("DmeChannelsClip", "maya_export_animation");
+    SetAttr(*clipElement, "channels", builder.ElementRefArray(channels));
+    SetAttr(*clipElement, "timeFrame", builder.ElementRef(timeFrameElement));
 
-    DmxElement *animationListElement = builder.CreateElement("DmeAnimationList");
-    animationListElement->attributes.push_back(MakeScalarAttribute("name", "string", "animationList"));
-    animationListElement->attributes.push_back(MakeElementArrayAttribute("animations", {clipElement}));
+    Element *animationListElement = builder.CreateElement("DmeAnimationList", "animationList");
+    SetAttr(*animationListElement, "animations", builder.ElementRefArray({clipElement}));
     return animationListElement;
 }
 

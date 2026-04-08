@@ -57,7 +57,7 @@ static std::string ReadDynamicStringAttribute(const MObject &nodeObject, const c
     return ReadStringPlugValue(attributePlug);
 }
 
-DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, ExportContext &context, const MDagPath *bindShapeMeshPath)
+Element *BuildMeshElement(DocumentBuilder &builder, const MDagPath &meshPath, ExportContext &context, const MDagPath *bindShapeMeshPath)
 {
     MStatus status;
     MFnMesh meshFn(meshPath, &status);
@@ -218,17 +218,16 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
         vertexFormat.push_back("tangents");
     }
 
-    DmxElement *vertexDataElement = builder.CreateElement("DmeVertexData");
-    vertexDataElement->attributes.push_back(MakeScalarAttribute("name", "string", "bind"));
-    vertexDataElement->attributes.push_back(MakeScalarAttribute("flipVCoordinates", "bool", "0"));
-    vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("vertexFormat", "string_array", std::move(vertexFormat)));
-    vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("positions", "vector3_array", positions));
-    vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("positionsIndices", "int_array", positionsIndices));
+    Element *vertexDataElement = builder.CreateElement("DmeVertexData", "bind");
+    SetAttr(*vertexDataElement, "flipVCoordinates", ScalarAttr("bool", "0"));
+    SetAttr(*vertexDataElement, "vertexFormat", ScalarArrayAttr("string_array", std::move(vertexFormat)));
+    SetAttr(*vertexDataElement, "positions", ScalarArrayAttr("vector3_array", positions));
+    SetAttr(*vertexDataElement, "positionsIndices", ScalarArrayAttr("int_array", positionsIndices));
 
     if (!normals.empty() && normalsIndices.size() == positionsIndices.size())
     {
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("normals", "vector3_array", normals));
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("normalsIndices", "int_array", normalsIndices));
+        SetAttr(*vertexDataElement, "normals", ScalarArrayAttr("vector3_array", normals));
+        SetAttr(*vertexDataElement, "normalsIndices", ScalarArrayAttr("int_array", normalsIndices));
     }
 
     std::vector<std::string> exportedUvSetNames;
@@ -240,38 +239,32 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
             continue;
         }
 
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute(
-            uvChannel.valueAttributeName,
-            "vector2_array",
-            uvChannel.values));
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute(
-            uvChannel.indexAttributeName,
-            "int_array",
-            uvChannel.indices));
+        SetAttr(*vertexDataElement, uvChannel.valueAttributeName, ScalarArrayAttr("vector2_array", uvChannel.values));
+        SetAttr(*vertexDataElement, uvChannel.indexAttributeName, ScalarArrayAttr("int_array", uvChannel.indices));
         exportedUvSetNames.push_back(uvSetNames[uvSetIndex].asChar());
     }
 
     if (context.exportMetadata && !exportedUvSetNames.empty())
     {
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("mayaUvSetNames", "string_array", exportedUvSetNames));
+        SetAttr(*vertexDataElement, "mayaUvSetNames", ScalarArrayAttr("string_array", exportedUvSetNames));
     }
 
     if (useStoredTangents)
     {
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangents", "vector4_array", storedTangents));
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangentsIndices", "int_array", storedTangentIndices));
+        SetAttr(*vertexDataElement, "tangents", ScalarArrayAttr("vector4_array", storedTangents));
+        SetAttr(*vertexDataElement, "tangentsIndices", ScalarArrayAttr("int_array", storedTangentIndices));
         if (context.exportMetadata && !storedTangentUvSetName.empty())
         {
-            vertexDataElement->attributes.push_back(MakeScalarAttribute("mayaTangentUvSetName", "string", storedTangentUvSetName));
+            SetAttr(*vertexDataElement, "mayaTangentUvSetName", ScalarAttr("string", storedTangentUvSetName));
         }
     }
     else if (!tangentChannel.values.empty() && tangentChannel.indices.size() == positionsIndices.size())
     {
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangents", "vector4_array", tangentChannel.values));
-        vertexDataElement->attributes.push_back(MakeScalarArrayAttribute("tangentsIndices", "int_array", tangentChannel.indices));
+        SetAttr(*vertexDataElement, "tangents", ScalarArrayAttr("vector4_array", tangentChannel.values));
+        SetAttr(*vertexDataElement, "tangentsIndices", ScalarArrayAttr("int_array", tangentChannel.indices));
         if (context.exportMetadata && uvSetNames.length() > 0)
         {
-            vertexDataElement->attributes.push_back(MakeScalarAttribute("mayaTangentUvSetName", "string", uvSetNames[0].asChar()));
+            SetAttr(*vertexDataElement, "mayaTangentUvSetName", ScalarAttr("string", uvSetNames[0].asChar()));
         }
     }
 
@@ -280,13 +273,13 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
         AppendSkinningData(meshPath, *vertexDataElement, context);
     }
 
-    std::vector<DmxElement *> deltaStateElements;
+    std::vector<Element *> deltaStateElements;
     if (context.exportDeltaStates)
     {
         AppendBlendShapeDeltaStates(builder, meshPath, meshPoints, context, deltaStateElements);
     }
 
-    std::vector<DmxElement *> faceSetElements;
+    std::vector<Element *> faceSetElements;
     std::vector<bool> coveredPolygons(polygonFaceIndices.size(), false);
     struct SetMembership
     {
@@ -379,24 +372,21 @@ DmxElement *BuildMeshElement(DmxTextBuilder &builder, const MDagPath &meshPath, 
         AppendFaceSetElement(builder, "default_faces", uncoveredPolygons, polygonFaceIndices, nullptr, context.exportMetadata, faceSetElements);
     }
 
-    DmxElement *meshElement = builder.CreateElement("DmeMesh");
-    meshElement->attributes.push_back(MakeScalarAttribute("name", "string", meshFn.name().asChar()));
-    meshElement->attributes.push_back(MakeInlineElementAttribute("bindState", vertexDataElement));
-    DmxElement *baseStateElement = CloneElement(builder, *vertexDataElement);
-    meshElement->attributes.push_back(MakeElementArrayAttribute("baseStates", {baseStateElement}));
-    DmxElement *currentStateElement = CloneElement(builder, *vertexDataElement);
-    currentStateElement->attributes.clear();
-    currentStateElement->attributes.push_back(MakeScalarAttribute("name", "string", "current"));
-    currentStateElement->attributes.push_back(MakeScalarAttribute("flipVCoordinates", "bool", "0"));
-    currentStateElement->attributes.push_back(MakeScalarArrayAttribute("vertexFormat", "string_array", {"positions"}));
-    currentStateElement->attributes.push_back(MakeScalarArrayAttribute("positions", "vector3_array", positions));
-    currentStateElement->attributes.push_back(MakeScalarArrayAttribute("positionsIndices", "int_array", positionsIndices));
-    meshElement->attributes.push_back(MakeInlineElementAttribute("currentState", currentStateElement));
+    Element *meshElement = builder.CreateElement("DmeMesh", meshFn.name().asChar());
+    SetAttr(*meshElement, "bindState", builder.ElementRef(vertexDataElement));
+    Element *baseStateElement = CloneElement(builder, *vertexDataElement);
+    SetAttr(*meshElement, "baseStates", builder.ElementRefArray({baseStateElement}));
+    Element *currentStateElement = builder.CreateElement("DmeVertexData", "current");
+    SetAttr(*currentStateElement, "flipVCoordinates", ScalarAttr("bool", "0"));
+    SetAttr(*currentStateElement, "vertexFormat", ScalarArrayAttr("string_array", {"positions"}));
+    SetAttr(*currentStateElement, "positions", ScalarArrayAttr("vector3_array", positions));
+    SetAttr(*currentStateElement, "positionsIndices", ScalarArrayAttr("int_array", positionsIndices));
+    SetAttr(*meshElement, "currentState", builder.ElementRef(currentStateElement));
     if (!deltaStateElements.empty())
     {
-        meshElement->attributes.push_back(MakeElementArrayAttribute("deltaStates", deltaStateElements));
+        SetAttr(*meshElement, "deltaStates", builder.ElementRefArray(deltaStateElements));
     }
-    meshElement->attributes.push_back(MakeElementArrayAttribute("faceSets", faceSetElements));
+    SetAttr(*meshElement, "faceSets", builder.ElementRefArray(faceSetElements));
     return meshElement;
 }
 

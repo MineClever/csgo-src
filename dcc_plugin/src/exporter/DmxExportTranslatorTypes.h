@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DmxExportTextModel.h"
+#include "../common/SimpleDmxDocument.h"
 
 #include <string>
 #include <unordered_map>
@@ -10,11 +10,11 @@ namespace dmx_export_translator
 {
 struct ExportContext
 {
-    std::vector<dmx_export::DmxElement *> jointElements;
+    std::vector<simple_dmx::Element *> jointElements;
     std::unordered_map<std::string, int> jointIndexByPath;
-    std::unordered_map<std::string, dmx_export::DmxElement *> dagElementByPath;
-    std::unordered_map<std::string, dmx_export::DmxElement *> transformElementByPath;
-    std::unordered_map<std::string, dmx_export::DmxElement *> floatTargetElementByName;
+    std::unordered_map<std::string, simple_dmx::Element *> dagElementByPath;
+    std::unordered_map<std::string, simple_dmx::Element *> transformElementByPath;
+    std::unordered_map<std::string, simple_dmx::Element *> floatTargetElementByName;
     bool exportSkin = true;
     bool exportDeltaStates = true;
     bool exportMetadata = true;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -8,6 +9,7 @@
 namespace simple_dmx
 {
 class Parser;
+class DocumentBuilder;
 struct Element;
 
 struct ElementLink
@@ -58,6 +60,51 @@ private:
     std::unordered_map<std::string, const Element *> m_elementsById;
 
     friend class Parser;
+    friend class DocumentBuilder;
     friend bool ParseBinaryDocument(const std::string &bytes, Document &document, std::string &errorMessage);
 };
+
+// --- Attribute construction helpers ---
+
+// Create a scalar string attribute (e.g. "float", "vector3", "string", ...).
+Attribute ScalarAttr(std::string declaredType, std::string value);
+
+// Create a scalar array attribute (e.g. "float_array", "int_array", ...).
+Attribute ScalarArrayAttr(std::string declaredType, std::vector<std::string> values);
+
+// Add (or replace) a named attribute on an element, maintaining attributeOrder.
+void SetAttr(Element &element, std::string name, Attribute attr);
+
+// Clear all attributes from an element (map + order).
+void ClearAttrs(Element &element);
+
+// --- DocumentBuilder ---
+// Builds a Document programmatically without parsing text/binary.
+// All element links use inlineElement so SerializeDocumentText produces the
+// standard nested keyvalues2 format (same style as the old DmxTextBuilder).
+class DocumentBuilder
+{
+public:
+    // Create a new owned element.  'name' sets Element::name directly.
+    Element *CreateElement(const std::string &type, const std::string &name = {});
+
+    // Designate the root element (must have been created by this builder).
+    void SetRoot(Element *root);
+
+    // Build an Element-kind Attribute that references 'element' as an inline child.
+    Attribute ElementRef(Element *element);
+
+    // Build an ElementArray-kind Attribute with inline references to each element.
+    Attribute ElementRefArray(const std::vector<Element *> &elements);
+
+    // Consume the builder and return the final Document.
+    Document Build();
+
+private:
+    std::deque<std::shared_ptr<Element>> m_owned;
+    std::unordered_map<Element *, std::shared_ptr<Element>> m_ptrToShared;
+    Element *m_root = nullptr;
+    int m_nextId = 0;
+};
+
 }
