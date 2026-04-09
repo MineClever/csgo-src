@@ -138,16 +138,16 @@
 - 优先级：中
 - 最新回归结果（2026-04-09）：
   - 基础样例（6/6）：`simple_hierarchy` ✅ `simple_blendshape` ✅ `simple_mesh` ✅ `simple_skinned_mesh` ✅ `complex_chr_mesh` ✅ `MostComplexSampleSet/chr_mesh` ✅
-  - Ellis/DMX 项目级（2/9）：
+  - Ellis/DMX 项目级（7/9）：
     - `head_morphs_sfm.dmx` ✅（keyvalues2，无蒙皮）
     - `mechanic_morphs_sfm.dmx` ✅（keyvalues2，无蒙皮）
-    - `upper_teeth.dmx` ❌ binary v3 解析失败（"unexpected end of string table"）
-    - `lower_teeth.dmx` ❌ binary v3 解析失败
-    - `teeth_sfm.dmx` ❌ binary v4 解析失败（"element dictionary referenced an invalid string"）
-    - `mechanic_model.dmx` ❌ binary v4 解析失败
-    - `head_morphs.dmx` ❌ binary v4 解析失败
-    - `mechanic_model_merged.dmx` ✅（修复后 mesh/skin/blendshape 全 ok，含 applyAxisCorrection=0 变体）
-    - `head_morphs_game.dmx` ✅（修复后 mesh/skin/blendshape 全 ok）
+    - `upper_teeth.dmx` ✅（binary v3，修复后通过）
+    - `lower_teeth.dmx` ✅（binary v3，修复后通过）
+    - `teeth_sfm.dmx` ✅（binary v4，修复后通过）
+    - `mechanic_model.dmx` ✅（binary v4，修复后通过，含 applyAxisCorrection=0 变体）
+    - `head_morphs.dmx` ✅（binary v4，修复后通过）
+    - `mechanic_model_merged.dmx` ✅（mesh/skin/blendshape 全 ok，含 applyAxisCorrection=0 变体）
+    - `head_morphs_game.dmx` ✅（mesh/skin/blendshape 全 ok）
 - 目标目录：[dcc_plugin](dcc_plugin)
 - 开发环境：
   - Maya 2022.5 DevKit：`D:\_Code_Here\Maya\Autodesk_Maya_2022_5_Update_DEVKIT_Windows\devkitBase`
@@ -238,12 +238,10 @@
   - 旧版错误编码产生的历史 batch 文件如果残留在 Maya 用户目录里，`listBatches` 仍可能显示脏名称；新格式已可用，但还缺一次性清理或文件头校验。
 
 - 已确认的新问题（Ellis/DMX 回归，2026-04-09）：
-  - **Binary v3/v4 解析不兼容**：
-    - 现象：插件 parser 假设 v5 风格（先 int32 string count → string table → element dict 用索引引用字符串），但 v3/v4 在 element dict 内联字符串，无独立 string table。
-    - v3 错误路径：读 int16 element count（如 `0x004e = 78`），解析器当成 int32 string count，尝试读 78 个字符串条目，遇到非字符串数据 → “unexpected end of string table”。
-    - v4 错误路径：读 int32（251）作为 string count，读 251 条内联字符串成功，再尝试解析 element dict 时字符串索引越界 → “element dictionary referenced an invalid string”。
-    - 修复难度：**高**。需要在 `SimpleDmxBinary.cpp` 按 encoding version 分叉解析路径；v3/v4 的 element dict 格式与 v5 差异显著，需要单独实现并做好单元测试。
-    - 影响文件：`upper_teeth.dmx`、`lower_teeth.dmx`（v3）；`teeth_sfm.dmx`、`mechanic_model.dmx`、`head_morphs.dmx`（v4）
+  - ~~**Binary v3/v4 解析不兼容**~~：✅ 已修复（2026-04-09）
+    - 根本原因：v3 scalar string 值 = 内联 cstring；v4 scalar string 值 = int16 字符串表索引；v5 scalar string 值 = int32 索引；StringArray 在所有版本均已正确使用内联 cstring。
+    - 修复：`SimpleDmxBinary.cpp` `ValueType::String` 分支对 `encodingVersion <= 3` 改为 `ReadCString()`；v3 string table 用 int16 count 读取；element dict v3 用 inline cstring name，v4/v5 用索引。
+    - 验证：`upper_teeth.dmx`、`lower_teeth.dmx`（v3）、`teeth_sfm.dmx`、`mechanic_model.dmx`、`head_morphs.dmx`（v4）五个文件均通过回归（含 `mechanic_model` 的 applyAxisCorrection=0 变体）。
   - ~~**含 n-gon 网格拓扑不匹配**~~：✅ 已修复（2026-04-09），见第一优先级。
 
 - 下一阶段计划：
@@ -266,11 +264,7 @@
     - ✅ ~~**exporter 私有 DOM 并入公共 codec**~~（已完成，2026-04-09）：删除 `DmxExportTextModel`，迁移到 `DocumentBuilder`，binary export 消除 text→parse 中转。
     - 补独立动画宿主回归，避免后续改 importer 时 [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx)、[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx)、[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 退回”只导骨架不导关键帧”。
   - 第二优先级（技术债务）：
-    - **修复 binary v3/v4 解析**：
-      - 在 `SimpleDmxBinary.cpp` 按 `version` 分叉 `ParseDocument` 逻辑
-      - v3：element count 为 int16，element dict 内联字符串，无 string table
-      - v4：element count 为 int32，element dict 内联字符串，无独立 string table
-      - 修复后可覆盖 `upper_teeth`、`lower_teeth`（v3）和 `teeth_sfm`、`mechanic_model`、`head_morphs`（v4）
+    - ✅ ~~**修复 binary v3/v4 解析**~~（已完成，2026-04-09）：根本原因：v3 scalar string 属性值为内联 cstring，v4 为 int16 字符串表索引，v5 为 int32 索引；修复：`SimpleDmxBinary.cpp` 的 `ValueType::String` 分支对 `encodingVersion <= 3` 改用 `ReadCString()`；StringArray 在所有版本均为内联 cstring（原有代码正确，无需修改）；5 个 Ellis v3/v4 文件全部通过回归。
     - 继续补材质网络，扩到 `place2dTexture`、utility 节点链、更多 shader 类型和更稳定的贴图路径还原。
     - 继续补组合型面部控制器和更完整 deformer / rig 元数据，逐步接近 Valve 角色资产的面部工作流。
     - 为 workflow 增加旧 batch 文件清理、格式校验和更明确的错误提示。
