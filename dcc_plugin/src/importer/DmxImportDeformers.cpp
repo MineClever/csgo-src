@@ -808,6 +808,18 @@ MStatus ApplyDeltaStates(
         const bool hasWeightPlug = weightPlugStatus && !weightArrayPlug.isNull();
         for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
         {
+            context.importedBlendShapeTargets[targetNames[targetIndex]].push_back(
+                BlendShapeTargetBinding{blendShapeObject, targetIndex});
+
+            // Delete the temporary target mesh first. While the mesh is connected,
+            // Maya keeps the weight alias in sync with the mesh name and ignores setAlias.
+            MString deleteCommand("delete \"");
+            deleteCommand += targetTransforms[targetIndex];
+            deleteCommand += "\"";
+            MGlobal::executeCommand(deleteCommand, false, false);
+
+            // Now set the desired alias using MEL aliasAttr. With the target mesh
+            // deleted, Maya no longer auto-manages the alias from the mesh name.
             if (hasWeightPlug)
             {
                 MStatus elemStatus;
@@ -815,16 +827,17 @@ MStatus ApplyDeltaStates(
                 if (elemStatus)
                 {
                     MString attrName = weightElemPlug.partialName();
-                    blendShapeDependency.setAlias(targetNames[targetIndex].c_str(), attrName, weightElemPlug, true);
+                    // Use MEL aliasAttr which reliably renames the alias.
+                    MString aliasCmd("aliasAttr ");
+                    aliasCmd += targetNames[targetIndex].c_str();
+                    aliasCmd += " \"";
+                    aliasCmd += blendShapeNodeName;
+                    aliasCmd += ".";
+                    aliasCmd += attrName;
+                    aliasCmd += "\"";
+                    MGlobal::executeCommand(aliasCmd, false, false);
                 }
             }
-            context.importedBlendShapeTargets[targetNames[targetIndex]].push_back(
-                BlendShapeTargetBinding{blendShapeObject, targetIndex});
-
-            MString deleteCommand("delete \"");
-            deleteCommand += targetTransforms[targetIndex];
-            deleteCommand += "\"";
-            MGlobal::executeCommand(deleteCommand, false, false);
         }
     }
 

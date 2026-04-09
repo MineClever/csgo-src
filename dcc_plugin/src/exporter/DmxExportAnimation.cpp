@@ -335,6 +335,11 @@ static void AppendControlAnimationChannels(
             continue;
         }
 
+        if (exportedFlexTargets.find(attributeName) != exportedFlexTargets.end())
+        {
+            continue;
+        }
+
         MPlug plug = nodeFn.findPlug(attributeName.c_str(), true, &status);
         if (!status || plug.isNull())
         {
@@ -435,6 +440,48 @@ static void AppendBlendShapeAnimationChannels(
     }
 }
 
+static void CollectControlAnimationChannelsRecursive(
+    DocumentBuilder &builder,
+    const MDagPath &dagPath,
+    ExportContext &context,
+    std::unordered_set<std::string> &exportedFlexTargets,
+    std::vector<Element *> &channels,
+    double &clipDurationSeconds)
+{
+    if (!dagPath.isValid())
+    {
+        return;
+    }
+
+    AppendControlAnimationChannels(builder, dagPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+
+    MStatus status;
+    MFnDagNode dagNode(dagPath, &status);
+    if (!status)
+    {
+        return;
+    }
+
+    for (unsigned int childIndex = 0; childIndex < dagNode.childCount(); ++childIndex)
+    {
+        MObject childObject = dagNode.child(childIndex, &status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        if (!(childObject.hasFn(MFn::kTransform) || childObject.hasFn(MFn::kJoint)))
+        {
+            continue;
+        }
+
+        MDagPath childPath = dagPath;
+        childPath.push(childObject);
+        CollectControlAnimationChannelsRecursive(builder, childPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+    }
+}
+
 static void AppendAnimationChannelsRecursive(
     DocumentBuilder &builder,
     const MDagPath &dagPath,
@@ -497,6 +544,14 @@ Element *BuildAnimationListElement(DocumentBuilder &builder, const std::vector<M
     std::unordered_set<std::string> exportedFlexTargets;
     double clipDurationSeconds = 0.0;
 
+    // Pre-pass: export _controls channels first so their flex targets take priority
+    // over blendShape weight aliases with the same name.
+    for (const MDagPath &rootPath : exportRoots)
+    {
+        CollectControlAnimationChannelsRecursive(builder, rootPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+    }
+
+    // Main pass: transform channels + blendShape channels (controls already in exportedFlexTargets).
     for (const MDagPath &rootPath : exportRoots)
     {
         AppendAnimationChannelsRecursive(builder, rootPath, context, exportedFlexTargets, channels, clipDurationSeconds);

@@ -346,10 +346,16 @@ def compare_animation_snapshots(reference_animations, candidate_animations):
                 continue
 
             parts = path_name.split("|")
+            if len(parts) == 1:
+                # No path separator — non-DAG nodes (e.g. blendShape) are keyed by
+                # their short name directly.  They have no wrapper to strip, so pass
+                # them through unchanged without contributing to wrapper detection.
+                stripped[node_name] = node_data
+                continue
+
             wrapper_names.add(parts[0])
-            stripped_path = "|".join(parts[1:]) if len(parts) > 1 else ""
-            if stripped_path:
-                stripped[f"{stripped_path}.{attribute_name}"] = node_data
+            stripped_path = "|".join(parts[1:])
+            stripped[f"{stripped_path}.{attribute_name}"] = node_data
         if len(wrapper_names) != 1 or not stripped:
             return None
         return stripped

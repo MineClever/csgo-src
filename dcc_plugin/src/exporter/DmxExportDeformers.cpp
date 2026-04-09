@@ -381,6 +381,17 @@ void AppendBlendShapeDeltaStates(
         for (unsigned int weightSlot = 0; weightSlot < weightIndices.length(); ++weightSlot)
         {
             const unsigned int weightIndex = static_cast<unsigned int>(weightIndices[weightSlot]);
+
+            // Read the weight alias before calling TryRegenerateBlendShapeTarget,
+            // because sculptTarget -regenerate may rename it to the shape node name.
+            MPlug weightPlug = weightArrayPlug.elementByLogicalIndex(weightIndex, &status);
+            MString preSculptAlias;
+            if (status && !weightPlug.isNull())
+            {
+                preSculptAlias = blendShapeNodeFn.plugsAlias(weightPlug);
+            }
+            status = MS::kSuccess;
+
             MObjectArray targets;
             status = blendShapeFn.getTargets(meshNodeObject, static_cast<int>(weightIndex), targets);
             MDagPath targetPath;
@@ -405,6 +416,17 @@ void AppendBlendShapeDeltaStates(
                 if (!TryRegenerateBlendShapeTarget(blendShapeNodeFn.name(), weightIndex, targetPath, temporaryTargetTransform))
                 {
                     continue;
+                }
+
+                // Restore the original weight alias if sculptTarget renamed it.
+                if (preSculptAlias.length() > 0 && !weightPlug.isNull())
+                {
+                    MString currentAlias = blendShapeNodeFn.plugsAlias(weightPlug);
+                    if (currentAlias != preSculptAlias)
+                    {
+                        MString attrName = weightPlug.partialName();
+                        blendShapeNodeFn.setAlias(preSculptAlias, attrName, weightPlug, true);
+                    }
                 }
 
                 MFnDagNode targetDagNode(targetPath, &status);
@@ -495,14 +517,9 @@ void AppendBlendShapeDeltaStates(
             }
 
             std::string deltaName = targetNodeName.asChar();
-            MPlug weightPlug = weightArrayPlug.elementByLogicalIndex(weightIndex, &status);
-            if (status)
+            if (preSculptAlias.length() > 0)
             {
-                MString alias = blendShapeNodeFn.plugsAlias(weightPlug);
-                if (alias.length() > 0)
-                {
-                    deltaName = alias.asChar();
-                }
+                deltaName = preSculptAlias.asChar();
             }
 
             Element *deltaElement = builder.CreateElement("DmeVertexDeltaData", deltaName);
