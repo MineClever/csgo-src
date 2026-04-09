@@ -93,6 +93,7 @@ ImportOptions ParseImportOptions(const MString &options)
     importOptions.importSkin = ParseBoolOption(optionMap, "importskin", true);
     importOptions.importMaterials = ParseBoolOption(optionMap, "importmaterials", true);
     importOptions.importDeltaStates = ParseBoolOption(optionMap, "importdeltastates", true);
+    importOptions.applyAxisCorrection = ParseBoolOption(optionMap, "applyaxiscorrection", true);
     return importOptions;
 }
 
@@ -211,6 +212,7 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
     context.importSkin = importOptions.importSkin;
     context.importMaterials = importOptions.importMaterials;
     context.importDeltaStates = importOptions.importDeltaStates;
+    context.applyAxisCorrection = importOptions.applyAxisCorrection;
     if (context.modelRoot)
     {
         CollectJointInfo(document, context.modelRoot, context);
@@ -229,7 +231,9 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
     const std::string upAxis = FindAttributeString(importRoot, "upAxis");
     MEulerRotation rootAxisCorrection;
     MString rootAxisWarning;
-    const bool needsAxisCorrection = ComputeRootAxisCorrection(upAxis, rootAxisCorrection, rootAxisWarning);
+    const bool needsAxisCorrection =
+        context.applyAxisCorrection &&
+        ComputeRootAxisCorrection(upAxis, rootAxisCorrection, rootAxisWarning);
 
     status = ApplyTransform(document, importRoot, sceneRoot);
     if (!status)

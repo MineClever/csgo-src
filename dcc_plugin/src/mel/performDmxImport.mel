@@ -11,11 +11,15 @@ global proc MayaDmxImport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_importDeltaStates`) {
         optionVar -intValue MayaDmx_importDeltaStates 1;
     }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_applyAxisCorrection`) {
+        optionVar -intValue MayaDmx_applyAxisCorrection 1;
+    }
 }
 
 global proc string MayaDmxImport_defaultOptionsString()
 {
-    return "importMaterials=1;importSkin=1;importDeltaStates=1";
+    return "importMaterials=1;importSkin=1;importDeltaStates=1;applyAxisCorrection=1";
 }
 
 global proc string MayaDmxImport_collectOptionVarString()
@@ -24,10 +28,12 @@ global proc string MayaDmxImport_collectOptionVarString()
     int $importMaterials = `optionVar -q MayaDmx_importMaterials`;
     int $importSkin = `optionVar -q MayaDmx_importSkin`;
     int $importDeltaStates = `optionVar -q MayaDmx_importDeltaStates`;
+    int $applyAxisCorrection = `optionVar -q MayaDmx_applyAxisCorrection`;
 
     return ("importMaterials=" + $importMaterials
         + ";importSkin=" + $importSkin
-        + ";importDeltaStates=" + $importDeltaStates);
+        + ";importDeltaStates=" + $importDeltaStates
+        + ";applyAxisCorrection=" + $applyAxisCorrection);
 }
 
 global proc MayaDmxImport_applyOptionsString(string $options)
@@ -40,6 +46,7 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     int $importMaterials = 1;
     int $importSkin = 1;
     int $importDeltaStates = 1;
+    int $applyAxisCorrection = 1;
 
     string $optionList[];
     tokenize($effectiveOptions, ";", $optionList);
@@ -56,6 +63,8 @@ global proc MayaDmxImport_applyOptionsString(string $options)
             $importSkin = $parts[1];
         } else if ($parts[0] == "importDeltaStates") {
             $importDeltaStates = $parts[1];
+        } else if ($parts[0] == "applyAxisCorrection") {
+            $applyAxisCorrection = $parts[1];
         }
     }
 
@@ -67,6 +76,9 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     }
     if (`checkBoxGrp -exists dmxImportDeltaStates`) {
         checkBoxGrp -e -value1 $importDeltaStates dmxImportDeltaStates;
+    }
+    if (`checkBoxGrp -exists dmxImportApplyAxisCorrection`) {
+        checkBoxGrp -e -value1 $applyAxisCorrection dmxImportApplyAxisCorrection;
     }
 }
 
@@ -87,9 +99,15 @@ global proc string MayaDmxImport_collectOptionsString()
         $importDeltaStates = `checkBoxGrp -q -value1 dmxImportDeltaStates`;
     }
 
+    int $applyAxisCorrection = 1;
+    if (`checkBoxGrp -exists dmxImportApplyAxisCorrection`) {
+        $applyAxisCorrection = `checkBoxGrp -q -value1 dmxImportApplyAxisCorrection`;
+    }
+
     return ("importMaterials=" + $importMaterials
         + ";importSkin=" + $importSkin
-        + ";importDeltaStates=" + $importDeltaStates);
+        + ";importDeltaStates=" + $importDeltaStates
+        + ";applyAxisCorrection=" + $applyAxisCorrection);
 }
 
 global proc MayaDmx_importSetup(string $parent, int $forceFactorySettings)
@@ -122,6 +140,8 @@ global proc MayaDmx_importCallback(string $parent, int $doIt)
             optionVar -intValue MayaDmx_importSkin $parts[1];
         } else if ($parts[0] == "importDeltaStates") {
             optionVar -intValue MayaDmx_importDeltaStates $parts[1];
+        } else if ($parts[0] == "applyAxisCorrection") {
+            optionVar -intValue MayaDmx_applyAxisCorrection $parts[1];
         }
     }
 
@@ -155,6 +175,13 @@ global proc string DmxImportOptionsUI(string $parent)
                 -label "Deformers"
                 -label1 "Import Delta States"
                 dmxImportDeltaStates;
+
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Coordinate System"
+                -label1 "Apply Axis Correction (Z-up to Y-up)"
+                -annotation "Rotate the scene root to match Maya's scene up-axis. Disable for round-trip Maya->DMX->Maya workflows where data is already in the correct space."
+                dmxImportApplyAxisCorrection;
         setParent ..;
     setParent ..;
 
@@ -195,6 +222,7 @@ global proc string[] captureDmxImportOptionVars(string $version)
     $args[0] = `optionVar -q MayaDmx_importMaterials`;
     $args[1] = `optionVar -q MayaDmx_importSkin`;
     $args[2] = `optionVar -q MayaDmx_importDeltaStates`;
+    $args[3] = `optionVar -q MayaDmx_applyAxisCorrection`;
     return $args;
 }
 

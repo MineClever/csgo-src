@@ -410,13 +410,17 @@ def verify_roundtrip(
     skin_marker_path,
     blendshape_marker_path,
     animation_marker_path,
+    import_options="",
 ):
     cmds.file(new=True, force=True)
     if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
         cmds.loadPlugin(plugin_path)
 
     before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
-    cmds.file(exported_path, i=True, type="Valve DMX Import", ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
+    import_kwargs = dict(i=True, type="Valve DMX Import", ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
+    if import_options:
+        import_kwargs["options"] = import_options
+    cmds.file(exported_path, **import_kwargs)
     imported_roots = collect_imported_roots(cmds, before_assemblies)
     candidate_meshes = snapshot_scene_meshes()
     candidate_node_types = snapshot_imported_node_types(imported_roots)
@@ -473,31 +477,40 @@ def resolve_input_path(sample_dir, case_name):
     raise RuntimeError(f"Missing sample file: {candidate_paths[0]}")
 
 
-def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
-    sys.stdout.write(f"[maya_dmx_case] {case_name}\n")
+def run_case(cmds, plugin_path, sample_dir, output_dir, case_name, import_options=""):
+    label = case_name if not import_options else f"{case_name} [{import_options}]"
+    sys.stdout.write(f"[maya_dmx_case] {label}\n")
     sys.stdout.flush()
 
     input_path = resolve_input_path(sample_dir, case_name)
     case_output_name = make_case_output_name(case_name)
-    exported_text = os.path.join(output_dir, f"{case_output_name}.maya_export.dmx")
-    exported_binary = os.path.join(output_dir, f"{case_output_name}.maya_export.dmxb")
-    roundtrip_text_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_meshcheck.txt")
-    roundtrip_binary_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_meshcheck.txt")
-    roundtrip_text_type_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_typecheck.txt")
-    roundtrip_binary_type_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_typecheck.txt")
-    roundtrip_text_skin_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_skincheck.txt")
-    roundtrip_binary_skin_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_skincheck.txt")
-    roundtrip_text_blendshape_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_blendshapecheck.txt")
-    roundtrip_binary_blendshape_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_blendshapecheck.txt")
-    roundtrip_text_animation_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_text_animcheck.txt")
-    roundtrip_binary_animation_marker = os.path.join(output_dir, f"{case_output_name}.roundtrip_binary_animcheck.txt")
+    # Append a suffix for non-default import options so markers don't collide.
+    options_suffix = ""
+    if import_options:
+        safe_options = import_options.replace("=", "").replace(";", "_").replace(" ", "")
+        options_suffix = f".{safe_options}"
+    exported_text = os.path.join(output_dir, f"{case_output_name}{options_suffix}.maya_export.dmx")
+    exported_binary = os.path.join(output_dir, f"{case_output_name}{options_suffix}.maya_export.dmxb")
+    roundtrip_text_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_meshcheck.txt")
+    roundtrip_binary_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_meshcheck.txt")
+    roundtrip_text_type_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_typecheck.txt")
+    roundtrip_binary_type_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_typecheck.txt")
+    roundtrip_text_skin_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_skincheck.txt")
+    roundtrip_binary_skin_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_skincheck.txt")
+    roundtrip_text_blendshape_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_blendshapecheck.txt")
+    roundtrip_binary_blendshape_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_blendshapecheck.txt")
+    roundtrip_text_animation_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_animcheck.txt")
+    roundtrip_binary_animation_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_animcheck.txt")
 
     cmds.file(new=True, force=True)
     if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
         cmds.loadPlugin(plugin_path)
 
     before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
-    cmds.file(input_path, i=True, type="Valve DMX Import", ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
+    import_kwargs = dict(i=True, type="Valve DMX Import", ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
+    if import_options:
+        import_kwargs["options"] = import_options
+    cmds.file(input_path, **import_kwargs)
     imported_roots = collect_imported_roots(cmds, before_assemblies)
     if imported_roots:
         cmds.select(imported_roots, replace=True)
@@ -529,6 +542,7 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
         roundtrip_text_skin_marker,
         roundtrip_text_blendshape_marker,
         roundtrip_text_animation_marker,
+        import_options=import_options,
     )
     verify_roundtrip(
         cmds,
@@ -544,7 +558,23 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name):
         roundtrip_binary_skin_marker,
         roundtrip_binary_blendshape_marker,
         roundtrip_binary_animation_marker,
+        import_options=import_options,
     )
+
+    # For samples that contain skinned meshes, automatically run a second pass with
+    # applyAxisCorrection=0 to verify that roundtrip is consistent regardless of the
+    # axis correction setting.  The no-correction import exports its own DMX and
+    # re-imports with the same no-correction option so the reference and candidate
+    # are always compared under matching settings.
+    if original_skins and not import_options:
+        run_case(
+            cmds,
+            plugin_path,
+            sample_dir,
+            output_dir,
+            case_name,
+            import_options="applyAxisCorrection=0",
+        )
 
 
 def main():

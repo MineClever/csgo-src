@@ -340,16 +340,69 @@ Element *BuildMeshElement(DocumentBuilder &builder, const MDagPath &meshPath, Ex
                 return minA < minB;
             });
 
-        for (SetMembership &membership : perFaceComponentSets)
+        // Build polygon-to-set-index mapping so we can walk polygons in sequential order.
+        // This is needed to handle face sets whose polygon indices are non-contiguous
+        // (e.g. a default set that covers [0-2245] + [2286-2716] with n-gon sets in between).
+        // Without interleaving, the large set would be emitted as one block and on re-import
+        // the polygon ordering would shift, breaking topology roundtrip.
+        std::vector<int> polyToSetIndex(polygonFaceIndices.size(), -1);
+        for (int setIdx = 0; setIdx < static_cast<int>(perFaceComponentSets.size()); ++setIdx)
         {
-            std::vector<int> filteredIndices = FilterUncoveredPolygons(membership.polygonIndices, coveredPolygons);
-            AppendFaceSetElement(builder, membership.name.c_str(), filteredIndices, polygonFaceIndices, &membership.materialData, context.exportMetadata, faceSetElements);
+            for (int polyIdx : perFaceComponentSets[setIdx].polygonIndices)
+            {
+                if (polyIdx >= 0 && polyIdx < static_cast<int>(polyToSetIndex.size()))
+                {
+                    polyToSetIndex[polyIdx] = setIdx;
+                }
+            }
         }
+
+        // Walk polygons in sequential order and emit contiguous runs into their face sets.
+        // Non-contiguous face sets are split into multiple DMX face set elements so that
+        // the re-imported polygon order matches the original topology.
+        int currentSetIdx = -1;
+        std::vector<int> currentRun;
+
+        auto flushRun = [&]()
+        {
+            if (currentRun.empty() || currentSetIdx < 0)
+            {
+                currentRun.clear();
+                return;
+            }
+            SetMembership &membership = perFaceComponentSets[currentSetIdx];
+            std::vector<int> filteredRun = FilterUncoveredPolygons(currentRun, coveredPolygons);
+            if (!filteredRun.empty())
+            {
+                AppendFaceSetElement(builder, membership.name.c_str(), filteredRun, polygonFaceIndices,
+                                     &membership.materialData, context.exportMetadata, faceSetElements);
+            }
+            currentRun.clear();
+        };
+
+        for (int polyIdx = 0; polyIdx < static_cast<int>(polygonFaceIndices.size()); ++polyIdx)
+        {
+            const int setIdx = polyToSetIndex[polyIdx];
+            if (setIdx < 0)
+            {
+                flushRun();
+                currentSetIdx = -1;
+                continue;
+            }
+            if (setIdx != currentSetIdx)
+            {
+                flushRun();
+                currentSetIdx = setIdx;
+            }
+            currentRun.push_back(polyIdx);
+        }
+        flushRun();
 
         for (const SetMembership &membership : deferredWholeObjectSets)
         {
             std::vector<int> polygonIndices = FilterUncoveredPolygons(membership.polygonIndices, coveredPolygons);
-            AppendFaceSetElement(builder, membership.name.c_str(), polygonIndices, polygonFaceIndices, &membership.materialData, context.exportMetadata, faceSetElements);
+            AppendFaceSetElement(builder, membership.name.c_str(), polygonIndices, polygonFaceIndices,
+                                 &membership.materialData, context.exportMetadata, faceSetElements);
         }
     }
 

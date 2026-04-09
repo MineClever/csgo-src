@@ -36,6 +36,11 @@ struct ImportContext
     bool importSkin = true;
     bool importMaterials = true;
     bool importDeltaStates = true;
+    // When true, a root axis correction rotation is applied to the scene root node if the DMX
+    // upAxis differs from the current Maya scene axis. Disable for round-trip Maya→DMX→Maya
+    // workflows where the data is already in the correct coordinate space, or when the skinned
+    // mesh over-correction (DAG inheritance double-applying the rotation) is undesirable.
+    bool applyAxisCorrection = true;
 };
 
 struct ImportOptions
@@ -43,5 +48,6 @@ struct ImportOptions
     bool importSkin = true;
     bool importMaterials = true;
     bool importDeltaStates = true;
+    bool applyAxisCorrection = true;
 };
 }

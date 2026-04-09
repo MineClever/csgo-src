@@ -252,6 +252,18 @@
     - 影响文件：`mechanic_model_merged.dmx`、`head_morphs_game.dmx`
 
 - 下一阶段计划：
+  - **优先处理**（已完成，2026-04-09）：
+    - **`ComputeRootAxisCorrection` 作为可选导入选项**：✅ 已完成
+      - `ImportOptions` / `ImportContext` 新增 `applyAxisCorrection`（默认 `true`）；`ParseImportOptions` 解析 `applyAxisCorrection` 键；`reader` 中用 `context.applyAxisCorrection &&` 条件保护调用。
+      - `performDmxImport.mel`：新增 `MayaDmx_applyAxisCorrection` optionVar、`dmxImportApplyAxisCorrection` checkbox（"Coordinate System / Apply Axis Correction"）及完整的 collect/apply/sync 流程。
+      - `doDmxImportArgList.mel`：`syncOptionVars` 读取 `$args[3]`，options 字符串拼入 `applyAxisCorrection=N`。
+    - **带蒙皮网格的过度修正问题**：已评估，结论如下
+      - **当前行为**：轴修正在 `ImportDagHierarchyRecursive`（建骨架）之前执行，蒙皮在 `ImportDagShapesRecursive`（建 mesh/skin）之后绑定；`bindPreMatrix` 若无存储值则取当前关节 world matrix 的逆（已含修正），skinCluster 绑定在修正后坐标系中，静态 rest pose 下 local mesh 顶点位置保持一致 → **当前无双重叠加问题**。
+      - **过度修正仅发生于 round-trip 场景**：从本插件导出的 DMX 含 `mayaBindPreMatrix`（Y-up world space），若再次导入时开启轴修正，存储矩阵与实际关节 world matrix 产生偏差。修复方式：round-trip 场景关闭 `applyAxisCorrection`（上一条选项已支持）；长期可在导出时写入 `upAxis` 元数据并在 importer 自动检测来源坐标系。
+      - 当前已通过 `applyAxisCorrection=0` 双状态回归验证，未发现顶点漂移。
+    - **回归测试覆盖 `applyAxisCorrection` 开关**：✅ 已完成
+      - `MayaBatchRegression.py` 的 `run_case` / `verify_roundtrip` 均新增 `import_options` 参数；对含蒙皮的样例，第一轮（默认选项）结束后自动触发第二轮 `applyAxisCorrection=0` 变体，输出文件以 `.applyAxisCorrection0.` 为后缀区分。
+      - 回归结果（2026-04-09）：`simple_hierarchy` ✅、`simple_blendshape` ✅、`simple_mesh` ✅、`simple_skinned_mesh` ✅（含 axisOff 变体 ✅）、`complex_chr_mesh` ✅（含 axisOff 变体 ✅）、`MostComplexSampleSet/chr_mesh` ✅（含 axisOff 变体 ✅）、`simple_ngon_mesh` ✅
   - 第一优先级：
     - ✅ ~~`complex_chr_mesh` 与 `MostComplexSampleSet/chr_mesh` 顶点漂移~~（已修复，2026-04-09）
     - ✅ ~~把 Ellis/DMX 纳入回归门槛并运行~~（已运行，2026-04-09，结果见上）
