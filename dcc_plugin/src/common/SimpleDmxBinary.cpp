@@ -89,6 +89,11 @@ public:
         return true;
     }
 
+    bool ReadInt16(std::int16_t &value)
+    {
+        return ReadPod(value);
+    }
+
     bool ReadInt32(std::int32_t &value)
     {
         return ReadPod(value);
@@ -612,10 +617,34 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
         return false;
     }
 
+    // v3 uses int16 string count; v4/v5 use int32.
     std::vector<std::string> strings;
-    if (!ReadStringTable(reader, strings, errorMessage))
+    if (encodingVersion <= 3)
     {
-        return false;
+        std::int16_t stringCount16 = 0;
+        if (!reader.ReadInt16(stringCount16) || stringCount16 < 0)
+        {
+            errorMessage = MakeError("invalid string table count");
+            return false;
+        }
+        strings.reserve(static_cast<size_t>(stringCount16));
+        for (std::int16_t i = 0; i < stringCount16; ++i)
+        {
+            std::string value;
+            if (!reader.ReadCString(value))
+            {
+                errorMessage = MakeError("unexpected end of string table");
+                return false;
+            }
+            strings.push_back(std::move(value));
+        }
+    }
+    else
+    {
+        if (!ReadStringTable(reader, strings, errorMessage))
+        {
+            return false;
+        }
     }
 
     std::int32_t elementCount = 0;
@@ -625,29 +654,86 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
         return false;
     }
 
+    // v3/v4 use int16 for element type/name indices and attribute name indices;
+    // v5 uses int32. String values in v3 are inline cstrings (not indices).
+    // Helper to read a string table index with the correct width.
+    auto readStringIndex = [&](std::int32_t &outIndex) -> bool
+    {
+        if (encodingVersion <= 4)
+        {
+            std::int16_t idx16 = -1;
+            if (!reader.ReadInt16(idx16))
+            {
+                return false;
+            }
+            outIndex = idx16;
+        }
+        else
+        {
+            if (!reader.ReadInt32(outIndex))
+            {
+                return false;
+            }
+        }
+        return true;
+    };
+
     std::vector<std::shared_ptr<Element>> elements(static_cast<size_t>(elementCount));
     for (std::int32_t i = 0; i < elementCount; ++i)
     {
+        // v3/v4: int16 typeIndex.  v5: int32 typeIndex.
         std::int32_t typeIndex = -1;
-        std::int32_t nameIndex = -1;
-        std::array<std::uint8_t, 16> idBytes{};
-        if (!reader.ReadInt32(typeIndex) || !reader.ReadInt32(nameIndex) || !reader.ReadBytes(idBytes.data(), idBytes.size()))
+        if (!readStringIndex(typeIndex))
         {
-            errorMessage = MakeError("unexpected end while reading element dictionary");
+            errorMessage = MakeError("unexpected end while reading element type index");
+            return false;
+        }
+
+        std::string nameValue;
+        if (encodingVersion <= 3)
+        {
+            // v3: element name is an inline null-terminated string.
+            if (!reader.ReadCString(nameValue))
+            {
+                errorMessage = MakeError("unexpected end while reading element name");
+                return false;
+            }
+        }
+        else
+        {
+            // v4/v5: element name is a string table index.
+            std::int32_t nameIndex = -1;
+            if (!readStringIndex(nameIndex))
+            {
+                errorMessage = MakeError("unexpected end while reading element name index");
+                return false;
+            }
+            const std::string *namePtr = LookupString(strings, nameIndex);
+            if (!namePtr)
+            {
+                errorMessage = MakeError("element name index is out of range");
+                return false;
+            }
+            nameValue = *namePtr;
+        }
+
+        std::array<std::uint8_t, 16> idBytes{};
+        if (!reader.ReadBytes(idBytes.data(), idBytes.size()))
+        {
+            errorMessage = MakeError("unexpected end while reading element id");
             return false;
         }
 
         const std::string *typeName = LookupString(strings, typeIndex);
-        const std::string *nameValue = LookupString(strings, nameIndex);
-        if (!typeName || !nameValue)
+        if (!typeName)
         {
-            errorMessage = MakeError("element dictionary referenced an invalid string");
+            errorMessage = MakeError("element type index is out of range");
             return false;
         }
 
         auto element = std::make_shared<Element>();
         element->type = *typeName;
-        element->name = *nameValue;
+        element->name = nameValue;
         element->id = IdBytesToString(idBytes);
 
         Attribute nameAttribute;
@@ -682,7 +768,8 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
         {
             std::int32_t nameIndex = -1;
             std::uint8_t attributeTypeCode = 0;
-            if (!reader.ReadInt32(nameIndex) || !reader.ReadUInt8(attributeTypeCode))
+            // v3/v4: attribute name stored as int16 index; v5: int32 index.
+            if (!readStringIndex(nameIndex) || !reader.ReadUInt8(attributeTypeCode))
             {
                 errorMessage = MakeError("unexpected end while reading attribute header");
                 return false;
@@ -743,19 +830,32 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
             {
                 attribute.kind = Attribute::Kind::String;
                 attribute.declaredType = DeclaredTypeFromValueType(valueType);
-                std::int32_t valueIndex = -1;
-                if (!reader.ReadInt32(valueIndex))
+                if (encodingVersion <= 3)
                 {
-                    errorMessage = MakeError("unexpected end while reading string value");
-                    return false;
+                    // v3: string value is an inline null-terminated string.
+                    if (!reader.ReadCString(attribute.stringValue))
+                    {
+                        errorMessage = MakeError("unexpected end while reading string value");
+                        return false;
+                    }
                 }
-                const std::string *value = LookupString(strings, valueIndex);
-                if (!value)
+                else
                 {
-                    errorMessage = MakeError("string value referenced an invalid string");
-                    return false;
+                    // v4: int16 index; v5: int32 index.
+                    std::int32_t valueIndex = -1;
+                    if (!readStringIndex(valueIndex))
+                    {
+                        errorMessage = MakeError("unexpected end while reading string value");
+                        return false;
+                    }
+                    const std::string *value = LookupString(strings, valueIndex);
+                    if (!value)
+                    {
+                        errorMessage = MakeError("string value referenced an invalid string");
+                        return false;
+                    }
+                    attribute.stringValue = *value;
                 }
-                attribute.stringValue = *value;
                 break;
             }
 

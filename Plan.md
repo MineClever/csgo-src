@@ -146,8 +146,8 @@
     - `teeth_sfm.dmx` ❌ binary v4 解析失败（"element dictionary referenced an invalid string"）
     - `mechanic_model.dmx` ❌ binary v4 解析失败
     - `head_morphs.dmx` ❌ binary v4 解析失败
-    - `mechanic_model_merged.dmx` ❌ 网格拓扑不匹配（poly 2247: quad→tri，含 n-gon）
-    - `head_morphs_game.dmx` ❌ 网格拓扑不匹配（poly 2247: quad→tri，含 n-gon）
+    - `mechanic_model_merged.dmx` ✅（修复后 mesh/skin/blendshape 全 ok，含 applyAxisCorrection=0 变体）
+    - `head_morphs_game.dmx` ✅（修复后 mesh/skin/blendshape 全 ok）
 - 目标目录：[dcc_plugin](dcc_plugin)
 - 开发环境：
   - Maya 2022.5 DevKit：`D:\_Code_Here\Maya\Autodesk_Maya_2022_5_Update_DEVKIT_Windows\devkitBase`
@@ -244,12 +244,7 @@
     - v4 错误路径：读 int32（251）作为 string count，读 251 条内联字符串成功，再尝试解析 element dict 时字符串索引越界 → “element dictionary referenced an invalid string”。
     - 修复难度：**高**。需要在 `SimpleDmxBinary.cpp` 按 encoding version 分叉解析路径；v3/v4 的 element dict 格式与 v5 差异显著，需要单独实现并做好单元测试。
     - 影响文件：`upper_teeth.dmx`、`lower_teeth.dmx`（v3）；`teeth_sfm.dmx`、`mechanic_model.dmx`、`head_morphs.dmx`（v4）
-  - **含 n-gon 网格拓扑不匹配**：
-    - 现象：keyvalues2 格式的生产级模型（含 5 顶点 n-gon polygon），roundtrip 后 poly 2247 的顶点数从 4 变为 3（quad → tri）。
-    - 已确认：原始 poly 2255 为 5-verts n-gon；poly 2247 原为 quad `[7,6,10,12]`，roundtrip 后顶点数变为 3。
-    - 怀疑方向：exporter 端 `MItMeshPolygon` 导出混合多边形时可能发生隐式三角化或面集合分割；或 importer 端面集恢复时 face count 误差导致拓扑移位。
-    - 修复难度：**中**。需要在 exporter 端加 n-gon 覆盖测试样例，逐步定位 `polygonFaceIndices` 中的错误条目来源。
-    - 影响文件：`mechanic_model_merged.dmx`、`head_morphs_game.dmx`
+  - ~~**含 n-gon 网格拓扑不匹配**~~：✅ 已修复（2026-04-09），见第一优先级。
 
 - 下一阶段计划：
   - **优先处理**（已完成，2026-04-09）：
@@ -267,7 +262,7 @@
   - 第一优先级：
     - ✅ ~~`complex_chr_mesh` 与 `MostComplexSampleSet/chr_mesh` 顶点漂移~~（已修复，2026-04-09）
     - ✅ ~~把 Ellis/DMX 纳入回归门槛并运行~~（已运行，2026-04-09，结果见上）
-    - ✅ ~~**修复含 n-gon 的网格拓扑不匹配**~~（已修复，2026-04-09）：根本原因：`getConnectedSetsAndMembers()` 返回顺序由 Maya 决定；修复：按最小 polygon index 排序 per-face face set 再输出。
+    - ✅ ~~**修复含 n-gon 的网格拓扑不匹配**~~（已修复，2026-04-09）：根本原因：face set A 覆盖非连续 polygon 范围（[0-2245]+[2286-2716]），导出时整块发射，n-gon face set B/C 追加在后，re-import 后 polygon 编号错位 40 个位置。修复：在 `DmxExportMesh.cpp` 中按 polyToSetIndex 映射表顺序遍历 0..N-1，将非连续 face set 自动切割成多个连续段交错发射，保持 polygon 序号与原始一致。`mechanic_model_merged` 与 `head_morphs_game` 均已通过 mesh/skin/blendshape/type 四重回归（含 applyAxisCorrection=0 变体）。
     - ✅ ~~**exporter 私有 DOM 并入公共 codec**~~（已完成，2026-04-09）：删除 `DmxExportTextModel`，迁移到 `DocumentBuilder`，binary export 消除 text→parse 中转。
     - 补独立动画宿主回归，避免后续改 importer 时 [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx)、[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx)、[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 退回”只导骨架不导关键帧”。
   - 第二优先级（技术债务）：
