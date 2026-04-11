@@ -17,6 +17,7 @@
 namespace dmx_import_impl
 {
 
+
 static int ParseUvChannelIndex(const std::string &attributeName)
 {
     if (attributeName == "textureCoordinates")

@@ -1,6 +1,8 @@
 #include "DmxImportInternals.h"
 
 #include <cstdint>
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -11,6 +13,7 @@
 #include <maya/MDGModifier.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnSet.h>
+#include <maya/MGlobal.h>
 #include <maya/MObject.h>
 #include <maya/MPlug.h>
 #include <maya/MPlugArray.h>
@@ -107,6 +110,133 @@ std::string ElementKey(const simple_dmx::Element *element)
     std::ostringstream stream;
     stream << reinterpret_cast<uintptr_t>(element);
     return stream.str();
+}
+
+std::string SanitizeNodeName(const std::string &name)
+{
+    std::string sanitized = name.empty() ? "dmxMaterial" : name;
+    for (char &ch : sanitized)
+    {
+        const bool ok = (ch >= 'a' && ch <= 'z') ||
+            (ch >= 'A' && ch <= 'Z') ||
+            (ch >= '0' && ch <= '9') ||
+            ch == '_';
+        if (!ok)
+        {
+            ch = '_';
+        }
+    }
+    return sanitized;
+}
+
+std::unordered_map<std::string, std::string> ParseOptionMap(const MString &options)
+{
+    std::unordered_map<std::string, std::string> optionMap;
+    std::string text = options.asChar();
+    size_t start = 0;
+    while (start < text.size())
+    {
+        size_t end = text.find(';', start);
+        if (end == std::string::npos)
+        {
+            end = text.size();
+        }
+
+        const std::string pair = text.substr(start, end - start);
+        const size_t separator = pair.find('=');
+        if (separator != std::string::npos)
+        {
+            std::string key = pair.substr(0, separator);
+            std::string value = pair.substr(separator + 1);
+            std::transform(key.begin(), key.end(), key.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+            optionMap[key] = value;
+        }
+
+        start = end + 1;
+    }
+    return optionMap;
+}
+
+bool ParseBoolOption(const std::unordered_map<std::string, std::string> &optionMap, const char *key, bool defaultValue)
+{
+    auto it = optionMap.find(key);
+    if (it == optionMap.end())
+    {
+        return defaultValue;
+    }
+
+    std::string value = it->second;
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value == "1" || value == "true" || value == "yes";
+}
+
+ImportOptions ParseImportOptions(const MString &options)
+{
+    ImportOptions importOptions;
+    const std::unordered_map<std::string, std::string> optionMap = ParseOptionMap(options);
+    importOptions.importSkin = ParseBoolOption(optionMap, "importskin", true);
+    importOptions.importMaterials = ParseBoolOption(optionMap, "importmaterials", true);
+    importOptions.importDeltaStates = ParseBoolOption(optionMap, "importdeltastates", true);
+    importOptions.applyAxisCorrection = ParseBoolOption(optionMap, "applyaxiscorrection", true);
+    return importOptions;
+}
+
+std::string ReadTextFile(const MString &filePath)
+{
+    std::ifstream file(filePath.asChar(), std::ios::in | std::ios::binary);
+    std::ostringstream stream;
+    stream << file.rdbuf();
+    return stream.str();
+}
+
+std::string NormalizeAxisName(std::string axisName)
+{
+    std::transform(axisName.begin(), axisName.end(), axisName.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::toupper(ch));
+    });
+    return axisName;
+}
+
+bool ComputeRootAxisCorrection(const std::string &sourceUpAxis, MEulerRotation &outRotation, MString &outWarning)
+{
+    const std::string normalizedSourceUpAxis = NormalizeAxisName(sourceUpAxis);
+    if (normalizedSourceUpAxis.empty())
+    {
+        return false;
+    }
+
+    MStatus status;
+    const bool mayaYAxisUp = MGlobal::isYAxisUp(&status);
+    if (!status)
+    {
+        return false;
+    }
+
+    const bool mayaZAxisUp = MGlobal::isZAxisUp(&status);
+    if (!status)
+    {
+        return false;
+    }
+
+    if (normalizedSourceUpAxis == "Z" && mayaYAxisUp)
+    {
+        outRotation = MEulerRotation(-1.57079632679, 0.0, 0.0);
+        outWarning = "maya_dmx: imported Z-up model into a Y-up Maya scene with a -90deg X correction group.";
+        return true;
+    }
+
+    if (normalizedSourceUpAxis == "Y" && mayaZAxisUp)
+    {
+        outRotation = MEulerRotation(1.57079632679, 0.0, 0.0);
+        outWarning = "maya_dmx: imported Y-up model into a Z-up Maya scene with a +90deg X correction group.";
+        return true;
+    }
+
+    return false;
 }
 
 bool ParseMatrixString(const std::string &text, MMatrix &matrix)

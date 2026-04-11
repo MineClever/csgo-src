@@ -8,53 +8,70 @@
 
 #include <maya/MDagPath.h>
 #include <maya/MDagPathArray.h>
+#include <maya/MDoubleArray.h>
 #include <maya/MFnBlendShapeDeformer.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
-#include <maya/MFnMatrixData.h>
 #include <maya/MFnMesh.h>
 #include <maya/MFnSingleIndexedComponent.h>
 #include <maya/MFnSkinCluster.h>
-#include <maya/MDoubleArray.h>
 #include <maya/MGlobal.h>
 #include <maya/MIntArray.h>
 #include <maya/MItDependencyGraph.h>
-#include <maya/MMatrix.h>
 #include <maya/MObjectArray.h>
 #include <maya/MPlug.h>
 #include <maya/MPointArray.h>
-#include <maya/MSelectionList.h>
 #include <maya/MStatus.h>
 #include <maya/MString.h>
 
 namespace dmx_export_impl
 {
 
-void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, ExportContext &context)
+DeformerExporter::DeformerExporter(ExportContext &context)
+    : context_(context)
 {
+}
+
+void DeformerExporter::bindMeshContext(const MDagPath &meshPath)
+{
+    meshPath_ = meshPath;
+    currentSkinClusterObject_ = MObject::kNullObj;
+    currentBlendShapeObject_ = MObject::kNullObj;
+    currentBlendShapeNodeName_.clear();
+}
+
+void DeformerExporter::AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement)
+{
+    bindMeshContext(meshPath);
+    vertexDataElement_ = &vertexDataElement;
+
     MStatus status;
-    MObject meshNodeCopy(meshPath.node());
-    MItDependencyGraph dgIt(meshNodeCopy, MFn::kSkinClusterFilter,
-        MItDependencyGraph::kUpstream, MItDependencyGraph::kDepthFirst,
-        MItDependencyGraph::kNodeLevel, &status);
+    MObject meshNodeCopy(meshPath_.node());
+    MItDependencyGraph dgIt(
+        meshNodeCopy,
+        MFn::kSkinClusterFilter,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
     if (!status || dgIt.isDone())
     {
         return;
     }
 
-    MObject skinClusterObject = dgIt.currentItem(&status);
-    if (!status || skinClusterObject.isNull())
+    currentSkinClusterObject_ = dgIt.currentItem(&status);
+    if (!status || currentSkinClusterObject_.isNull())
     {
         return;
     }
 
-    MFnSkinCluster skinClusterFn(skinClusterObject, &status);
+    MFnSkinCluster skinClusterFn(currentSkinClusterObject_, &status);
     if (!status)
     {
         return;
     }
 
-    MFnMesh meshFn(meshPath, &status);
+    MFnMesh meshFn(meshPath_, &status);
     if (!status)
     {
         return;
@@ -96,19 +113,19 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
     for (unsigned int influenceIndex = 0; influenceIndex < influenceCount; ++influenceIndex)
     {
         const std::string pathKey = DagPathKey(influencePaths[influenceIndex]);
-        auto it = context.jointIndexByPath.find(pathKey);
-        if (it == context.jointIndexByPath.end())
+        auto it = context_.jointIndexByPath.find(pathKey);
+        if (it == context_.jointIndexByPath.end())
         {
-            auto dagIt = context.dagElementByPath.find(pathKey);
-            if (dagIt != context.dagElementByPath.end() && dagIt->second)
+            auto dagIt = context_.dagElementByPath.find(pathKey);
+            if (dagIt != context_.dagElementByPath.end() && dagIt->second)
             {
-                const int jointIndex = static_cast<int>(context.jointElements.size());
-                context.jointIndexByPath[pathKey] = jointIndex;
-                context.jointElements.push_back(dagIt->second);
-                it = context.jointIndexByPath.find(pathKey);
+                const int jointIndex = static_cast<int>(context_.jointElements.size());
+                context_.jointIndexByPath[pathKey] = jointIndex;
+                context_.jointElements.push_back(dagIt->second);
+                it = context_.jointIndexByPath.find(pathKey);
             }
         }
-        if (it != context.jointIndexByPath.end())
+        if (it != context_.jointIndexByPath.end())
         {
             influenceToJointIndex[influenceIndex] = it->second;
         }
@@ -116,7 +133,7 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
 
     MDoubleArray weights;
     unsigned int exportedInfluenceCount = 0;
-    status = skinClusterFn.getWeights(meshPath, vertexComponent, weights, exportedInfluenceCount);
+    status = skinClusterFn.getWeights(meshPath_, vertexComponent, weights, exportedInfluenceCount);
     if (!status || exportedInfluenceCount != influenceCount)
     {
         return;
@@ -151,9 +168,6 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
 
     std::vector<std::string> jointWeightValues;
     std::vector<std::string> jointIndexValues;
-    jointWeightValues.reserve(static_cast<size_t>(vertexCount) * jointCount);
-    jointIndexValues.reserve(static_cast<size_t>(vertexCount) * jointCount);
-
     for (unsigned int vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
     {
         const unsigned int baseOffset = vertexIndex * influenceCount;
@@ -181,13 +195,11 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
         if (vertexWeights.size() > jointCount)
         {
             vertexWeights.resize(jointCount);
-
             double weightSum = 0.0;
             for (const auto &entry : vertexWeights)
             {
                 weightSum += entry.second;
             }
-
             if (weightSum > kWeightEpsilon)
             {
                 for (auto &entry : vertexWeights)
@@ -209,23 +221,18 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
         }
     }
 
-    SetAttr(vertexDataElement, "jointCount", ScalarAttr("int", std::to_string(jointCount)));
-    SetAttr(vertexDataElement, "jointIndices", ScalarArrayAttr("int_array", std::move(jointIndexValues)));
-    SetAttr(vertexDataElement, "jointWeights", ScalarArrayAttr("float_array", std::move(jointWeightValues)));
+    SetAttr(*vertexDataElement_, "jointCount", ScalarAttr("int", std::to_string(jointCount)));
+    SetAttr(*vertexDataElement_, "jointIndices", ScalarArrayAttr("int_array", std::move(jointIndexValues)));
+    SetAttr(*vertexDataElement_, "jointWeights", ScalarArrayAttr("float_array", std::move(jointWeightValues)));
 
-    MFnDependencyNode skinClusterNodeFn(skinClusterObject, &status);
-    if (!status)
+    MFnDependencyNode skinClusterNodeFn(currentSkinClusterObject_, &status);
+    if (!status || !context_.exportMetadata)
     {
         return;
     }
 
-    if (!context.exportMetadata)
-    {
-        return;
-    }
-
-    SetAttr(vertexDataElement, "mayaDeformerType", ScalarAttr("string", "skinCluster"));
-    SetAttr(vertexDataElement, "mayaSkinClusterName", ScalarAttr("string", skinClusterNodeFn.name().asChar()));
+    SetAttr(*vertexDataElement_, "mayaDeformerType", ScalarAttr("string", "skinCluster"));
+    SetAttr(*vertexDataElement_, "mayaSkinClusterName", ScalarAttr("string", skinClusterNodeFn.name().asChar()));
 
     MPlug skinningMethodPlug = skinClusterNodeFn.findPlug("skinningMethod", true, &status);
     if (status)
@@ -233,7 +240,7 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
         short skinningMethod = 0;
         if (skinningMethodPlug.getValue(skinningMethod) == MS::kSuccess)
         {
-            SetAttr(vertexDataElement, "mayaSkinningMethod", ScalarAttr("int", std::to_string(static_cast<int>(skinningMethod))));
+            SetAttr(*vertexDataElement_, "mayaSkinningMethod", ScalarAttr("int", std::to_string(static_cast<int>(skinningMethod))));
         }
     }
 
@@ -243,7 +250,7 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
         int maxInfluences = 0;
         if (maxInfluencesPlug.getValue(maxInfluences) == MS::kSuccess)
         {
-            SetAttr(vertexDataElement, "mayaMaxInfluences", ScalarAttr("int", std::to_string(maxInfluences)));
+            SetAttr(*vertexDataElement_, "mayaMaxInfluences", ScalarAttr("int", std::to_string(maxInfluences)));
         }
     }
 
@@ -253,7 +260,7 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
         bool maintainMaxInfluences = false;
         if (maintainMaxInfluencesPlug.getValue(maintainMaxInfluences) == MS::kSuccess)
         {
-            SetAttr(vertexDataElement, "mayaMaintainMaxInfluences", ScalarAttr("bool", maintainMaxInfluences ? "1" : "0"));
+            SetAttr(*vertexDataElement_, "mayaMaintainMaxInfluences", ScalarAttr("bool", maintainMaxInfluences ? "1" : "0"));
         }
     }
 
@@ -263,7 +270,7 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
         short normalizeWeights = 0;
         if (normalizeWeightsPlug.getValue(normalizeWeights) == MS::kSuccess)
         {
-            SetAttr(vertexDataElement, "mayaNormalizeWeights", ScalarAttr("int", std::to_string(static_cast<int>(normalizeWeights))));
+            SetAttr(*vertexDataElement_, "mayaNormalizeWeights", ScalarAttr("int", std::to_string(static_cast<int>(normalizeWeights))));
         }
     }
 
@@ -273,7 +280,7 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
         bool useComponents = false;
         if (useComponentsPlug.getValue(useComponents) == MS::kSuccess)
         {
-            SetAttr(vertexDataElement, "mayaUseComponents", ScalarAttr("bool", useComponents ? "1" : "0"));
+            SetAttr(*vertexDataElement_, "mayaUseComponents", ScalarAttr("bool", useComponents ? "1" : "0"));
         }
     }
 
@@ -283,14 +290,12 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
         const std::string geomMatrixValue = ReadMatrixPlugValue(geomMatrixPlug);
         if (!geomMatrixValue.empty())
         {
-            SetAttr(vertexDataElement, "mayaGeomMatrix", ScalarAttr("string", geomMatrixValue));
+            SetAttr(*vertexDataElement_, "mayaGeomMatrix", ScalarAttr("string", geomMatrixValue));
         }
     }
 
     std::vector<std::string> bindPreMatrixValues;
     std::vector<std::string> influencePathValues;
-    bindPreMatrixValues.reserve(influenceCount);
-    influencePathValues.reserve(influenceCount);
     MPlug bindPreMatrixArrayPlug = skinClusterNodeFn.findPlug("bindPreMatrix", true, &status);
     if (status)
     {
@@ -316,23 +321,27 @@ void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, Ex
 
     if (!influencePathValues.empty())
     {
-        SetAttr(vertexDataElement, "mayaInfluencePaths", ScalarArrayAttr("string_array", std::move(influencePathValues)));
+        SetAttr(*vertexDataElement_, "mayaInfluencePaths", ScalarArrayAttr("string_array", std::move(influencePathValues)));
     }
     if (!bindPreMatrixValues.empty())
     {
-        SetAttr(vertexDataElement, "mayaBindPreMatrix", ScalarArrayAttr("string_array", std::move(bindPreMatrixValues)));
+        SetAttr(*vertexDataElement_, "mayaBindPreMatrix", ScalarArrayAttr("string_array", std::move(bindPreMatrixValues)));
     }
 }
 
-void AppendBlendShapeDeltaStates(
+void DeformerExporter::AppendBlendShapeDeltaStates(
     DocumentBuilder &builder,
     const MDagPath &meshPath,
     const MPointArray &meshPoints,
-    ExportContext &context,
     std::vector<Element *> &deltaStateElements)
 {
+    builder_ = &builder;
+    bindMeshContext(meshPath);
+    meshPoints_ = &meshPoints;
+    deltaStateElements_ = &deltaStateElements;
+
     MStatus status;
-    MObject meshNodeObject = meshPath.node();
+    MObject meshNodeObject = meshPath_.node();
     MItDependencyGraph dependencyIt(
         meshNodeObject,
         MFn::kBlendShape,
@@ -347,13 +356,13 @@ void AppendBlendShapeDeltaStates(
 
     for (; !dependencyIt.isDone(); dependencyIt.next())
     {
-        MObject blendShapeObject = dependencyIt.currentItem(&status);
-        if (!status || blendShapeObject.isNull())
+        currentBlendShapeObject_ = dependencyIt.currentItem(&status);
+        if (!status || currentBlendShapeObject_.isNull())
         {
             continue;
         }
 
-        MFnBlendShapeDeformer blendShapeFn(blendShapeObject, &status);
+        MFnBlendShapeDeformer blendShapeFn(currentBlendShapeObject_, &status);
         if (!status)
         {
             continue;
@@ -366,11 +375,12 @@ void AppendBlendShapeDeltaStates(
             continue;
         }
 
-        MFnDependencyNode blendShapeNodeFn(blendShapeObject, &status);
+        MFnDependencyNode blendShapeNodeFn(currentBlendShapeObject_, &status);
         if (!status)
         {
             continue;
         }
+        currentBlendShapeNodeName_ = blendShapeNodeFn.name();
 
         MPlug weightArrayPlug = blendShapeNodeFn.findPlug("weight", true, &status);
         if (!status)
@@ -382,8 +392,6 @@ void AppendBlendShapeDeltaStates(
         {
             const unsigned int weightIndex = static_cast<unsigned int>(weightIndices[weightSlot]);
 
-            // Read the weight alias before calling TryRegenerateBlendShapeTarget,
-            // because sculptTarget -regenerate may rename it to the shape node name.
             MPlug weightPlug = weightArrayPlug.elementByLogicalIndex(weightIndex, &status);
             MString preSculptAlias;
             if (status && !weightPlug.isNull())
@@ -413,12 +421,11 @@ void AppendBlendShapeDeltaStates(
             }
             else
             {
-                if (!TryRegenerateBlendShapeTarget(blendShapeNodeFn.name(), weightIndex, targetPath, temporaryTargetTransform))
+                if (!TryRegenerateBlendShapeTarget(currentBlendShapeNodeName_, weightIndex, targetPath, temporaryTargetTransform))
                 {
                     continue;
                 }
 
-                // Restore the original weight alias if sculptTarget renamed it.
                 if (preSculptAlias.length() > 0 && !weightPlug.isNull())
                 {
                     MString currentAlias = blendShapeNodeFn.plugsAlias(weightPlug);
@@ -449,47 +456,35 @@ void AppendBlendShapeDeltaStates(
             {
                 if (temporaryTargetTransform.length() > 0)
                 {
-                    MSelectionList deleteList;
-                    MObject deleteObject;
-                    if (deleteList.add(temporaryTargetTransform) == MS::kSuccess &&
-                        deleteList.getDependNode(0, deleteObject) == MS::kSuccess)
-                    {
-                        MDGModifier dgModifier;
-                        dgModifier.deleteNode(deleteObject);
-                        dgModifier.doIt();
-                    }
+                    MString deleteCommand("delete \"");
+                    deleteCommand += temporaryTargetTransform;
+                    deleteCommand += "\"";
+                    MGlobal::executeCommand(deleteCommand, false, false);
                 }
                 continue;
             }
 
             MPointArray targetPoints;
             status = targetMeshFn.getPoints(targetPoints, MSpace::kObject);
-            if (!status || targetPoints.length() != meshPoints.length())
+            if (!status || targetPoints.length() != meshPoints_->length())
             {
                 if (temporaryTargetTransform.length() > 0)
                 {
-                    MSelectionList deleteList;
-                    MObject deleteObject;
-                    if (deleteList.add(temporaryTargetTransform) == MS::kSuccess &&
-                        deleteList.getDependNode(0, deleteObject) == MS::kSuccess)
-                    {
-                        MDGModifier dgModifier;
-                        dgModifier.deleteNode(deleteObject);
-                        dgModifier.doIt();
-                    }
+                    MString deleteCommand("delete \"");
+                    deleteCommand += temporaryTargetTransform;
+                    deleteCommand += "\"";
+                    MGlobal::executeCommand(deleteCommand, false, false);
                 }
                 continue;
             }
 
             std::vector<std::string> deltaPositions;
             std::vector<std::string> deltaPositionIndices;
-            deltaPositions.reserve(targetPoints.length());
-            deltaPositionIndices.reserve(targetPoints.length());
             for (unsigned int pointIndex = 0; pointIndex < targetPoints.length(); ++pointIndex)
             {
-                const double dx = targetPoints[pointIndex].x - meshPoints[pointIndex].x;
-                const double dy = targetPoints[pointIndex].y - meshPoints[pointIndex].y;
-                const double dz = targetPoints[pointIndex].z - meshPoints[pointIndex].z;
+                const double dx = targetPoints[pointIndex].x - (*meshPoints_)[pointIndex].x;
+                const double dy = targetPoints[pointIndex].y - (*meshPoints_)[pointIndex].y;
+                const double dz = targetPoints[pointIndex].z - (*meshPoints_)[pointIndex].z;
                 if (std::abs(dx) < 1.0e-6 && std::abs(dy) < 1.0e-6 && std::abs(dz) < 1.0e-6)
                 {
                     continue;
@@ -503,15 +498,10 @@ void AppendBlendShapeDeltaStates(
             {
                 if (temporaryTargetTransform.length() > 0)
                 {
-                    MSelectionList deleteList;
-                    MObject deleteObject;
-                    if (deleteList.add(temporaryTargetTransform) == MS::kSuccess &&
-                        deleteList.getDependNode(0, deleteObject) == MS::kSuccess)
-                    {
-                        MDGModifier dgModifier;
-                        dgModifier.deleteNode(deleteObject);
-                        dgModifier.doIt();
-                    }
+                    MString deleteCommand("delete \"");
+                    deleteCommand += temporaryTargetTransform;
+                    deleteCommand += "\"";
+                    MGlobal::executeCommand(deleteCommand, false, false);
                 }
                 continue;
             }
@@ -522,16 +512,17 @@ void AppendBlendShapeDeltaStates(
                 deltaName = preSculptAlias.asChar();
             }
 
-            Element *deltaElement = builder.CreateElement("DmeVertexDeltaData", deltaName);
+            Element *deltaElement = builder_->CreateElement("DmeVertexDeltaData", deltaName);
             SetAttr(*deltaElement, "vertexFormat", ScalarArrayAttr("string_array", {"positions"}));
             SetAttr(*deltaElement, "positions", ScalarArrayAttr("vector3_array", std::move(deltaPositions)));
             SetAttr(*deltaElement, "positionsIndices", ScalarArrayAttr("int_array", std::move(deltaPositionIndices)));
-            if (context.exportMetadata)
+            if (context_.exportMetadata)
             {
                 SetAttr(*deltaElement, "mayaDeformerType", ScalarAttr("string", "blendShape"));
-                SetAttr(*deltaElement, "mayaBlendShapeNode", ScalarAttr("string", blendShapeNodeFn.name().asChar()));
+                SetAttr(*deltaElement, "mayaBlendShapeNode", ScalarAttr("string", currentBlendShapeNodeName_.asChar()));
                 SetAttr(*deltaElement, "mayaWeightIndex", ScalarAttr("int", std::to_string(weightIndex)));
                 SetAttr(*deltaElement, "mayaTargetName", ScalarAttr("string", targetNodeName.asChar()));
+
                 MPlug envelopePlug = blendShapeNodeFn.findPlug("envelope", true, &status);
                 if (status)
                 {
@@ -541,6 +532,7 @@ void AppendBlendShapeDeltaStates(
                         SetAttr(*deltaElement, "mayaBlendShapeEnvelope", ScalarAttr("float", FormatFloat(envelope)));
                     }
                 }
+
                 MPlug originPlug = blendShapeNodeFn.findPlug("origin", true, &status);
                 if (status)
                 {
@@ -560,9 +552,26 @@ void AppendBlendShapeDeltaStates(
                 MGlobal::executeCommand(deleteCommand, false, false);
             }
 
-            deltaStateElements.push_back(deltaElement);
+            deltaStateElements_->push_back(deltaElement);
         }
     }
+}
+
+void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, ExportContext &context)
+{
+    DeformerExporter exporter(context);
+    exporter.AppendSkinningData(meshPath, vertexDataElement);
+}
+
+void AppendBlendShapeDeltaStates(
+    DocumentBuilder &builder,
+    const MDagPath &meshPath,
+    const MPointArray &meshPoints,
+    ExportContext &context,
+    std::vector<Element *> &deltaStateElements)
+{
+    DeformerExporter exporter(context);
+    exporter.AppendBlendShapeDeltaStates(builder, meshPath, meshPoints, deltaStateElements);
 }
 
 } // namespace dmx_export_impl

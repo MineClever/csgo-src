@@ -8,22 +8,20 @@
 #include <unordered_map>
 #include <vector>
 
+#include <maya/MDGModifier.h>
 #include <maya/MDagPath.h>
 #include <maya/MDagPathArray.h>
-#include <maya/MDGModifier.h>
+#include <maya/MFloatArray.h>
 #include <maya/MFnBlendShapeDeformer.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnMatrixData.h>
 #include <maya/MFnMesh.h>
-#include <maya/MFnSet.h>
 #include <maya/MFnSingleIndexedComponent.h>
 #include <maya/MFnSkinCluster.h>
 #include <maya/MFnTransform.h>
-#include <maya/MFloatArray.h>
 #include <maya/MGlobal.h>
 #include <maya/MIntArray.h>
-#include <maya/MItDependencyGraph.h>
 #include <maya/MMatrix.h>
 #include <maya/MObject.h>
 #include <maya/MPlug.h>
@@ -36,7 +34,33 @@
 namespace dmx_import_impl
 {
 
-static MObject FindPrimaryMeshChildForDeformers(const MObject &transformObject)
+
+DeformerImporter::DeformerImporter(ImportContext &context)
+    : context_(context)
+{
+}
+
+MStatus DeformerImporter::bindMeshContext(const MObject &meshObject, const MObject &meshParentObject)
+{
+    meshObject_ = meshObject;
+    meshParentObject_ = meshParentObject;
+
+    MStatus status = MDagPath::getAPathTo(meshObject_, meshDagPath_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    status = MDagPath::getAPathTo(meshParentObject_, meshParentPath_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    return MStatus::kSuccess;
+}
+
+MObject DeformerImporter::findPrimaryMeshChildForDeformers(const MObject &transformObject) const
 {
     MStatus status;
     MFnDagNode dagNode(transformObject, &status);
@@ -63,24 +87,21 @@ static MObject FindPrimaryMeshChildForDeformers(const MObject &transformObject)
     return MObject::kNullObj;
 }
 
-static MStatus CreateSkinClusterWithApi(
-    const simple_dmx::Element *vertexData,
+MStatus DeformerImporter::createSkinClusterWithApi(
     const MDagPathArray &influencePaths,
-    const MDagPath &meshDagPath,
-    const MDagPath &meshParentPath,
-    MObject &skinClusterObject)
+    MObject &skinClusterObject) const
 {
     skinClusterObject = MObject::kNullObj;
 
     MStatus status;
-    MFnMesh meshFn(meshDagPath, &status);
+    MFnMesh meshFn(meshDagPath_, &status);
     if (!status)
     {
         return MStatus::kFailure;
     }
 
     const MString originalShapeName = meshFn.name() + "Orig";
-    MObject originalMeshObject = meshFn.copy(meshDagPath.node(), meshParentPath.node(), &status);
+    MObject originalMeshObject = meshFn.copy(meshDagPath_.node(), meshParentPath_.node(), &status);
     if (!status)
     {
         return MStatus::kFailure;
@@ -106,7 +127,7 @@ static MStatus CreateSkinClusterWithApi(
         return MStatus::kFailure;
     }
 
-    const std::string requestedSkinClusterName = FindAttributeString(vertexData, "mayaSkinClusterName");
+    const std::string requestedSkinClusterName = FindAttributeString(vertexData_, "mayaSkinClusterName");
     if (!requestedSkinClusterName.empty())
     {
         skinClusterNodeFn.setName(requestedSkinClusterName.c_str(), &status);
@@ -114,8 +135,8 @@ static MStatus CreateSkinClusterWithApi(
     }
 
     MDGModifier dgModifier;
-    const auto connectArrayPlug = [&](const MObject &srcNode, const char *srcAttr, unsigned int srcIndex,
-                                      const MObject &dstNode, const char *dstAttr, unsigned int dstIndex) -> MStatus
+    auto connectArrayPlug = [&](const MObject &srcNode, const char *srcAttr, unsigned int srcIndex,
+                                const MObject &dstNode, const char *dstAttr, unsigned int dstIndex) -> MStatus
     {
         MFnDependencyNode srcFn(srcNode);
         MFnDependencyNode dstFn(dstNode);
@@ -190,18 +211,15 @@ static MStatus CreateSkinClusterWithApi(
     {
         return MStatus::kFailure;
     }
-    status = connectArrayPlug(skinClusterObject, "outputGeometry", 0, meshDagPath.node(), "inMesh", 0);
+    status = connectArrayPlug(skinClusterObject, "outputGeometry", 0, meshDagPath_.node(), "inMesh", 0);
     if (!status)
     {
         return MStatus::kFailure;
     }
 
-    const std::vector<std::string> bindPreMatrixStrings = FindAttributeStringArray(vertexData, "mayaBindPreMatrix");
-    const std::vector<std::string> influencePathStrings = FindAttributeStringArray(vertexData, "mayaInfluencePaths");
+    const std::vector<std::string> bindPreMatrixStrings = FindAttributeStringArray(vertexData_, "mayaBindPreMatrix");
+    const std::vector<std::string> influencePathStrings = FindAttributeStringArray(vertexData_, "mayaInfluencePaths");
 
-    // Build a map from joint name suffix to stored bindPreMatrix index for path-based matching.
-    // The stored arrays are ordered by Maya's influence order from the export scene, which may
-    // differ from the current DMX joint index order. Matching by name avoids index misalignment.
     std::unordered_map<std::string, size_t> storedPathNameToIndex;
     for (size_t storedIndex = 0; storedIndex < influencePathStrings.size(); ++storedIndex)
     {
@@ -269,9 +287,9 @@ static MStatus CreateSkinClusterWithApi(
         return MStatus::kFailure;
     }
     MFnMatrixData geomMatrixDataFn;
-    MMatrix geomMatrix = meshParentPath.inclusiveMatrix();
+    MMatrix geomMatrix = meshParentPath_.inclusiveMatrix();
     MMatrix parsedGeomMatrix;
-    if (ParseMatrixString(FindAttributeString(vertexData, "mayaGeomMatrix"), parsedGeomMatrix))
+    if (ParseMatrixString(FindAttributeString(vertexData_, "mayaGeomMatrix"), parsedGeomMatrix))
     {
         geomMatrix = parsedGeomMatrix;
     }
@@ -289,7 +307,7 @@ static MStatus CreateSkinClusterWithApi(
     return dgModifier.doIt();
 }
 
-static MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData, const MObject &skinClusterObject)
+MStatus DeformerImporter::restoreSkinClusterSettings(const MObject &skinClusterObject) const
 {
     MStatus status;
     MFnDependencyNode skinClusterNode(skinClusterObject, &status);
@@ -301,7 +319,7 @@ static MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData,
     MPlug skinningMethodPlug = skinClusterNode.findPlug("skinningMethod", true, &status);
     if (status)
     {
-        const std::vector<double> values = ParseNumberList(FindAttributeString(vertexData, "mayaSkinningMethod"));
+        const std::vector<double> values = ParseNumberList(FindAttributeString(vertexData_, "mayaSkinningMethod"));
         if (!values.empty())
         {
             skinningMethodPlug.setShort(static_cast<short>(values[0]));
@@ -312,7 +330,7 @@ static MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData,
     MPlug useComponentsPlug = skinClusterNode.findPlug("useComponents", true, &status);
     if (status)
     {
-        const std::string value = FindAttributeString(vertexData, "mayaUseComponents");
+        const std::string value = FindAttributeString(vertexData_, "mayaUseComponents");
         if (!value.empty())
         {
             useComponentsPlug.setBool(value == "1" || value == "true");
@@ -323,7 +341,7 @@ static MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData,
     MPlug maxInfluencesPlug = skinClusterNode.findPlug("maxInfluences", true, &status);
     if (status)
     {
-        const std::vector<double> values = ParseNumberList(FindAttributeString(vertexData, "mayaMaxInfluences"));
+        const std::vector<double> values = ParseNumberList(FindAttributeString(vertexData_, "mayaMaxInfluences"));
         if (!values.empty())
         {
             maxInfluencesPlug.setInt(static_cast<int>(values[0]));
@@ -334,7 +352,7 @@ static MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData,
     MPlug maintainMaxInfluencesPlug = skinClusterNode.findPlug("maintainMaxInfluences", true, &status);
     if (status)
     {
-        const std::string value = FindAttributeString(vertexData, "mayaMaintainMaxInfluences");
+        const std::string value = FindAttributeString(vertexData_, "mayaMaintainMaxInfluences");
         if (!value.empty())
         {
             maintainMaxInfluencesPlug.setBool(value == "1" || value == "true");
@@ -345,7 +363,7 @@ static MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData,
     MPlug normalizeWeightsPlug = skinClusterNode.findPlug("normalizeWeights", true, &status);
     if (status)
     {
-        const std::vector<double> values = ParseNumberList(FindAttributeString(vertexData, "mayaNormalizeWeights"));
+        const std::vector<double> values = ParseNumberList(FindAttributeString(vertexData_, "mayaNormalizeWeights"));
         if (!values.empty())
         {
             normalizeWeightsPlug.setShort(static_cast<short>(values[0]));
@@ -355,21 +373,27 @@ static MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData,
     return MS::kSuccess;
 }
 
-MStatus ApplySkinning(
-    const ImportContext &context,
+MStatus DeformerImporter::ApplySkinning(
     const simple_dmx::Element *vertexData,
     const MObject &meshObject,
     const MObject &meshParentObject)
 {
+    vertexData_ = vertexData;
+    MStatus status = bindMeshContext(meshObject, meshParentObject);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     AppendImportDebugLog("skinning: begin");
-    const std::vector<std::string> weightStrings = FindAttributeStringArray(vertexData, "jointWeights");
-    const std::vector<std::string> indexStrings = FindAttributeStringArray(vertexData, "jointIndices");
-    if (weightStrings.empty() || indexStrings.empty() || context.jointOrder.empty())
+    const std::vector<std::string> weightStrings = FindAttributeStringArray(vertexData_, "jointWeights");
+    const std::vector<std::string> indexStrings = FindAttributeStringArray(vertexData_, "jointIndices");
+    if (weightStrings.empty() || indexStrings.empty() || context_.jointOrder.empty())
     {
         return MS::kSuccess;
     }
 
-    const std::vector<double> jointCountValues = ParseNumberList(FindAttributeString(vertexData, "jointCount"));
+    const std::vector<double> jointCountValues = ParseNumberList(FindAttributeString(vertexData_, "jointCount"));
     if (jointCountValues.empty())
     {
         return MS::kSuccess;
@@ -382,7 +406,6 @@ MStatus ApplySkinning(
     }
 
     std::vector<float> jointWeights;
-    jointWeights.reserve(weightStrings.size());
     for (const std::string &weightString : weightStrings)
     {
         const std::vector<double> values = ParseNumberList(weightString);
@@ -393,7 +416,6 @@ MStatus ApplySkinning(
     }
 
     std::vector<int> jointIndices;
-    jointIndices.reserve(indexStrings.size());
     for (const std::string &indexString : indexStrings)
     {
         const std::vector<double> values = ParseNumberList(indexString);
@@ -414,7 +436,7 @@ MStatus ApplySkinning(
         return maya_dmx::ReportWarning("maya_dmx: skipped skinning because joint weight layout did not match jointCount.");
     }
 
-    std::vector<bool> referencedJointMask(context.jointOrder.size(), false);
+    std::vector<bool> referencedJointMask(context_.jointOrder.size(), false);
     size_t skippedJointReferenceCount = 0;
     for (unsigned int vertexIndex = 0; vertexIndex < static_cast<unsigned int>(vertexCount); ++vertexIndex)
     {
@@ -422,7 +444,7 @@ MStatus ApplySkinning(
         for (int slot = 0; slot < jointCount; ++slot)
         {
             const int dmxJointIndex = jointIndices[baseOffset + slot];
-            if (dmxJointIndex < 0 || static_cast<size_t>(dmxJointIndex) >= context.jointOrder.size())
+            if (dmxJointIndex < 0 || static_cast<size_t>(dmxJointIndex) >= context_.jointOrder.size())
             {
                 ++skippedJointReferenceCount;
                 continue;
@@ -437,18 +459,17 @@ MStatus ApplySkinning(
         AppendImportDebugLog("skinning: skipped out-of-range joint indices while building influence list");
     }
 
-    MStatus status;
     MDagPathArray activeInfluencePaths;
     std::vector<int> activeDmxJointIndices;
-    for (size_t dmxJointIndex = 0; dmxJointIndex < context.jointOrder.size(); ++dmxJointIndex)
+    for (size_t dmxJointIndex = 0; dmxJointIndex < context_.jointOrder.size(); ++dmxJointIndex)
     {
         if (!referencedJointMask[dmxJointIndex])
         {
             continue;
         }
 
-        auto it = context.importedDagPaths.find(context.jointOrder[dmxJointIndex]);
-        if (it == context.importedDagPaths.end())
+        auto it = context_.importedDagPaths.find(context_.jointOrder[dmxJointIndex]);
+        if (it == context_.importedDagPaths.end())
         {
             continue;
         }
@@ -463,25 +484,11 @@ MStatus ApplySkinning(
         return MS::kSuccess;
     }
 
-    MDagPath meshParentPath;
-    status = MDagPath::getAPathTo(meshParentObject, meshParentPath);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MDagPath meshDagPath;
-    status = MDagPath::getAPathTo(meshObject, meshDagPath);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
     MObject skinClusterObject;
-    status = CreateSkinClusterWithApi(vertexData, activeInfluencePaths, meshDagPath, meshParentPath, skinClusterObject);
+    status = createSkinClusterWithApi(activeInfluencePaths, skinClusterObject);
     if (!status || skinClusterObject.isNull())
     {
-        return maya_dmx::ReportError(MString("maya_dmx: skinCluster API creation failed for ") + meshDagPath.fullPathName(), status);
+        return maya_dmx::ReportError(MString("maya_dmx: skinCluster API creation failed for ") + meshDagPath_.fullPathName(), status);
     }
     AppendImportDebugLog("skinning: created cluster");
 
@@ -556,6 +563,7 @@ MStatus ApplySkinning(
     {
         weights[weightIndex] = 0.0f;
     }
+
     unsigned int maxAssignedInfluences = 0;
     for (unsigned int vertexIndex = 0; vertexIndex < static_cast<unsigned int>(vertexCount); ++vertexIndex)
     {
@@ -602,33 +610,37 @@ MStatus ApplySkinning(
 
     if (!maxInfluencesPlug.isNull())
     {
-        const unsigned int temporaryMaxInfluences = std::max(1u, maxAssignedInfluences);
-        maxInfluencesPlug.setInt(static_cast<int>(temporaryMaxInfluences));
+        maxInfluencesPlug.setInt(static_cast<int>(std::max(1u, maxAssignedInfluences)));
     }
 
-    status = skinClusterFn.setWeights(meshDagPath, vertexComponent, influenceIndices, weights, false);
-    if (status)
-    {
-        AppendImportDebugLog("skinning: setWeights ok");
-    }
+    status = skinClusterFn.setWeights(meshDagPath_, vertexComponent, influenceIndices, weights, false);
     if (!status)
     {
         return MStatus::kFailure;
     }
 
-    return RestoreSkinClusterSettings(vertexData, skinClusterObject);
+    AppendImportDebugLog("skinning: setWeights ok");
+    return restoreSkinClusterSettings(skinClusterObject);
 }
 
-MStatus ApplyDeltaStates(
-    ImportContext &context,
+MStatus DeformerImporter::ApplyDeltaStates(
     const simple_dmx::Document &document,
     const simple_dmx::Element *meshElement,
     const MObject &meshObject,
     const MObject &meshParentObject,
     const MPointArray &basePoints)
 {
+    document_ = &document;
+    meshElement_ = meshElement;
+    basePoints_ = &basePoints;
+    MStatus status = bindMeshContext(meshObject, meshParentObject);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     AppendImportDebugLog("delta: begin");
-    const std::vector<const simple_dmx::Element *> deltaStates = FindAttributeElementArray(document, meshElement, "deltaStates");
+    const std::vector<const simple_dmx::Element *> deltaStates = FindAttributeElementArray(*document_, meshElement_, "deltaStates");
     if (deltaStates.empty())
     {
         return MS::kSuccess;
@@ -646,7 +658,7 @@ MStatus ApplyDeltaStates(
         std::string groupName = FindAttributeString(deltaState, "mayaBlendShapeNode");
         if (groupName.empty())
         {
-            groupName = meshElement->name.empty() ? std::string("dmx_blendShape") : meshElement->name + "_blendShape";
+            groupName = meshElement_->name.empty() ? std::string("dmx_blendShape") : meshElement_->name + "_blendShape";
         }
 
         auto [groupIt, inserted] = deltaStateGroupIndex.emplace(groupName, deltaStateGroups.size());
@@ -657,13 +669,6 @@ MStatus ApplyDeltaStates(
             deltaStateGroups.push_back(std::move(group));
         }
         deltaStateGroups[groupIt->second].states.push_back(deltaState);
-    }
-
-    MDagPath baseParentPath;
-    MStatus status = MDagPath::getAPathTo(meshParentObject, baseParentPath);
-    if (!status)
-    {
-        return MStatus::kFailure;
     }
 
     for (const DeltaStateGroup &group : deltaStateGroups)
@@ -687,7 +692,7 @@ MStatus ApplyDeltaStates(
 
             MStringArray duplicateResult;
             MString duplicateCommand("duplicate -rr \"");
-            duplicateCommand += baseParentPath.fullPathName();
+            duplicateCommand += meshParentPath_.fullPathName();
             duplicateCommand += "\"";
             AppendImportDebugLog(duplicateCommand.asChar());
             status = MGlobal::executeCommand(duplicateCommand, duplicateResult, false, false);
@@ -705,7 +710,7 @@ MStatus ApplyDeltaStates(
                 return MStatus::kFailure;
             }
 
-            const MObject duplicateMeshObject = FindPrimaryMeshChildForDeformers(duplicateTransformObject);
+            const MObject duplicateMeshObject = findPrimaryMeshChildForDeformers(duplicateTransformObject);
             if (duplicateMeshObject.isNull())
             {
                 return maya_dmx::ReportWarning(MString("maya_dmx: delta target duplicate had no mesh shape: ") + duplicateResult[0]);
@@ -717,7 +722,7 @@ MStatus ApplyDeltaStates(
                 return MStatus::kFailure;
             }
 
-            MPointArray deltaPoints = basePoints;
+            MPointArray deltaPoints = *basePoints_;
             const size_t deltaCount = std::min(deltaPositionStrings.size(), deltaPositionIndexStrings.size());
             for (size_t i = 0; i < deltaCount; ++i)
             {
@@ -756,11 +761,12 @@ MStatus ApplyDeltaStates(
         }
 
         MFnBlendShapeDeformer blendShapeFn;
-        const MObject blendShapeObject = blendShapeFn.create(meshObject, MFnBlendShapeDeformer::kLocalOrigin, &status);
+        const MObject blendShapeObject = blendShapeFn.create(meshObject_, MFnBlendShapeDeformer::kLocalOrigin, &status);
         if (!status)
         {
-            return maya_dmx::ReportError(MString("maya_dmx: failed to create blendShape for ") + baseParentPath.fullPathName(), status);
+            return maya_dmx::ReportError(MString("maya_dmx: failed to create blendShape for ") + meshParentPath_.fullPathName(), status);
         }
+
         const std::string blendShapeName = SanitizeNodeName(group.nodeName);
         MFnDependencyNode blendShapeDependency(blendShapeObject, &status);
         if (!status)
@@ -796,7 +802,7 @@ MStatus ApplyDeltaStates(
 
         for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
         {
-            status = blendShapeFn.addTarget(meshObject, static_cast<int>(targetIndex), targetMeshObjects[targetIndex], 1.0);
+            status = blendShapeFn.addTarget(meshObject_, static_cast<int>(targetIndex), targetMeshObjects[targetIndex], 1.0);
             if (!status)
             {
                 return maya_dmx::ReportError(MString("maya_dmx: failed to add blendShape target to ") + blendShapeNodeName, status);
@@ -808,18 +814,13 @@ MStatus ApplyDeltaStates(
         const bool hasWeightPlug = weightPlugStatus && !weightArrayPlug.isNull();
         for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
         {
-            context.importedBlendShapeTargets[targetNames[targetIndex]].push_back(
-                BlendShapeTargetBinding{blendShapeObject, targetIndex});
+            context_.importedBlendShapeTargets[targetNames[targetIndex]].push_back(BlendShapeTargetBinding{blendShapeObject, targetIndex});
 
-            // Delete the temporary target mesh first. While the mesh is connected,
-            // Maya keeps the weight alias in sync with the mesh name and ignores setAlias.
             MString deleteCommand("delete \"");
             deleteCommand += targetTransforms[targetIndex];
             deleteCommand += "\"";
             MGlobal::executeCommand(deleteCommand, false, false);
 
-            // Now set the desired alias using MEL aliasAttr. With the target mesh
-            // deleted, Maya no longer auto-manages the alias from the mesh name.
             if (hasWeightPlug)
             {
                 MStatus elemStatus;
@@ -827,7 +828,6 @@ MStatus ApplyDeltaStates(
                 if (elemStatus)
                 {
                     MString attrName = weightElemPlug.partialName();
-                    // Use MEL aliasAttr which reliably renames the alias.
                     MString aliasCmd("aliasAttr ");
                     aliasCmd += targetNames[targetIndex].c_str();
                     aliasCmd += " \"";
@@ -844,5 +844,27 @@ MStatus ApplyDeltaStates(
     return MS::kSuccess;
 }
 
-} // namespace dmx_import_impl
+MStatus ApplySkinning(
+    const ImportContext &context,
+    const simple_dmx::Element *vertexData,
+    const MObject &meshObject,
+    const MObject &meshParentObject)
+{
+    ImportContext &mutableContext = const_cast<ImportContext &>(context);
+    DeformerImporter importer(mutableContext);
+    return importer.ApplySkinning(vertexData, meshObject, meshParentObject);
+}
 
+MStatus ApplyDeltaStates(
+    ImportContext &context,
+    const simple_dmx::Document &document,
+    const simple_dmx::Element *meshElement,
+    const MObject &meshObject,
+    const MObject &meshParentObject,
+    const MPointArray &basePoints)
+{
+    DeformerImporter importer(context);
+    return importer.ApplyDeltaStates(document, meshElement, meshObject, meshParentObject, basePoints);
+}
+
+} // namespace dmx_import_impl

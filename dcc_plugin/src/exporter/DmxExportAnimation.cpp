@@ -3,45 +3,56 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
-#include <maya/MDagPath.h>
 #include <maya/MFnAnimCurve.h>
 #include <maya/MFnAttribute.h>
-#include <maya/MFnBlendShapeDeformer.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MItDependencyGraph.h>
+#include <maya/MEulerRotation.h>
 #include <maya/MObject.h>
 #include <maya/MPlug.h>
-#include <maya/MQuaternion.h>
-#include <maya/MEulerRotation.h>
-#include <maya/MSelectionList.h>
-#include <maya/MStatus.h>
-#include <maya/MTime.h>
 
 namespace dmx_export_impl
 {
 
-static Element *FindOrCreateFloatTargetElement(DocumentBuilder &builder, ExportContext &context, const std::string &targetName)
+AnimationExporter::AnimationExporter(
+    DocumentBuilder &builder,
+    const std::vector<MDagPath> &exportRoots,
+    ExportContext &context)
+    : builder_(builder)
+    , exportRoots_(exportRoots)
+    , context_(context)
 {
-    auto targetIt = context.floatTargetElementByName.find(targetName);
-    if (targetIt != context.floatTargetElementByName.end())
+}
+
+void AnimationExporter::bindCurrentDagContext(const MDagPath &dagPath)
+{
+    currentDagPath_ = dagPath;
+    currentDagName_ = dagPath.partialPathName().asChar();
+
+    const auto transformIt = context_.transformElementByPath.find(DagPathKey(currentDagPath_));
+    currentTransformElement_ = transformIt != context_.transformElementByPath.end() ? transformIt->second : nullptr;
+}
+
+Element *AnimationExporter::findOrCreateFloatTargetElement(const std::string &targetName)
+{
+    auto targetIt = context_.floatTargetElementByName.find(targetName);
+    if (targetIt != context_.floatTargetElementByName.end())
     {
         return targetIt->second;
     }
 
-    Element *targetElement = builder.CreateElement("DmElement", targetName);
+    Element *targetElement = builder_.CreateElement("DmElement", targetName);
     SetAttr(*targetElement, "flexWeight", ScalarAttr("float", "0.000000"));
-    context.floatTargetElementByName[targetName] = targetElement;
+    context_.floatTargetElementByName[targetName] = targetElement;
     return targetElement;
 }
 
-static Element *BuildFloatLog(
-    DocumentBuilder &builder,
+Element *AnimationExporter::buildFloatLog(
     const std::string &logName,
     const std::vector<double> &times,
     const std::vector<double> &values)
@@ -53,25 +64,22 @@ static Element *BuildFloatLog(
 
     std::vector<std::string> timeStrings;
     std::vector<std::string> valueStrings;
-    timeStrings.reserve(times.size());
-    valueStrings.reserve(values.size());
     for (size_t keyIndex = 0; keyIndex < times.size(); ++keyIndex)
     {
         timeStrings.push_back(FormatTimeSeconds(times[keyIndex]));
         valueStrings.push_back(FormatFloat(values[keyIndex]));
     }
 
-    Element *logLayer = builder.CreateElement("DmeFloatLogLayer", "base");
+    Element *logLayer = builder_.CreateElement("DmeFloatLogLayer", "base");
     SetAttr(*logLayer, "times", ScalarArrayAttr("time_array", std::move(timeStrings)));
     SetAttr(*logLayer, "values", ScalarArrayAttr("float_array", std::move(valueStrings)));
 
-    Element *logElement = builder.CreateElement("DmeFloatLog", logName);
-    SetAttr(*logElement, "layers", builder.ElementRefArray({logLayer}));
+    Element *logElement = builder_.CreateElement("DmeFloatLog", logName);
+    SetAttr(*logElement, "layers", builder_.ElementRefArray({logLayer}));
     return logElement;
 }
 
-static Element *BuildVector3Log(
-    DocumentBuilder &builder,
+Element *AnimationExporter::buildVector3Log(
     const std::string &logName,
     const std::vector<double> &times,
     const std::vector<std::array<double, 3>> &values)
@@ -83,25 +91,22 @@ static Element *BuildVector3Log(
 
     std::vector<std::string> timeStrings;
     std::vector<std::string> valueStrings;
-    timeStrings.reserve(times.size());
-    valueStrings.reserve(values.size());
     for (size_t keyIndex = 0; keyIndex < times.size(); ++keyIndex)
     {
         timeStrings.push_back(FormatTimeSeconds(times[keyIndex]));
         valueStrings.push_back(FormatVector3(values[keyIndex][0], values[keyIndex][1], values[keyIndex][2]));
     }
 
-    Element *logLayer = builder.CreateElement("DmeVector3LogLayer", "base");
+    Element *logLayer = builder_.CreateElement("DmeVector3LogLayer", "base");
     SetAttr(*logLayer, "times", ScalarArrayAttr("time_array", std::move(timeStrings)));
     SetAttr(*logLayer, "values", ScalarArrayAttr("vector3_array", std::move(valueStrings)));
 
-    Element *logElement = builder.CreateElement("DmeVector3Log", logName);
-    SetAttr(*logElement, "layers", builder.ElementRefArray({logLayer}));
+    Element *logElement = builder_.CreateElement("DmeVector3Log", logName);
+    SetAttr(*logElement, "layers", builder_.ElementRefArray({logLayer}));
     return logElement;
 }
 
-static Element *BuildQuaternionLog(
-    DocumentBuilder &builder,
+Element *AnimationExporter::buildQuaternionLog(
     const std::string &logName,
     const std::vector<double> &times,
     const std::vector<MQuaternion> &values)
@@ -113,45 +118,44 @@ static Element *BuildQuaternionLog(
 
     std::vector<std::string> timeStrings;
     std::vector<std::string> valueStrings;
-    timeStrings.reserve(times.size());
-    valueStrings.reserve(values.size());
     for (size_t keyIndex = 0; keyIndex < times.size(); ++keyIndex)
     {
         timeStrings.push_back(FormatTimeSeconds(times[keyIndex]));
         valueStrings.push_back(FormatQuaternion(values[keyIndex].x, values[keyIndex].y, values[keyIndex].z, values[keyIndex].w));
     }
 
-    Element *logLayer = builder.CreateElement("DmeQuaternionLogLayer", "base");
+    Element *logLayer = builder_.CreateElement("DmeQuaternionLogLayer", "base");
     SetAttr(*logLayer, "times", ScalarArrayAttr("time_array", std::move(timeStrings)));
     SetAttr(*logLayer, "values", ScalarArrayAttr("quaternion_array", std::move(valueStrings)));
 
-    Element *logElement = builder.CreateElement("DmeQuaternionLog", logName);
-    SetAttr(*logElement, "layers", builder.ElementRefArray({logLayer}));
+    Element *logElement = builder_.CreateElement("DmeQuaternionLog", logName);
+    SetAttr(*logElement, "layers", builder_.ElementRefArray({logLayer}));
     return logElement;
 }
 
-static Element *BuildFloatChannel(DocumentBuilder &builder, const std::string &name, Element *targetElement, const std::string &attributeName, Element *logElement)
+Element *AnimationExporter::buildFloatChannel(
+    const std::string &name,
+    Element *targetElement,
+    const std::string &attributeName,
+    Element *logElement)
 {
     if (!targetElement || !logElement)
     {
         return nullptr;
     }
 
-    Element *channelElement = builder.CreateElement("DmeChannel", name);
-    SetAttr(*channelElement, "toElement", builder.ElementRef(targetElement));
+    Element *channelElement = builder_.CreateElement("DmeChannel", name);
+    SetAttr(*channelElement, "toElement", builder_.ElementRef(targetElement));
     SetAttr(*channelElement, "toAttribute", ScalarAttr("string", attributeName));
-    SetAttr(*channelElement, "log", builder.ElementRef(logElement));
+    SetAttr(*channelElement, "log", builder_.ElementRef(logElement));
     return channelElement;
 }
 
-static void AppendScalarAnimationChannel(
-    DocumentBuilder &builder,
+void AnimationExporter::appendScalarAnimationChannel(
     const MPlug &plug,
     Element *targetElement,
     const std::string &attributeName,
-    const std::string &channelName,
-    std::vector<Element *> &channels,
-    double &clipDurationSeconds)
+    const std::string &channelName)
 {
     if (plug.isNull() || !targetElement)
     {
@@ -172,124 +176,158 @@ static void AppendScalarAnimationChannel(
     }
 
     std::vector<double> values;
-    values.reserve(times.size());
     for (double timeSeconds : times)
     {
         values.push_back(EvaluateCurveOrValue(curveObject, plug, timeSeconds));
-        clipDurationSeconds = std::max(clipDurationSeconds, timeSeconds);
+        clipDurationSeconds_ = std::max(clipDurationSeconds_, timeSeconds);
     }
 
-    Element *logElement = BuildFloatLog(builder, channelName + "_log", times, values);
+    Element *logElement = buildFloatLog(channelName + "_log", times, values);
     if (!logElement)
     {
         return;
     }
 
-    if (Element *channelElement = BuildFloatChannel(builder, channelName, targetElement, attributeName, logElement))
+    if (Element *channelElement = buildFloatChannel(channelName, targetElement, attributeName, logElement))
     {
-        channels.push_back(channelElement);
+        channels_.push_back(channelElement);
     }
 }
 
-static void AppendTransformAnimationChannels(
-    DocumentBuilder &builder,
-    const MDagPath &dagPath,
-    ExportContext &context,
-    std::vector<Element *> &channels,
-    double &clipDurationSeconds)
+void AnimationExporter::appendCurrentPositionAnimationChannels()
 {
-    const auto transformIt = context.transformElementByPath.find(DagPathKey(dagPath));
-    if (transformIt == context.transformElementByPath.end() || !transformIt->second)
+    if (!currentTransformElement_)
     {
         return;
     }
 
     MStatus status;
-    MFnDependencyNode nodeFn(dagPath.node(), &status);
+    MFnDependencyNode nodeFn(currentDagPath_.node(), &status);
     if (!status)
     {
         return;
     }
 
-    const auto findPlug = [&](const char *name) -> MPlug {
-        return nodeFn.findPlug(name, true, &status);
-    };
-
-    MPlug txPlug = findPlug("translateX");
+    MPlug txPlug = nodeFn.findPlug("translateX", true, &status);
     MObject txCurve = FindAnimationCurveForPlug(txPlug);
-    MPlug tyPlug = findPlug("translateY");
+    MPlug tyPlug = nodeFn.findPlug("translateY", true, &status);
     MObject tyCurve = FindAnimationCurveForPlug(tyPlug);
-    MPlug tzPlug = findPlug("translateZ");
+    MPlug tzPlug = nodeFn.findPlug("translateZ", true, &status);
     MObject tzCurve = FindAnimationCurveForPlug(tzPlug);
     std::vector<double> positionTimes;
     AppendCurveTimes(txCurve, positionTimes);
     AppendCurveTimes(tyCurve, positionTimes);
     AppendCurveTimes(tzCurve, positionTimes);
-    if (!positionTimes.empty())
+    if (positionTimes.empty())
     {
-        std::vector<std::array<double, 3>> positionValues;
-        positionValues.reserve(positionTimes.size());
-        for (double timeSeconds : positionTimes)
-        {
-            positionValues.push_back({
-                EvaluateCurveOrValue(txCurve, txPlug, timeSeconds),
-                EvaluateCurveOrValue(tyCurve, tyPlug, timeSeconds),
-                EvaluateCurveOrValue(tzCurve, tzPlug, timeSeconds)});
-            clipDurationSeconds = std::max(clipDurationSeconds, timeSeconds);
-        }
-
-        Element *logElement = BuildVector3Log(builder, std::string(dagPath.partialPathName().asChar()) + "_position", positionTimes, positionValues);
-        if (logElement)
-        {
-            channels.push_back(BuildFloatChannel(builder, std::string(dagPath.partialPathName().asChar()) + "_position_channel", transformIt->second, "position", logElement));
-        }
+        return;
     }
 
-    MPlug rxPlug = findPlug("rotateX");
+    std::vector<std::array<double, 3>> positionValues;
+    for (double timeSeconds : positionTimes)
+    {
+        positionValues.push_back({
+            EvaluateCurveOrValue(txCurve, txPlug, timeSeconds),
+            EvaluateCurveOrValue(tyCurve, tyPlug, timeSeconds),
+            EvaluateCurveOrValue(tzCurve, tzPlug, timeSeconds)});
+        clipDurationSeconds_ = std::max(clipDurationSeconds_, timeSeconds);
+    }
+
+    Element *logElement = buildVector3Log(currentDagName_ + "_position", positionTimes, positionValues);
+    if (!logElement)
+    {
+        return;
+    }
+
+    if (Element *channelElement = buildFloatChannel(currentDagName_ + "_position_channel", currentTransformElement_, "position", logElement))
+    {
+        channels_.push_back(channelElement);
+    }
+}
+
+void AnimationExporter::appendCurrentRotationAnimationChannels()
+{
+    if (!currentTransformElement_)
+    {
+        return;
+    }
+
+    MStatus status;
+    MFnDependencyNode nodeFn(currentDagPath_.node(), &status);
+    if (!status)
+    {
+        return;
+    }
+
+    MPlug rxPlug = nodeFn.findPlug("rotateX", true, &status);
     MObject rxCurve = FindAnimationCurveForPlug(rxPlug);
-    MPlug ryPlug = findPlug("rotateY");
+    MPlug ryPlug = nodeFn.findPlug("rotateY", true, &status);
     MObject ryCurve = FindAnimationCurveForPlug(ryPlug);
-    MPlug rzPlug = findPlug("rotateZ");
+    MPlug rzPlug = nodeFn.findPlug("rotateZ", true, &status);
     MObject rzCurve = FindAnimationCurveForPlug(rzPlug);
     std::vector<double> rotationTimes;
     AppendCurveTimes(rxCurve, rotationTimes);
     AppendCurveTimes(ryCurve, rotationTimes);
     AppendCurveTimes(rzCurve, rotationTimes);
-    if (!rotationTimes.empty())
+    if (rotationTimes.empty())
     {
-        std::vector<MQuaternion> rotationValues;
-        rotationValues.reserve(rotationTimes.size());
-        for (double timeSeconds : rotationTimes)
-        {
-            const double rx = EvaluateCurveOrValue(rxCurve, rxPlug, timeSeconds);
-            const double ry = EvaluateCurveOrValue(ryCurve, ryPlug, timeSeconds);
-            const double rz = EvaluateCurveOrValue(rzCurve, rzPlug, timeSeconds);
-            rotationValues.push_back(MEulerRotation(rx, ry, rz).asQuaternion());
-            clipDurationSeconds = std::max(clipDurationSeconds, timeSeconds);
-        }
-
-        Element *logElement = BuildQuaternionLog(builder, std::string(dagPath.partialPathName().asChar()) + "_orientation", rotationTimes, rotationValues);
-        if (logElement)
-        {
-            if (Element *channelElement = BuildFloatChannel(builder, std::string(dagPath.partialPathName().asChar()) + "_orientation_channel", transformIt->second, "orientation", logElement))
-            {
-                channels.push_back(channelElement);
-            }
-        }
+        return;
     }
 
-    AppendScalarAnimationChannel(builder, findPlug("scaleX"), transformIt->second, "scaleX", std::string(dagPath.partialPathName().asChar()) + "_scaleX_channel", channels, clipDurationSeconds);
-    AppendScalarAnimationChannel(builder, findPlug("scaleY"), transformIt->second, "scaleY", std::string(dagPath.partialPathName().asChar()) + "_scaleY_channel", channels, clipDurationSeconds);
-    AppendScalarAnimationChannel(builder, findPlug("scaleZ"), transformIt->second, "scaleZ", std::string(dagPath.partialPathName().asChar()) + "_scaleZ_channel", channels, clipDurationSeconds);
+    std::vector<MQuaternion> rotationValues;
+    for (double timeSeconds : rotationTimes)
+    {
+        const double rx = EvaluateCurveOrValue(rxCurve, rxPlug, timeSeconds);
+        const double ry = EvaluateCurveOrValue(ryCurve, ryPlug, timeSeconds);
+        const double rz = EvaluateCurveOrValue(rzCurve, rzPlug, timeSeconds);
+        rotationValues.push_back(MEulerRotation(rx, ry, rz).asQuaternion());
+        clipDurationSeconds_ = std::max(clipDurationSeconds_, timeSeconds);
+    }
+
+    Element *logElement = buildQuaternionLog(currentDagName_ + "_orientation", rotationTimes, rotationValues);
+    if (!logElement)
+    {
+        return;
+    }
+
+    if (Element *channelElement = buildFloatChannel(currentDagName_ + "_orientation_channel", currentTransformElement_, "orientation", logElement))
+    {
+        channels_.push_back(channelElement);
+    }
 }
 
-static void AppendControlAnimationChannels(
-    DocumentBuilder &builder,
-    const MDagPath &dagPath,
-    ExportContext &context,
-    std::unordered_set<std::string> &exportedFlexTargets,
-    std::vector<Element *> &channels,
-    double &clipDurationSeconds)
+void AnimationExporter::appendCurrentScaleAnimationChannels()
+{
+    if (!currentTransformElement_)
+    {
+        return;
+    }
+
+    MStatus status;
+    MFnDependencyNode nodeFn(currentDagPath_.node(), &status);
+    if (!status)
+    {
+        return;
+    }
+
+    appendScalarAnimationChannel(nodeFn.findPlug("scaleX", true, &status), currentTransformElement_, "scaleX", currentDagName_ + "_scaleX_channel");
+    appendScalarAnimationChannel(nodeFn.findPlug("scaleY", true, &status), currentTransformElement_, "scaleY", currentDagName_ + "_scaleY_channel");
+    appendScalarAnimationChannel(nodeFn.findPlug("scaleZ", true, &status), currentTransformElement_, "scaleZ", currentDagName_ + "_scaleZ_channel");
+}
+
+void AnimationExporter::appendTransformAnimationChannels(const MDagPath &dagPath)
+{
+    bindCurrentDagContext(dagPath);
+    if (!currentTransformElement_)
+    {
+        return;
+    }
+    appendCurrentPositionAnimationChannels();
+    appendCurrentRotationAnimationChannels();
+    appendCurrentScaleAnimationChannels();
+}
+
+void AnimationExporter::appendControlAnimationChannels(const MDagPath &dagPath)
 {
     MStatus status;
     MFnDependencyNode nodeFn(dagPath.node(), &status);
@@ -330,12 +368,7 @@ static void AppendControlAnimationChannels(
         if (attributeName == "translateX" || attributeName == "translateY" || attributeName == "translateZ" ||
             attributeName == "rotateX" || attributeName == "rotateY" || attributeName == "rotateZ" ||
             attributeName == "scaleX" || attributeName == "scaleY" || attributeName == "scaleZ" ||
-            attributeName == "visibility")
-        {
-            continue;
-        }
-
-        if (exportedFlexTargets.find(attributeName) != exportedFlexTargets.end())
+            attributeName == "visibility" || exportedFlexTargets_.find(attributeName) != exportedFlexTargets_.end())
         {
             continue;
         }
@@ -347,23 +380,17 @@ static void AppendControlAnimationChannels(
             continue;
         }
 
-        Element *targetElement = FindOrCreateFloatTargetElement(builder, context, attributeName);
-        const size_t beforeChannelCount = channels.size();
-        AppendScalarAnimationChannel(builder, plug, targetElement, "flexWeight", attributeName + "_flex_channel", channels, clipDurationSeconds);
-        if (channels.size() != beforeChannelCount)
+        Element *targetElement = findOrCreateFloatTargetElement(attributeName);
+        const size_t beforeChannelCount = channels_.size();
+        appendScalarAnimationChannel(plug, targetElement, "flexWeight", attributeName + "_flex_channel");
+        if (channels_.size() != beforeChannelCount)
         {
-            exportedFlexTargets.insert(attributeName);
+            exportedFlexTargets_.insert(attributeName);
         }
     }
 }
 
-static void AppendBlendShapeAnimationChannels(
-    DocumentBuilder &builder,
-    const MDagPath &meshPath,
-    ExportContext &context,
-    std::unordered_set<std::string> &exportedFlexTargets,
-    std::vector<Element *> &channels,
-    double &clipDurationSeconds)
+void AnimationExporter::appendBlendShapeAnimationChannels(const MDagPath &meshPath)
 {
     MStatus status;
     MObject meshObjectCopy(meshPath.node());
@@ -424,36 +451,30 @@ static void AppendBlendShapeAnimationChannels(
             }
 
             const std::string aliasName = alias.asChar();
-            if (exportedFlexTargets.find(aliasName) != exportedFlexTargets.end())
+            if (exportedFlexTargets_.find(aliasName) != exportedFlexTargets_.end())
             {
                 continue;
             }
 
-            Element *targetElement = FindOrCreateFloatTargetElement(builder, context, aliasName);
-            const size_t beforeChannelCount = channels.size();
-            AppendScalarAnimationChannel(builder, weightPlug, targetElement, "flexWeight", aliasName + "_flex_channel", channels, clipDurationSeconds);
-            if (channels.size() != beforeChannelCount)
+            Element *targetElement = findOrCreateFloatTargetElement(aliasName);
+            const size_t beforeChannelCount = channels_.size();
+            appendScalarAnimationChannel(weightPlug, targetElement, "flexWeight", aliasName + "_flex_channel");
+            if (channels_.size() != beforeChannelCount)
             {
-                exportedFlexTargets.insert(aliasName);
+                exportedFlexTargets_.insert(aliasName);
             }
         }
     }
 }
 
-static void CollectControlAnimationChannelsRecursive(
-    DocumentBuilder &builder,
-    const MDagPath &dagPath,
-    ExportContext &context,
-    std::unordered_set<std::string> &exportedFlexTargets,
-    std::vector<Element *> &channels,
-    double &clipDurationSeconds)
+void AnimationExporter::collectControlAnimationChannelsRecursive(const MDagPath &dagPath)
 {
     if (!dagPath.isValid())
     {
         return;
     }
 
-    AppendControlAnimationChannels(builder, dagPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+    appendControlAnimationChannels(dagPath);
 
     MStatus status;
     MFnDagNode dagNode(dagPath, &status);
@@ -478,25 +499,19 @@ static void CollectControlAnimationChannelsRecursive(
 
         MDagPath childPath = dagPath;
         childPath.push(childObject);
-        CollectControlAnimationChannelsRecursive(builder, childPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+        collectControlAnimationChannelsRecursive(childPath);
     }
 }
 
-static void AppendAnimationChannelsRecursive(
-    DocumentBuilder &builder,
-    const MDagPath &dagPath,
-    ExportContext &context,
-    std::unordered_set<std::string> &exportedFlexTargets,
-    std::vector<Element *> &channels,
-    double &clipDurationSeconds)
+void AnimationExporter::appendAnimationChannelsRecursive(const MDagPath &dagPath)
 {
     if (!dagPath.isValid())
     {
         return;
     }
 
-    AppendTransformAnimationChannels(builder, dagPath, context, channels, clipDurationSeconds);
-    AppendControlAnimationChannels(builder, dagPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+    appendTransformAnimationChannels(dagPath);
+    appendControlAnimationChannels(dagPath);
 
     MStatus status;
     MFnDagNode dagNode(dagPath, &status);
@@ -521,7 +536,7 @@ static void AppendAnimationChannelsRecursive(
             MFnDagNode meshDagNode(meshPath, &status);
             if (status && !meshDagNode.isIntermediateObject())
             {
-                AppendBlendShapeAnimationChannels(builder, meshPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+                appendBlendShapeAnimationChannels(meshPath);
             }
             status = MS::kSuccess;
             continue;
@@ -534,45 +549,44 @@ static void AppendAnimationChannelsRecursive(
 
         MDagPath childPath = dagPath;
         childPath.push(childObject);
-        AppendAnimationChannelsRecursive(builder, childPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+        appendAnimationChannelsRecursive(childPath);
     }
 }
 
-Element *BuildAnimationListElement(DocumentBuilder &builder, const std::vector<MDagPath> &exportRoots, ExportContext &context)
+Element *AnimationExporter::BuildAnimationListElement()
 {
-    std::vector<Element *> channels;
-    std::unordered_set<std::string> exportedFlexTargets;
-    double clipDurationSeconds = 0.0;
-
-    // Pre-pass: export _controls channels first so their flex targets take priority
-    // over blendShape weight aliases with the same name.
-    for (const MDagPath &rootPath : exportRoots)
+    for (const MDagPath &rootPath : exportRoots_)
     {
-        CollectControlAnimationChannelsRecursive(builder, rootPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+        collectControlAnimationChannelsRecursive(rootPath);
     }
 
-    // Main pass: transform channels + blendShape channels (controls already in exportedFlexTargets).
-    for (const MDagPath &rootPath : exportRoots)
+    for (const MDagPath &rootPath : exportRoots_)
     {
-        AppendAnimationChannelsRecursive(builder, rootPath, context, exportedFlexTargets, channels, clipDurationSeconds);
+        appendAnimationChannelsRecursive(rootPath);
     }
 
-    if (channels.empty())
+    if (channels_.empty())
     {
         return nullptr;
     }
 
-    Element *timeFrameElement = builder.CreateElement("DmeTimeFrame");
-    SetAttr(*timeFrameElement, "duration", ScalarAttr("time", FormatTimeSeconds(clipDurationSeconds)));
+    Element *timeFrameElement = builder_.CreateElement("DmeTimeFrame");
+    SetAttr(*timeFrameElement, "duration", ScalarAttr("time", FormatTimeSeconds(clipDurationSeconds_)));
     SetAttr(*timeFrameElement, "frameRate", ScalarAttr("float", "30.0"));
 
-    Element *clipElement = builder.CreateElement("DmeChannelsClip", "maya_export_animation");
-    SetAttr(*clipElement, "channels", builder.ElementRefArray(channels));
-    SetAttr(*clipElement, "timeFrame", builder.ElementRef(timeFrameElement));
+    Element *clipElement = builder_.CreateElement("DmeChannelsClip", "maya_export_animation");
+    SetAttr(*clipElement, "channels", builder_.ElementRefArray(channels_));
+    SetAttr(*clipElement, "timeFrame", builder_.ElementRef(timeFrameElement));
 
-    Element *animationListElement = builder.CreateElement("DmeAnimationList", "animationList");
-    SetAttr(*animationListElement, "animations", builder.ElementRefArray({clipElement}));
+    Element *animationListElement = builder_.CreateElement("DmeAnimationList", "animationList");
+    SetAttr(*animationListElement, "animations", builder_.ElementRefArray({clipElement}));
     return animationListElement;
+}
+
+Element *BuildAnimationListElement(DocumentBuilder &builder, const std::vector<MDagPath> &exportRoots, ExportContext &context)
+{
+    AnimationExporter exporter(builder, exportRoots, context);
+    return exporter.BuildAnimationListElement();
 }
 
 } // namespace dmx_export_impl

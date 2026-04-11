@@ -8,10 +8,12 @@
 
 #include <array>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <maya/MDagPath.h>
 #include <maya/MMatrix.h>
+#include <maya/MPxFileTranslator.h>
 #include <maya/MObject.h>
 #include <maya/MPlug.h>
 #include <maya/MString.h>
@@ -55,6 +57,11 @@ inline Element *CloneElement(DocumentBuilder &builder, const Element &source)
 using simple_dmx::ParseNumberList;
 
 // --- Formatting helpers (implemented in DmxExportInternals.cpp) ---
+void AppendDebugLog(const char *message);
+bool IsBinaryExportRequested(const MFileObject &fileObject, const MString &options);
+std::unordered_map<std::string, std::string> ParseOptionMap(const MString &options);
+bool ParseBoolOption(const std::unordered_map<std::string, std::string> &optionMap, const char *key, bool defaultValue);
+ExportOptions ParseExportOptions(const MFileObject &fileObject, const MString &options);
 std::string FormatFloat(double value);
 std::string FormatVector2(double x, double y);
 std::string FormatVector3(double x, double y, double z);

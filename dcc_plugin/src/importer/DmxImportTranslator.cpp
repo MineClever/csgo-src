@@ -1,5 +1,5 @@
 #include "DmxImportTranslator.h"
-#include "ImportSession.h"
+#include "DmxImportSession.h"
 
 #include "../common/MayaDmxCommon.h"
 
@@ -35,7 +35,7 @@ MPxFileTranslator::MFileKind DmxImportTranslator::identifyFile(const MFileObject
 
 MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString &options, FileAccessMode)
 {
-    ImportSession session(fileObject, options);
+    DmxImportSession session(fileObject, options);
     return session.Run();
 }
 

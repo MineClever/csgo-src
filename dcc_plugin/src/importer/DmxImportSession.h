@@ -9,10 +9,10 @@
 #include <maya/MStatus.h>
 #include <maya/MString.h>
 
-class ImportSession
+class DmxImportSession
 {
 public:
-    ImportSession(const MFileObject &fileObject, const MString &options);
+    DmxImportSession(const MFileObject &fileObject, const MString &options);
 
     MStatus Run();
 

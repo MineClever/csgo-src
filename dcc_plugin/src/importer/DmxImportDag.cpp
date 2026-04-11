@@ -14,6 +14,7 @@
 namespace dmx_import_impl
 {
 
+
 MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::Element *dagElement, MObject object)
 {
     const simple_dmx::Element *transformElement = FindAttributeElement(document, dagElement, "transform");

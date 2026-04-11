@@ -1,5 +1,5 @@
 #include "DmxExportTranslator.h"
-#include "ExportSession.h"
+#include "DmxExportSession.h"
 
 #include "../common/MayaDmxCommon.h"
 
@@ -34,7 +34,7 @@ MStatus DmxExportTranslator::writer(const MFileObject &fileObject, const MString
 {
     try
     {
-        ExportSession session(fileObject, options, mode);
+        DmxExportSession session(fileObject, options, mode);
         return session.Run();
     }
     catch (const std::exception &exception)

@@ -10,10 +10,10 @@
 
 #include <vector>
 
-class ExportSession
+class DmxExportSession
 {
 public:
-    ExportSession(const MFileObject &fileObject, const MString &options, MPxFileTranslator::FileAccessMode mode);
+    DmxExportSession(const MFileObject &fileObject, const MString &options, MPxFileTranslator::FileAccessMode mode);
 
     MStatus Run();
 
