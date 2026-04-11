@@ -134,11 +134,11 @@
 ## DCC / Maya 插件计划
 
 ### 9. 为 Maya 2022.5 开发 DMX 导入导出插件
-- 状态：进行中（基础回归全通过；exporter 私有 DOM 已并入公共 codec；binary v3/v4 解析待修）
+- 状态：进行中（基础模型回归已稳定；动画导入导出已具备最小闭环；剩余工作集中在动画宿主回归、材质网络、facial/rig 语义与通用层收口）
 - 优先级：中
-- 最新回归结果（2026-04-09）：
+- 最新回归结果（2026-04-09，2026-04-11 代码复核通过）：
   - 基础样例（6/6）：`simple_hierarchy` ✅ `simple_blendshape` ✅ `simple_mesh` ✅ `simple_skinned_mesh` ✅ `complex_chr_mesh` ✅ `MostComplexSampleSet/chr_mesh` ✅
-  - Ellis/DMX 项目级（7/9）：
+  - Ellis/DMX 核心模型样例（9/9）：
     - `head_morphs_sfm.dmx` ✅（keyvalues2，无蒙皮）
     - `mechanic_morphs_sfm.dmx` ✅（keyvalues2，无蒙皮）
     - `upper_teeth.dmx` ✅（binary v3，修复后通过）
@@ -155,12 +155,15 @@
   - Maya 默认宿主执行入口：`C:\Program Files\Autodesk\Maya2022\`
   - 插件独立构建目录：`build\maya_dmx`
   - 最终项目级回归样本目录：`D:\_Code_Here\Git\csgo-src\dcc_plugin\samples\Ellis\DMX`
+  - 宿主环境查询入口：[QueryMayaValidationEnv.bat](dcc_plugin/QueryMayaValidationEnv.bat)、[QueryMayaValidationEnv.ps1](dcc_plugin/tools/QueryMayaValidationEnv.ps1)
+  - 宿主环境说明文档：[MayaValidationEnv.md](dcc_plugin/docs/MayaValidationEnv.md)
 
 - 当前概况：
   - 构建、部署与 Maya module 安装链路已稳定，`cmake --build build\maya_dmx --config Release` 可生成 [maya_dmx.mll](dcc_plugin/bin/Release/maya_dmx.mll)，[InstallPluginModuleToMaya.bat](dcc_plugin/InstallPluginModuleToMaya.bat) 负责同步 `.mll`、`.pdb` 与 MEL 脚本。
   - MEL 真源已统一到 [src/mel](dcc_plugin/src/mel)，`maya_module/scripts` 仅作为安装产物。
   - 实现约束：避免通过拼装 MEL 字串实现核心功能，优先使用 Maya C++ API；只有 file type specific options、option box 或 Maya 原生脚本入口确实要求 MEL 时，才保留最小必要脚本桥接。
   - 插件主线已形成“DMX 基础层 + importer/exporter + Maya UI/workflow + batch 回归 + 交互宿主验证”的最小闭环，但复杂角色样例 roundtrip 和完整 facial/animation/export 仍未收口。
+  - 2026-04-11 已通过宿主环境查询脚本确认当前机器具备 Maya 2022、mayapy、DevKit、插件二进制、MEL 脚本和回归入口的基础路径条件；查询报告输出到 `build\maya_dmx\maya_validation_env_report.md`。
 
 - 已完成能力：
   - DMX 基础层：
@@ -182,6 +185,7 @@
   - 验证与样例：
     - [RunMayaInteractiveValidation.bat](dcc_plugin/RunMayaInteractiveValidation.bat) 与 [MayaInteractiveValidation.py](dcc_plugin/tools/MayaInteractiveValidation.py) 已固定交互宿主验证入口；已人工确认验证窗口和导入/导出 option box 可正常打开。
     - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已支持 mesh diff、`transform/joint` 类型稳定检查、`skinCluster` 保留检查、`blendShape` 快照检查、动画连接/关键帧快照检查，并可直接处理 `.dmx/.dmxb/.dmxbin`。
+    - 2026-04-11 使用 `MAYA_SKIP_USERSETUP_PY=1` 的干净宿主环境重新运行整套批回归，`simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`（含 `applyAxisCorrection=0`）、`complex_chr_mesh`（含 `applyAxisCorrection=0`）、`MostComplexSampleSet/chr_mesh`（含 `applyAxisCorrection=0`）、`simple_ngon_mesh`、`MostComplexSampleSet/vcaanim_VertexAnim`、`simple_float_animation`、`simple_blendshape_animation` 全部通过。
     - `simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/chr_mesh` 六组样例已通过基础 `导入 -> 导出 text/binary -> 再导入 -> mesh diff` 闭环；`type_stability_check` 也已在真实 Maya 宿主下跑通。
     - [dcc_plugin/samples/Ellis/DMX](dcc_plugin/samples/Ellis/DMX) 目录下已确认存在实际项目级 DMX 资产，如 [mechanic_model.dmx](dcc_plugin/samples/Ellis/DMX/mechanic_model.dmx)、[mechanic_model_merged.dmx](dcc_plugin/samples/Ellis/DMX/mechanic_model_merged.dmx)、[head_morphs.dmx](dcc_plugin/samples/Ellis/DMX/head_morphs.dmx) 及 `animation/` 子目录；这批样本后续作为最终回归测试集，而不是日常最小样例。
   - 动画与 facial 最小支持：
@@ -224,18 +228,25 @@
   - **bindPreMatrix 顺序错位**：存储的 `mayaBindPreMatrix` 按 Maya 导出顺序排列，而导入时按 DMX 关节索引顺序分配，导致矩阵错位。改为按关节名称路径匹配查找对应矩阵。受影响文件：`DmxImportDeformers.cpp`。
   - **零权重填充索引污染**：导出时用 `{0, 0.0}` 填充空槽，导致关节 0 被误判为活跃影响，改为 `{-1, 0.0}`（负数索引由导入器忽略）。受影响文件：`DmxExportDeformers.cpp`。
 
+- 代码对照结论（2026-04-11）：
+  - `Plan.md` 里先前“DMX 动画当前仍只覆盖 importer”的表述已过时；当前代码已在 [DmxExportAnimation.cpp](dcc_plugin/src/exporter/DmxExportAnimation.cpp) 实现最小 `DmeAnimationList / DmeChannelsClip / DmeChannel / DmeTimeFrame` 导出，`simple_float_animation` 的 text/binary roundtrip 也已在批回归中覆盖。
+  - `Plan.md` 里先前“.hpp 拆分待做”的表述已过时；当前 `dcc_plugin/src/importer` 与 `dcc_plugin/src/exporter` 相关拆分文件已经落成 `.h/.cpp` 形式。
+  - `Plan.md` 里先前“FindAttribute* / ParseNumberList 并入公共层待做”的表述已过时；当前实现已落在 [SimpleDmxDocument.h](dcc_plugin/src/common/SimpleDmxDocument.h) / [SimpleDmxDocument.cpp](dcc_plugin/src/common/SimpleDmxDocument.cpp)。
+  - workflow 侧的“损坏 batch 报错”已部分具备；[MayaDmxWorkflow.cpp](dcc_plugin/src/workflow/MayaDmxWorkflow.cpp) 已对损坏条目、旧 optionVar fallback、文件读写失败做错误返回，但仍缺显式清理/迁移入口。
+
 - 已确认剩余问题：
-  - 材质网络恢复深度仍不足。`AssignFaceSetMaterials()` 虽已改为 API 实现，但当前仍只覆盖基础 shader 图，尚未补 `place2dTexture`、utility 链、分层材质以及更完整的 Valve/Maya 材质语义映射。
+  - 材质网络恢复深度仍不足。`AssignFaceSetMaterials()` 已走 API 路径，但当前仍只覆盖基础 shader 图，尚未补 `place2dTexture`、utility 链、分层材质以及更完整的 Valve/Maya 材质语义映射。
   - `exportMetadata=0` 当前只裁掉 Maya 专用 metadata 和材质 inline metadata，不会改写核心 mesh/skin/delta 数据；如果后续希望进一步削减文件大小，还需要继续评估哪些非 `maya*` 字段也可选裁剪而不破坏回读。
   - `SimpleDmx*` 仍是插件定制层，不是通用 DMX DOM/codec。继续扩大 Valve DMX 兼容范围时，未知字段保真、顺序保真和引用语义都会成为重构阻力。
-  - ✅ ~~exporter 私有 DOM / binary serializer 已并入公共 codec（2026-04-09）~~：`DmxExportTextModel.h/.cpp` 已删除；`DmxTextBuilder` 已替换为 `simple_dmx::DocumentBuilder`；`DmxElement*` 全部改为 `simple_dmx::Element*`；binary export 已消除 text→parse→binary 中转，直接走 `SerializeDocumentBinary(builder.Build())`；`SerializeDocumentText` 已修复 inline element 二次输出 bug（`CollectInlineDescendants`）。
   - 当前 `SimpleDmx*` 已能在 text 路径上保留 unknown field 与属性顺序，但“未知 declared type 的 text -> binary” 仍不成立：例如 [simple_unknown_order.dmx](dcc_plugin/samples/simple_unknown_order.dmx) 中的 `mystery_type` / `mystery_array` 目前仍会在 binary 写出阶段被拒绝，因为标准 binary DMX 没有可直接承载这类未知自定义类型名的 type code。
   - 未知 declared type 的 binary 保真目前不存在低成本“原样写回”方案。根据 [dmattributetypes.h](src/public/datamodel/dmattributetypes.h) 的 `DmAttributeType_t`，binary DMX 只有固定 type code 集，没有用于任意自定义 declared type 名的扩展槽位；因此现阶段如果继续要求 Valve 兼容的 binary DMX，未知类型只能选择显式报错、导出时强制回退 text、或引入插件私有旁带保真方案，不能像 text DMX 那样无损直接写出。
-  - [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx) 并不是“带蒙皮和 BlendShape 的模型样例”，而是纯 `skeleton + channels/logs` 动画样例；当前它更适合作为动画支持回归入口，而不是 `skin + blendShape` 组合回归入口。
-  - DMX 动画当前仍只覆盖 importer；虽然 `position/orientation`、基础 `DmeFloatLog`、最小 `flexWeight -> blendShape weight` 以及最小 `DmeCombinationOperator` 控制器属性都已能导入成 Maya 关键帧，但 controls/controlValues 到更高层 facial rig 的完整驱动语义、`DmeAnimationList` 导出、动画 roundtrip 回归和更高层 clip / sequence 语义都还没有落地。
-  - 动画 roundtrip 刚开始形成闭环，但 facial 组合样例还没完全稳定。当前 [simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx) 的 text/binary 动画回归已通过；而 [simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 现在已经不再失败于“动画丢失”，而是前移成 text roundtrip 后 `blendshapeAnimMeshShape at vertex 2` 的 mesh point diff，说明 exporter/importer 的最小 facial 动画链已接通，但 blendShape 几何保真还要继续收口。
-  - “蒙皮 + blendShape 同时存在”的最小闭环问题已完成一轮收敛。当前 [DmxImportTranslator.cpp](dcc_plugin/src/importer/DmxImportTranslator.cpp) 已改成先 `ApplySkinning()` 再 `ApplyDeltaStates()`，修复了 `skinCluster API creation failed`；[DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 也已在 `blendShapeFn.getTargets()` 拿不到 live target DAG 时，通过 `sculptTarget -regenerate` 临时重建 target 再提取 `DmeVertexDeltaData`，因此最小 `skin + deltaStates` 样例的 text/binary roundtrip 已能保住 `blendShape`。
-  - 旧版错误编码产生的历史 batch 文件如果残留在 Maya 用户目录里，`listBatches` 仍可能显示脏名称；新格式已可用，但还缺一次性清理或文件头校验。
+  - [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx) 仍更适合作为纯骨骼动画回归入口，而不是 `skin + blendShape` 复合样例入口。
+  - 动画导入导出虽已形成最小闭环；2026-04-11 已为骨骼动画、标量动画、facial 动画样例补上“初始导入动画门槛”，但复杂动画样例覆盖仍不足，后续仍需继续扩展。
+  - facial 动画链路尚未完全收口。当前 [simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 已不再丢动画，但 text roundtrip 后仍存在 `blendshapeAnimMeshShape at vertex 2` 的 mesh point diff，说明最小 `flexWeight -> blendShape` 已接通，但 blendShape 几何保真仍需继续修。
+  - 更高层 facial rig 语义尚未落地。当前 importer 只支持最小 `DmeCombinationOperator` 控制器节点与 `controlValues` 绑定，离完整 controls/controlValues 到 rig 控制网络的语义仍有距离。
+  - `skin + deltaStates` 最小闭环已经可用，但 `sculptTarget -regenerate` 这条 fallback 还没有在更复杂的多 target / 多 mesh history 样例上完成稳定性确认。
+  - workflow 已支持文件化 batch manifest、损坏条目报错、旧 optionVar fallback，以及显式的 legacy batch 迁移/清理入口；剩余工作主要收敛为更细的用户侧诊断体验优化。
+  - 2026-04-11 直接裸跑 `mayapy` 时暴露宿主环境存在第三方 `userSetup.py` 干扰（`VaccineKiller.mod` 权限错误）；按当前文档与包装脚本约定，批回归必须保持 `MAYA_SKIP_USERSETUP_PY=1`，后续宿主验证默认沿用该约束。
 
 - 已确认的新问题（Ellis/DMX 回归，2026-04-09）：
   - ~~**Binary v3/v4 解析不兼容**~~：✅ 已修复（2026-04-09）
@@ -245,53 +256,30 @@
   - ~~**含 n-gon 网格拓扑不匹配**~~：✅ 已修复（2026-04-09），见第一优先级。
 
 - 下一阶段计划：
-  - **优先处理**（已完成，2026-04-09）：
-    - **`ComputeRootAxisCorrection` 作为可选导入选项**：✅ 已完成
-      - `ImportOptions` / `ImportContext` 新增 `applyAxisCorrection`（默认 `true`）；`ParseImportOptions` 解析 `applyAxisCorrection` 键；`reader` 中用 `context.applyAxisCorrection &&` 条件保护调用。
-      - `performDmxImport.mel`：新增 `MayaDmx_applyAxisCorrection` optionVar、`dmxImportApplyAxisCorrection` checkbox（"Coordinate System / Apply Axis Correction"）及完整的 collect/apply/sync 流程。
-      - `doDmxImportArgList.mel`：`syncOptionVars` 读取 `$args[3]`，options 字符串拼入 `applyAxisCorrection=N`。
-    - **带蒙皮网格的过度修正问题**：已评估，结论如下
-      - **当前行为**：轴修正在 `ImportDagHierarchyRecursive`（建骨架）之前执行，蒙皮在 `ImportDagShapesRecursive`（建 mesh/skin）之后绑定；`bindPreMatrix` 若无存储值则取当前关节 world matrix 的逆（已含修正），skinCluster 绑定在修正后坐标系中，静态 rest pose 下 local mesh 顶点位置保持一致 → **当前无双重叠加问题**。
-      - **过度修正仅发生于 round-trip 场景**：从本插件导出的 DMX 含 `mayaBindPreMatrix`（Y-up world space），若再次导入时开启轴修正，存储矩阵与实际关节 world matrix 产生偏差。修复方式：round-trip 场景关闭 `applyAxisCorrection`（上一条选项已支持）；长期可在导出时写入 `upAxis` 元数据并在 importer 自动检测来源坐标系。
-      - 当前已通过 `applyAxisCorrection=0` 双状态回归验证，未发现顶点漂移。
-    - **回归测试覆盖 `applyAxisCorrection` 开关**：✅ 已完成
-      - `MayaBatchRegression.py` 的 `run_case` / `verify_roundtrip` 均新增 `import_options` 参数；对含蒙皮的样例，第一轮（默认选项）结束后自动触发第二轮 `applyAxisCorrection=0` 变体，输出文件以 `.applyAxisCorrection0.` 为后缀区分。
-      - 回归结果（2026-04-09）：`simple_hierarchy` ✅、`simple_blendshape` ✅、`simple_mesh` ✅、`simple_skinned_mesh` ✅（含 axisOff 变体 ✅）、`complex_chr_mesh` ✅（含 axisOff 变体 ✅）、`MostComplexSampleSet/chr_mesh` ✅（含 axisOff 变体 ✅）、`simple_ngon_mesh` ✅
   - 第一优先级：
-    - ✅ ~~`complex_chr_mesh` 与 `MostComplexSampleSet/chr_mesh` 顶点漂移~~（已修复，2026-04-09）
-    - ✅ ~~把 Ellis/DMX 纳入回归门槛并运行~~（已运行，2026-04-09，结果见上）
-    - ✅ ~~**修复含 n-gon 的网格拓扑不匹配**~~（已修复，2026-04-09）：根本原因：face set A 覆盖非连续 polygon 范围（[0-2245]+[2286-2716]），导出时整块发射，n-gon face set B/C 追加在后，re-import 后 polygon 编号错位 40 个位置。修复：在 `DmxExportMesh.cpp` 中按 polyToSetIndex 映射表顺序遍历 0..N-1，将非连续 face set 自动切割成多个连续段交错发射，保持 polygon 序号与原始一致。`mechanic_model_merged` 与 `head_morphs_game` 均已通过 mesh/skin/blendshape/type 四重回归（含 applyAxisCorrection=0 变体）。
-    - ✅ ~~**exporter 私有 DOM 并入公共 codec**~~（已完成，2026-04-09）：删除 `DmxExportTextModel`，迁移到 `DocumentBuilder`，binary export 消除 text→parse 中转。
-    - 补独立动画宿主回归，避免后续改 importer 时 [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx)、[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx)、[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 退回”只导骨架不导关键帧”。
-  - 第二优先级（技术债务）：
-    - ✅ ~~**修复 binary v3/v4 解析**~~（已完成，2026-04-09）：根本原因：v3 scalar string 属性值为内联 cstring，v4 为 int16 字符串表索引，v5 为 int32 索引；修复：`SimpleDmxBinary.cpp` 的 `ValueType::String` 分支对 `encodingVersion <= 3` 改用 `ReadCString()`；StringArray 在所有版本均为内联 cstring（原有代码正确，无需修改）；5 个 Ellis v3/v4 文件全部通过回归。
+    - ✅ ~~补独立动画宿主回归，至少把 [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx)、[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx)、[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 变成单独门槛，避免后续修改退回“只导骨架、不导关键帧”。~~（已完成，2026-04-11）：[MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 新增 `ANIMATION_GATE_EXPECTATIONS` 与 `validate_animation_gate()`，会在样例初始导入后直接校验动画绑定是否存在；[RunMayaBatchRegression.bat](dcc_plugin/RunMayaBatchRegression.bat) 的说明文本也已同步更新。
+    - 收口 `simple_blendshape_animation` 的 blendShape 几何 diff，完成最小 facial 动画 roundtrip 稳定化。
+    - 选 1 到 2 组更接近 Valve 角色资产的复合样例，验证 `skin + deltaStates + animation` 以及 `sculptTarget -regenerate` fallback 在复杂场景下仍稳定。
+  - 第二优先级：
     - 继续补材质网络，扩到 `place2dTexture`、utility 节点链、更多 shader 类型和更稳定的贴图路径还原。
-    - 继续补组合型面部控制器和更完整 deformer / rig 元数据，逐步接近 Valve 角色资产的面部工作流。
-    - 为 workflow 增加旧 batch 文件清理、格式校验和更明确的错误提示。
+    - 继续补组合型面部控制器和更完整 deformer / rig metadata，逐步接近 Valve 角色资产的 facial 工作流。
+    - 继续评估 `exportMetadata=0` 的裁剪边界，明确哪些字段可以在不破坏回读的前提下继续瘦身。
   - 中期重构方向：
-    - **代码规范约束（强制执行）**：
-      - 禁止使用 `.hpp` 文件；所有声明放 `.h`，所有实现放 `.cpp`，不得保留或新增 `.hpp`。
-      - 禁止匿名 namespace（`namespace { ... }`）；需要限制符号可见性时，改用具名 namespace 或 `static` 修饰符。
-    - **`.hpp` 拆分与 common 头文件整理**（与下一条合并做）：
-      - 将现有 `.hpp`（`DmxExportAnimation.hpp`、`DmxExportDeformers.hpp`、`DmxExportMeshMaterial.hpp`、`DmxImportAnimation.hpp`、`DmxImportDeformers.hpp`、`DmxImportMeshMaterial.hpp`）各自拆分为同名 `.h` + `.cpp`。
-      - 识别 importer/exporter 双侧共用的类型、工具函数和辅助结构，统一移入 [dcc_plugin/src/common](dcc_plugin/src/common)，避免跨侧重复声明。
-      - 完成后同步更新 CMakeLists.txt，确保新增 `.cpp` 文件纳入编译。
-    - ✅ ~~**importer DOM 查询 helper 并入公共 codec**~~（已完成，2026-04-09）：`FindAttributeElement/Array/String/StringArray` 和 `ParseNumberList` 已搬入 `SimpleDmxDocument.h/.cpp`；importer/exporter 两侧改为 `using simple_dmx::`；`DmxImportUtils` 只保留 `SanitizeNodeName`。
-    - 继续拆分 [DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 与 [DmxImportTranslator.cpp](dcc_plugin/src/importer/DmxImportTranslator.cpp) 中 namespace 里的数据结构和方法，优先抽离 animation、mesh、material、skin 等子模块到更小的 `.h/.cpp` 文件，减少单文件耦合并提高复用性。
-    - 在 [SimpleDmxDocument.h](dcc_plugin/src/common/SimpleDmxDocument.h) 与 [SimpleDmxTypes.h](dcc_plugin/src/common/SimpleDmxTypes.h) 这一层稳定后，继续补完整 attribute type、未知字段保真和 text/binary 对称。
-    - 在 text 路径的 unknown field / 顺序保真已落地后，继续评估未知 declared type 的 text -> binary 降级策略、旁带保真或显式能力边界，避免 binary exporter 对自定义类型直接硬失败。
-    - 为动画 DMX 单独补 importer/exporter 路线图，优先支持 `DmeAnimationList / DmeChannelsClip / DmeChannel / DmeTimeFrame / DmeVector3Log / DmeQuaternionLog` 这条骨骼变换动画主干，并明确它与现有静态 mesh / skin translator 的关系。
-    - 在最小骨骼变换动画 importer 已落地后，继续评估 `DmeFloatLog`、vertex animation list、flex / facial animation 和动画导出，确认是沿现有 translator 扩展还是单独拆动画工作流。
-    - 在最小 `skin + deltaStates` 样例已通过后，继续找更接近 Valve 角色资产的复合样例，确认 `sculptTarget -regenerate` 这条 fallback 在复杂 blendShape / 多 target / 多 mesh history 下是否仍稳定。
-    - 在通用 DMX 层稳定后，再扩主干类型覆盖范围，最后再评估更大范围的 Valve DMX rig / animation 兼容。
+    - 继续拆分 [DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 与 [DmxImportTranslator.cpp](dcc_plugin/src/importer/DmxImportTranslator.cpp) 中仍留在实现文件里的上下文结构、流程拼装和 Maya 侧 helper，优先把 animation、mesh、material、skin 的剩余主路径再收窄。
+    - 识别 importer/exporter 双侧共用的类型、工具函数和辅助结构，继续移入 [dcc_plugin/src/common](dcc_plugin/src/common)，减少跨侧重复定义。
+    - 在 [SimpleDmxDocument.h](dcc_plugin/src/common/SimpleDmxDocument.h) 与 [SimpleDmxTypes.h](dcc_plugin/src/common/SimpleDmxTypes.h) 这一层稳定后，继续补完整 attribute type、unknown field 保真和 text/binary 对称。
+    - 在 text 路径 unknown field / 顺序保真已落地的前提下，继续评估未知 declared type 的 text -> binary 降级策略、旁带保真或显式能力边界，避免 binary exporter 对自定义类型直接硬失败。
+    - 为动画 DMX 单独整理 importer/exporter 路线图，明确最小骨骼动画、标量动画、facial 动画和更高层 clip / sequence 语义的边界，不再混写进静态 mesh / skin 主计划。
 
 - importer 并入公共 codec 评估（2026-04-09）：
   - **结论：importer 不存在”私有 DOM”问题，已直接消费 `simple_dmx::Document`，不需要对称的整体迁移。**
   - exporter 迁移的核心价值在于删除了整套私有 `DmxTextBuilder/DmxElement` DOM 并消除 text→parse→binary 中转；importer 从一开始就直接在 `document.Parse()` 后遍历 `simple_dmx::Element*`，没有这层独立 DOM。
-  - 仍有两处轻量改进值得与”`.hpp` 拆分”一轮合并做：
-    1. **`FindAttribute*` 并入公共层**：`DmxImportUtils` 中的 `FindAttributeElement/Array/String/StringArray` 本质上是 DOM 便捷访问器，搬入 `SimpleDmxDocument.h/.cpp` 后对未来新消费者可见。工作量极小，风险低。
-    2. **`ParseNumberList` 去重**：importer（`DmxImportUtils`）与 exporter（`DmxExportInternals`）各自实现了同名函数，合并到公共层消除重复。
+  - 2026-04-11 复核：`FindAttributeElement/Array/String/StringArray` 与 `ParseNumberList` 已并入 [SimpleDmxDocument.h](dcc_plugin/src/common/SimpleDmxDocument.h) / [SimpleDmxDocument.cpp](dcc_plugin/src/common/SimpleDmxDocument.cpp)，这一条不再是待办。
   - **不并入**：`SanitizeNodeName`、`SetVector3Plug`、`EnsureDependencyNode` 等 Maya API 调用，以及 `ImportContext/ImportOptions`——这些是插件专用逻辑，与 codec 无关。
+  - 任务同步（2026-04-11）：本次已按“剩余开发计划”重新核对 DMX 插件状态；当前未完成主线仍集中在动画宿主回归、材质网络补全、facial/rig 语义扩展、workflow 历史 batch 清理，以及中期的 translator/common 层重构，现有优先级不变。
+  - 任务同步（2026-04-11，回归门槛补齐）：DMX 批回归已补上动画专项门槛，当前未完成主线更新为 `simple_blendshape_animation` 几何保真、复杂复合动画样例验证、材质网络补全、facial/rig 语义扩展、workflow 历史 batch 清理，以及中期的 translator/common 层重构。
+  - 任务同步（2026-04-11，宿主环境查询与批回归）：已新增宿主环境查询脚本与文档，确认当前机器满足基础验证条件；在 `MAYA_SKIP_USERSETUP_PY=1` 条件下重新运行 Maya 批回归，全套当前样例通过。
+  - 任务同步（2026-04-11，workflow 收尾）：已为 `mayaDmxWorkflow` 新增 `-listLegacyBatches`、`-migrateLegacyBatches`、`-cleanupBatchStorage` 三个入口；batch 文件读取错误已带 manifest 路径/行号，批量导出错误已带 entry index。`cmake --build build\maya_dmx --config Release --target maya_dmx` 复编通过；Maya standalone 下已实测 legacy optionVar batch 可迁移到文件存储，且无效 `.batch` 文件可被清理。
 
 ## 环境与工具链说明
 

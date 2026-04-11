@@ -360,6 +360,81 @@ MStatus CollectOptionVars(const char *prefix, MStringArray &names)
 
     return MS::kSuccess;
 }
+
+MStatus LoadLegacyBatchManifest(const MString &name, MStringArray &entries)
+{
+    entries.clear();
+
+    MString serialized;
+    if (!GetOptionVarString(MakeOptionVarName(kBatchVarPrefix, name), serialized))
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: legacy batch manifest not found: ") + name);
+    }
+
+    const std::vector<MString> parts = SplitEscaped(serialized, '\n');
+    for (size_t partIndex = 0; partIndex < parts.size(); ++partIndex)
+    {
+        const MString &part = parts[partIndex];
+        if (part.length() == 0)
+        {
+            continue;
+        }
+
+        MString decoded;
+        if (!DecodeHexString(part, decoded))
+        {
+            return maya_dmx::ReportError(
+                MString("maya_dmx: legacy batch manifest entry was corrupted at line ")
+                + static_cast<int>(partIndex + 1)
+                + ": " + part);
+        }
+
+        entries.append(decoded);
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus ReadBatchManifestFile(const std::filesystem::path &manifestPath, MStringArray &entries)
+{
+    entries.clear();
+
+    std::ifstream input(manifestPath, std::ios::binary);
+    if (!input)
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: failed to open batch manifest: ") + manifestPath.generic_string().c_str());
+    }
+
+    std::string line;
+    size_t lineNumber = 0;
+    while (std::getline(input, line))
+    {
+        ++lineNumber;
+        if (line.empty())
+        {
+            continue;
+        }
+
+        MString decoded;
+        if (!DecodeHexString(line.c_str(), decoded))
+        {
+            return maya_dmx::ReportError(
+                MString("maya_dmx: batch manifest entry was corrupted at ")
+                + manifestPath.generic_string().c_str()
+                + ": line " + static_cast<int>(lineNumber)
+                + " value=" + line.c_str());
+        }
+
+        entries.append(decoded);
+    }
+
+    if (!input.eof() && input.fail())
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: failed to read batch manifest: ") + manifestPath.generic_string().c_str());
+    }
+
+    return MS::kSuccess;
+}
 }
 
 namespace maya_dmx
@@ -587,57 +662,16 @@ MStatus LoadBatchManifest(const MString &name, MStringArray &entries)
     const std::filesystem::path manifestPath = GetBatchManifestPath(name);
     if (!manifestPath.empty() && std::filesystem::exists(manifestPath))
     {
-        std::ifstream input(manifestPath, std::ios::binary);
-        if (!input)
-        {
-            return ReportError(MString("maya_dmx: failed to open batch manifest: ") + manifestPath.generic_string().c_str());
-        }
-
-        std::string line;
-        while (std::getline(input, line))
-        {
-            if (line.empty())
-            {
-                continue;
-            }
-
-            MString decoded;
-            if (!DecodeHexString(line.c_str(), decoded))
-            {
-                return ReportError(MString("maya_dmx: batch manifest entry was corrupted: ") + line.c_str());
-            }
-            entries.append(decoded);
-        }
-
-        if (!input.eof() && input.fail())
-        {
-            return ReportError(MString("maya_dmx: failed to read batch manifest: ") + manifestPath.generic_string().c_str());
-        }
-
-        return MS::kSuccess;
+        return ReadBatchManifestFile(manifestPath, entries);
     }
 
     // One-time fallback for older optionVar-backed manifests.
-    MString serialized;
-    if (!GetOptionVarString(MakeOptionVarName(kBatchVarPrefix, name), serialized))
+    if (!MGlobal::optionVarExists(MakeOptionVarName(kBatchVarPrefix, name)))
     {
         return ReportError(MString("maya_dmx: batch manifest not found: ") + name);
     }
 
-    const std::vector<MString> parts = SplitEscaped(serialized, '\n');
-    for (const MString &part : parts)
-    {
-        if (part.length() > 0)
-        {
-            MString decoded;
-            if (!DecodeHexString(part, decoded))
-            {
-                return ReportError(MString("maya_dmx: batch manifest entry was corrupted: ") + part);
-            }
-            entries.append(decoded);
-        }
-    }
-    return MS::kSuccess;
+    return LoadLegacyBatchManifest(name, entries);
 }
 
 MStatus DeleteBatchManifest(const MString &name)
@@ -700,6 +734,117 @@ MStatus ListBatchManifestNames(MStringArray &names)
     for (const MString &name : sorted)
     {
         names.append(name);
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus ListLegacyBatchManifestNames(MStringArray &names)
+{
+    return CollectOptionVars(kBatchVarPrefix, names);
+}
+
+MStatus MigrateLegacyBatchManifests(MStringArray &migratedNames)
+{
+    migratedNames.clear();
+
+    MStringArray legacyNames;
+    MStatus status = ListLegacyBatchManifestNames(legacyNames);
+    if (!status)
+    {
+        return status;
+    }
+
+    for (unsigned int index = 0; index < legacyNames.length(); ++index)
+    {
+        const MString &name = legacyNames[index];
+        const std::filesystem::path manifestPath = GetBatchManifestPath(name);
+        if (manifestPath.empty())
+        {
+            return ReportError(MString("maya_dmx: batch manifest path could not be resolved for migration: ") + name);
+        }
+
+        if (std::filesystem::exists(manifestPath))
+        {
+            RemoveOptionVar(MakeOptionVarName(kBatchVarPrefix, name));
+            migratedNames.append(name + " (legacy optionVar removed; file already existed)");
+            continue;
+        }
+
+        MStringArray entries;
+        status = LoadLegacyBatchManifest(name, entries);
+        if (!status)
+        {
+            return status;
+        }
+
+        status = SaveBatchManifest(name, entries);
+        if (!status)
+        {
+            return status;
+        }
+
+        migratedNames.append(name);
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus CleanupBatchManifestStorage(MStringArray &removedItems)
+{
+    removedItems.clear();
+
+    std::filesystem::path directory;
+    MStatus status = GetBatchManifestDirectory(directory);
+    if (!status)
+    {
+        return status;
+    }
+
+    for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory))
+    {
+        if (!entry.is_regular_file() || entry.path().extension() != kBatchManifestExtension)
+        {
+            continue;
+        }
+
+        std::string decodedName;
+        if (DecodeHexBytes(entry.path().stem().string(), decodedName))
+        {
+            continue;
+        }
+
+        std::error_code errorCode;
+        std::filesystem::remove(entry.path(), errorCode);
+        if (errorCode)
+        {
+            return ReportError(MString("maya_dmx: failed to delete invalid batch manifest: ") + entry.path().generic_string().c_str());
+        }
+
+        removedItems.append(MString("invalid_file:") + entry.path().generic_string().c_str());
+    }
+
+    MStringArray legacyNames;
+    status = ListLegacyBatchManifestNames(legacyNames);
+    if (!status)
+    {
+        return status;
+    }
+
+    for (unsigned int index = 0; index < legacyNames.length(); ++index)
+    {
+        const MString &name = legacyNames[index];
+        const std::filesystem::path manifestPath = GetBatchManifestPath(name);
+        if (!manifestPath.empty() && std::filesystem::exists(manifestPath))
+        {
+            status = RemoveOptionVar(MakeOptionVarName(kBatchVarPrefix, name));
+            if (!status)
+            {
+                return status;
+            }
+
+            removedItems.append(MString("legacy_optionVar:") + name);
+        }
     }
 
     return MS::kSuccess;
@@ -770,7 +915,10 @@ MStatus ExecuteBatchExport(const ExportPreset &preset, const MStringArray &entri
         if (!ParseBatchManifestEntry(entries[entryIndex], entry))
         {
             MGlobal::setActiveSelectionList(originalSelection);
-            return ReportError(MString("maya_dmx: invalid batch entry: ") + entries[entryIndex]);
+            return ReportError(
+                MString("maya_dmx: invalid batch entry at index ")
+                + static_cast<int>(entryIndex)
+                + ": " + entries[entryIndex]);
         }
 
         MSelectionList exportSelection;
@@ -778,7 +926,11 @@ MStatus ExecuteBatchExport(const ExportPreset &preset, const MStringArray &entri
         if (!status)
         {
             MGlobal::setActiveSelectionList(originalSelection);
-            return ReportError(MString("maya_dmx: batch root was not found: ") + entry.rootPath, status);
+            return ReportError(
+                MString("maya_dmx: batch root was not found for entry ")
+                + static_cast<int>(entryIndex)
+                + ": " + entry.rootPath,
+                status);
         }
 
         status = MGlobal::setActiveSelectionList(exportSelection);

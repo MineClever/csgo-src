@@ -40,8 +40,14 @@ constexpr const char *kDeleteBatchFlag = "-db";
 constexpr const char *kDeleteBatchLongFlag = "-deleteBatch";
 constexpr const char *kListBatchesFlag = "-lbt";
 constexpr const char *kListBatchesLongFlag = "-listBatches";
+constexpr const char *kListLegacyBatchesFlag = "-llb";
+constexpr const char *kListLegacyBatchesLongFlag = "-listLegacyBatches";
 constexpr const char *kBatchEntryFlag = "-be";
 constexpr const char *kBatchEntryLongFlag = "-batchEntry";
+constexpr const char *kMigrateLegacyBatchesFlag = "-mlb";
+constexpr const char *kMigrateLegacyBatchesLongFlag = "-migrateLegacyBatches";
+constexpr const char *kCleanupBatchStorageFlag = "-cbt";
+constexpr const char *kCleanupBatchStorageLongFlag = "-cleanupBatchStorage";
 constexpr const char *kExportPresetFlag = "-ep";
 constexpr const char *kExportPresetLongFlag = "-exportPreset";
 constexpr const char *kExportPathFlag = "-fp";
@@ -90,7 +96,10 @@ MSyntax MayaDmxWorkflowCommand::CreateSyntax()
     syntax.addFlag(kLoadBatchFlag, kLoadBatchLongFlag, MSyntax::kString);
     syntax.addFlag(kDeleteBatchFlag, kDeleteBatchLongFlag, MSyntax::kString);
     syntax.addFlag(kListBatchesFlag, kListBatchesLongFlag);
+    syntax.addFlag(kListLegacyBatchesFlag, kListLegacyBatchesLongFlag);
     syntax.addFlag(kBatchEntryFlag, kBatchEntryLongFlag, MSyntax::kString);
+    syntax.addFlag(kMigrateLegacyBatchesFlag, kMigrateLegacyBatchesLongFlag);
+    syntax.addFlag(kCleanupBatchStorageFlag, kCleanupBatchStorageLongFlag);
     syntax.addFlag(kExportPresetFlag, kExportPresetLongFlag, MSyntax::kString);
     syntax.addFlag(kExportPathFlag, kExportPathLongFlag, MSyntax::kString);
     syntax.addFlag(kExportAllFlag, kExportAllLongFlag, MSyntax::kBoolean);
@@ -129,6 +138,51 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
 
         MString result;
         AppendJoinedResult(names, result);
+        setResult(result);
+        return MS::kSuccess;
+    }
+
+    if (arguments.isFlagSet(kListLegacyBatchesFlag))
+    {
+        MStringArray names;
+        MStatus status = maya_dmx::ListLegacyBatchManifestNames(names);
+        if (!status)
+        {
+            return status;
+        }
+
+        MString result;
+        AppendJoinedResult(names, result);
+        setResult(result);
+        return MS::kSuccess;
+    }
+
+    if (arguments.isFlagSet(kMigrateLegacyBatchesFlag))
+    {
+        MStringArray names;
+        MStatus status = maya_dmx::MigrateLegacyBatchManifests(names);
+        if (!status)
+        {
+            return status;
+        }
+
+        MString result;
+        AppendJoinedResult(names, result);
+        setResult(result);
+        return MS::kSuccess;
+    }
+
+    if (arguments.isFlagSet(kCleanupBatchStorageFlag))
+    {
+        MStringArray removedItems;
+        MStatus status = maya_dmx::CleanupBatchManifestStorage(removedItems);
+        if (!status)
+        {
+            return status;
+        }
+
+        MString result;
+        AppendJoinedResult(removedItems, result);
         setResult(result);
         return MS::kSuccess;
     }
@@ -328,7 +382,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
     }
 
     return maya_dmx::ReportError(
-        MString("maya_dmx: no workflow action specified. Use ") + kCommandName + " with -savePreset, -exportPreset, -runBatch, -saveBatch, or related flags.");
+        MString("maya_dmx: no workflow action specified. Use ") + kCommandName + " with -savePreset, -exportPreset, -runBatch, -saveBatch, -migrateLegacyBatches, -cleanupBatchStorage, or related flags.");
 }
 
 bool MayaDmxWorkflowCommand::isUndoable() const

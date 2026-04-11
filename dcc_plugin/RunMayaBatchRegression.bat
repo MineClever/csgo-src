@@ -20,7 +20,8 @@ echo ============================================================
 echo  Running Maya batch DMX regression (%CONFIG%)
 echo ============================================================
 echo.
-echo This regression verifies mesh roundtrip and transform/joint type stability.
+echo This regression verifies mesh roundtrip, transform/joint type stability,
+echo and animation import gates for the dedicated DMX animation samples.
 echo.
 
 if not exist "%MAYA_PYTHON_EXE%" (

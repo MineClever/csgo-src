@@ -4,6 +4,29 @@ import sys
 
 import maya.standalone
 
+ANIMATION_GATE_EXPECTATIONS = {
+    "MostComplexSampleSet/vcaanim_VertexAnim": {
+        "min_animated_plugs": 2,
+        "required_any_suffix_groups": [
+            [".translateX", ".translateY", ".translateZ"],
+            [".rotateX", ".rotateY", ".rotateZ"],
+        ],
+    },
+    "simple_float_animation": {
+        "min_animated_plugs": 1,
+        "required_any_suffix_groups": [
+            [".scaleX"],
+        ],
+    },
+    "simple_blendshape_animation": {
+        "min_animated_plugs": 2,
+        "required_substrings": [
+            "combinationOperator_controls.smile",
+            "_blendShape.smile",
+        ],
+    },
+}
+
 
 def snapshot_imported_node_types(root_paths):
     import maya.api.OpenMaya as om
@@ -402,6 +425,34 @@ def compare_animation_snapshots(reference_animations, candidate_animations):
     raise last_error
 
 
+def validate_animation_gate(case_name, animation_snapshots):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = ANIMATION_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    if len(animation_snapshots) < expectation.get("min_animated_plugs", 0):
+        raise RuntimeError(
+            f"Animation gate failed for {normalized_case_name}. "
+            f"expected at least {expectation['min_animated_plugs']} animated plugs, got {len(animation_snapshots)}"
+        )
+
+    animation_keys = sorted(animation_snapshots.keys())
+    for suffix_group in expectation.get("required_any_suffix_groups", []):
+        if not any(any(animation_key.endswith(suffix) for suffix in suffix_group) for animation_key in animation_keys):
+            raise RuntimeError(
+                f"Animation gate failed for {normalized_case_name}. "
+                f"missing animated plug matching one of: {suffix_group}"
+            )
+
+    for required_substring in expectation.get("required_substrings", []):
+        if not any(required_substring in animation_key for animation_key in animation_keys):
+            raise RuntimeError(
+                f"Animation gate failed for {normalized_case_name}. "
+                f"missing animated plug containing: {required_substring}"
+            )
+
+
 def verify_roundtrip(
     cmds,
     plugin_path,
@@ -507,6 +558,7 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name, import_option
     roundtrip_binary_blendshape_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_blendshapecheck.txt")
     roundtrip_text_animation_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_animcheck.txt")
     roundtrip_binary_animation_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_animcheck.txt")
+    import_animation_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.import_animgate.txt")
 
     cmds.file(new=True, force=True)
     if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
@@ -528,6 +580,9 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name, import_option
     original_skins = snapshot_skin_bindings(cmds, imported_roots)
     original_blendshapes = snapshot_blendshape_bindings(cmds, imported_roots)
     original_animations = snapshot_animation_bindings(cmds, imported_roots)
+    validate_animation_gate(case_name, original_animations)
+    with open(import_animation_gate_marker, "w", encoding="utf-8") as marker_file:
+        marker_file.write("ok\n")
     cmds.file(rename=exported_text)
     cmds.file(force=True, exportSelected=True, type="Valve DMX Export")
 

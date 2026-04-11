@@ -37,6 +37,12 @@ Maya standalone regression:
 dcc_plugin\RunMayaBatchRegression.bat
 ```
 
+Host environment query:
+
+```bat
+dcc_plugin\QueryMayaValidationEnv.bat
+```
+
 Interactive Maya validation:
 
 ```bat
@@ -51,6 +57,9 @@ mayaDmxWorkflow -listPresets;
 mayaDmxWorkflow -loadPreset "default";
 mayaDmxWorkflow -saveBatch "characters" -batchEntry "|root_chr_a|characters/chr_a.dmx" -batchEntry "|root_chr_b|characters/chr_b.dmx";
 mayaDmxWorkflow -listBatches;
+mayaDmxWorkflow -listLegacyBatches;
+mayaDmxWorkflow -migrateLegacyBatches;
+mayaDmxWorkflow -cleanupBatchStorage;
 mayaDmxWorkflow -loadBatch "characters";
 ```
 
@@ -91,7 +100,15 @@ This writes `%USERPROFILE%\Documents\maya\modules\maya_dmx.mod`, clears the stag
 
 `RunMayaInteractiveValidation.bat` defaults to `C:\Program Files\Autodesk\Maya2022\bin\maya.exe`. It launches Maya with `MAYA_SKIP_USERSETUP_PY=1`, loads the built plugin, sources the DMX MEL scripts from `dcc_plugin\src\mel\`, verifies the expected MEL entrypoints exist, and opens a small validation window with buttons for the import/export option boxes. If Maya is installed elsewhere, set `MAYA_EXE_OVERRIDE` before running it.
 
+`QueryMayaValidationEnv.bat` / `tools\QueryMayaValidationEnv.ps1` query the host validation environment and write a Markdown report to `build\maya_dmx\maya_validation_env_report.md`.
+
 `mayaDmxWorkflow` now executes both single exports and batch exports. Export presets still use Maya optionVars, while batch manifests are stored as files under the Maya user prefs directory to avoid DAG path corruption.
+
+Workflow cleanup helpers:
+
+- `-listLegacyBatches` lists legacy optionVar-backed batch manifests that have not been migrated yet.
+- `-migrateLegacyBatches` writes legacy optionVar-backed batch manifests to the file-backed workflow directory and removes the old optionVars.
+- `-cleanupBatchStorage` removes invalid `.batch` files with undecodable names and prunes legacy batch optionVars when the file-backed manifest already exists.
 
 The module also now ships a minimal Alembic-style MEL export UI layer. Source files are managed under:
 

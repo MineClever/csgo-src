@@ -38,6 +38,9 @@ MStatus SaveBatchManifest(const MString &name, const MStringArray &entries);
 MStatus LoadBatchManifest(const MString &name, MStringArray &entries);
 MStatus DeleteBatchManifest(const MString &name);
 MStatus ListBatchManifestNames(MStringArray &names);
+MStatus ListLegacyBatchManifestNames(MStringArray &names);
+MStatus MigrateLegacyBatchManifests(MStringArray &migratedNames);
+MStatus CleanupBatchManifestStorage(MStringArray &removedItems);
 MStatus ExecuteExport(const ExportPreset &preset, const MString &outputPath, bool exportSelection);
 MStatus ExecuteBatchExport(const ExportPreset &preset, const MStringArray &entries);
 }
