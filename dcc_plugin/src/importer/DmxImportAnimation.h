@@ -57,6 +57,7 @@ private:
         std::vector<MPlug> &targets);
     MStatus applyFloatAnimation(const MPlug &targetPlug, const simple_dmx::Element *logLayer) const;
     MStatus applyFloatAnimation(const std::vector<MPlug> &targetPlugs, const simple_dmx::Element *logLayer) const;
+    bool shouldSkipAppendTransformAnimation(const simple_dmx::Element *targetElement) const;
     void bindCurrentChannel(const simple_dmx::Element *channel);
 
     std::shared_ptr<ImportContext> context_;

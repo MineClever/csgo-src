@@ -28,6 +28,7 @@ private:
     MStatus applyAnimation();
     MStatus createJoint(const simple_smd::Node &node);
     MObject findExistingJoint(const simple_smd::Node &node) const;
+    MObject findAppendTargetChild(const MObject &parent, const std::string &nodeName) const;
 
     MObject findParentObject(const simple_smd::Node &node) const;
     const simple_smd::SkeletonPose *findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const;

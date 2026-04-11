@@ -95,60 +95,6 @@ MStatus SetCurveKeys(
     return MS::kSuccess;
 }
 
-MObject FindAppendTargetChild(const MObject &parent, const std::string &nodeName)
-{
-    MStatus status;
-    if (parent.isNull())
-    {
-        MItDag dagIterator(MItDag::kDepthFirst);
-        for (; !dagIterator.isDone(); dagIterator.next())
-        {
-            if (dagIterator.depth() != 1)
-            {
-                continue;
-            }
-
-            MDagPath dagPath;
-            if (dagIterator.getPath(dagPath) != MS::kSuccess || !dagPath.hasFn(MFn::kJoint))
-            {
-                continue;
-            }
-
-            MFnDagNode dagNode(dagPath, &status);
-            if (status && std::string(dagNode.name().asChar()) == nodeName)
-            {
-                return dagPath.node();
-            }
-        }
-
-        return MObject::kNullObj;
-    }
-
-    MFnDagNode parentDagNode(parent, &status);
-    if (!status)
-    {
-        return MObject::kNullObj;
-    }
-
-    for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
-    {
-        const MObject childObject = parentDagNode.child(childIndex, &status);
-        if (!status || !childObject.hasFn(MFn::kJoint))
-        {
-            status = MS::kSuccess;
-            continue;
-        }
-
-        MFnDagNode childDagNode(childObject, &status);
-        if (status && std::string(childDagNode.name().asChar()) == nodeName)
-        {
-            return childObject;
-        }
-        status = MS::kSuccess;
-    }
-
-    return MObject::kNullObj;
-}
 }
 
 SmdSceneImporter::SmdSceneImporter(std::shared_ptr<const simple_smd::Document> document, const SmdImportOptions &importOptions)
@@ -318,7 +264,62 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
 
 MObject SmdSceneImporter::findExistingJoint(const simple_smd::Node &node) const
 {
-    return FindAppendTargetChild(findParentObject(node), SanitizeNodeName(node.name));
+    return findAppendTargetChild(findParentObject(node), SanitizeNodeName(node.name));
+}
+
+MObject SmdSceneImporter::findAppendTargetChild(const MObject &parent, const std::string &nodeName) const
+{
+    MStatus status;
+    if (parent.isNull())
+    {
+        MItDag dagIterator(MItDag::kDepthFirst);
+        for (; !dagIterator.isDone(); dagIterator.next())
+        {
+            if (dagIterator.depth() != 1)
+            {
+                continue;
+            }
+
+            MDagPath dagPath;
+            if (dagIterator.getPath(dagPath) != MS::kSuccess || !dagPath.hasFn(MFn::kJoint))
+            {
+                continue;
+            }
+
+            MFnDagNode dagNode(dagPath, &status);
+            if (status && std::string(dagNode.name().asChar()) == nodeName)
+            {
+                return dagPath.node();
+            }
+        }
+
+        return MObject::kNullObj;
+    }
+
+    MFnDagNode parentDagNode(parent, &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
+    {
+        const MObject childObject = parentDagNode.child(childIndex, &status);
+        if (!status || !childObject.hasFn(MFn::kJoint))
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        MFnDagNode childDagNode(childObject, &status);
+        if (status && std::string(childDagNode.name().asChar()) == nodeName)
+        {
+            return childObject;
+        }
+        status = MS::kSuccess;
+    }
+
+    return MObject::kNullObj;
 }
 
 MObject SmdSceneImporter::findParentObject(const simple_smd::Node &node) const

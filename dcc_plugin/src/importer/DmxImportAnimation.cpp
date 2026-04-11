@@ -18,19 +18,6 @@
 namespace dmx_import_impl
 {
 
-namespace
-{
-bool ShouldSkipAppendTransformAnimation(const ImportContext &context, const simple_dmx::Element *targetElement)
-{
-    if (!targetElement || !dcc_import_policy::UsesAppendMissingObjects(context.scenePolicy))
-    {
-        return false;
-    }
-
-    return context.reusedTransformElementKeys.find(ElementKey(targetElement)) != context.reusedTransformElementKeys.end();
-}
-}
-
 
 AnimationImporter::AnimationImporter(std::shared_ptr<ImportContext> context)
     : context_(context)
@@ -513,6 +500,16 @@ MStatus AnimationImporter::applyFloatAnimation(const std::vector<MPlug> &targetP
     return MS::kSuccess;
 }
 
+bool AnimationImporter::shouldSkipAppendTransformAnimation(const simple_dmx::Element *targetElement) const
+{
+    if (!targetElement || !dcc_import_policy::UsesAppendMissingObjects(context_->scenePolicy))
+    {
+        return false;
+    }
+
+    return context_->reusedTransformElementKeys.find(ElementKey(targetElement)) != context_->reusedTransformElementKeys.end();
+}
+
 const simple_dmx::Element *AnimationImporter::FindAnimationList() const
 {
     if (const simple_dmx::Element *animationList = FindAttributeElement(context_->document, documentRoot_, "animationList"))
@@ -597,7 +594,7 @@ MStatus AnimationImporter::ApplyChannelsClipAnimation(const simple_dmx::Element 
         auto targetIt = context_->importedTransformPaths.find(ElementKey(currentTargetElement_));
         if (targetIt != context_->importedTransformPaths.end() && currentTargetAttribute_ == "position")
         {
-            if (ShouldSkipAppendTransformAnimation(*context_, currentTargetElement_))
+            if (shouldSkipAppendTransformAnimation(currentTargetElement_))
             {
                 continue;
             }
@@ -605,7 +602,7 @@ MStatus AnimationImporter::ApplyChannelsClipAnimation(const simple_dmx::Element 
         }
         else if (targetIt != context_->importedTransformPaths.end() && currentTargetAttribute_ == "orientation")
         {
-            if (ShouldSkipAppendTransformAnimation(*context_, currentTargetElement_))
+            if (shouldSkipAppendTransformAnimation(currentTargetElement_))
             {
                 continue;
             }
