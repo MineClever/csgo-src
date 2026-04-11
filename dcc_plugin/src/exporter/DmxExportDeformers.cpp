@@ -27,7 +27,7 @@
 namespace dmx_export_impl
 {
 
-DeformerExporter::DeformerExporter(ExportContext &context)
+DeformerExporter::DeformerExporter(std::shared_ptr<ExportContext> context)
     : context_(context)
 {
 }
@@ -113,19 +113,19 @@ void DeformerExporter::AppendSkinningData(const MDagPath &meshPath, Element &ver
     for (unsigned int influenceIndex = 0; influenceIndex < influenceCount; ++influenceIndex)
     {
         const std::string pathKey = DagPathKey(influencePaths[influenceIndex]);
-        auto it = context_.jointIndexByPath.find(pathKey);
-        if (it == context_.jointIndexByPath.end())
+        auto it = context_->jointIndexByPath.find(pathKey);
+        if (it == context_->jointIndexByPath.end())
         {
-            auto dagIt = context_.dagElementByPath.find(pathKey);
-            if (dagIt != context_.dagElementByPath.end() && dagIt->second)
+            auto dagIt = context_->dagElementByPath.find(pathKey);
+            if (dagIt != context_->dagElementByPath.end() && dagIt->second)
             {
-                const int jointIndex = static_cast<int>(context_.jointElements.size());
-                context_.jointIndexByPath[pathKey] = jointIndex;
-                context_.jointElements.push_back(dagIt->second);
-                it = context_.jointIndexByPath.find(pathKey);
+                const int jointIndex = static_cast<int>(context_->jointElements.size());
+                context_->jointIndexByPath[pathKey] = jointIndex;
+                context_->jointElements.push_back(dagIt->second);
+                it = context_->jointIndexByPath.find(pathKey);
             }
         }
-        if (it != context_.jointIndexByPath.end())
+        if (it != context_->jointIndexByPath.end())
         {
             influenceToJointIndex[influenceIndex] = it->second;
         }
@@ -226,7 +226,7 @@ void DeformerExporter::AppendSkinningData(const MDagPath &meshPath, Element &ver
     SetAttr(*vertexDataElement_, "jointWeights", ScalarArrayAttr("float_array", std::move(jointWeightValues)));
 
     MFnDependencyNode skinClusterNodeFn(currentSkinClusterObject_, &status);
-    if (!status || !context_.exportMetadata)
+    if (!status || !context_->exportMetadata)
     {
         return;
     }
@@ -516,7 +516,7 @@ void DeformerExporter::AppendBlendShapeDeltaStates(
             SetAttr(*deltaElement, "vertexFormat", ScalarArrayAttr("string_array", {"positions"}));
             SetAttr(*deltaElement, "positions", ScalarArrayAttr("vector3_array", std::move(deltaPositions)));
             SetAttr(*deltaElement, "positionsIndices", ScalarArrayAttr("int_array", std::move(deltaPositionIndices)));
-            if (context_.exportMetadata)
+            if (context_->exportMetadata)
             {
                 SetAttr(*deltaElement, "mayaDeformerType", ScalarAttr("string", "blendShape"));
                 SetAttr(*deltaElement, "mayaBlendShapeNode", ScalarAttr("string", currentBlendShapeNodeName_.asChar()));
@@ -559,7 +559,8 @@ void DeformerExporter::AppendBlendShapeDeltaStates(
 
 void AppendSkinningData(const MDagPath &meshPath, Element &vertexDataElement, ExportContext &context)
 {
-    DeformerExporter exporter(context);
+    auto contextPtr = std::shared_ptr<ExportContext>(&context, [](ExportContext *) {});
+    DeformerExporter exporter(contextPtr);
     exporter.AppendSkinningData(meshPath, vertexDataElement);
 }
 
@@ -570,7 +571,8 @@ void AppendBlendShapeDeltaStates(
     ExportContext &context,
     std::vector<Element *> &deltaStateElements)
 {
-    DeformerExporter exporter(context);
+    auto contextPtr = std::shared_ptr<ExportContext>(&context, [](ExportContext *) {});
+    DeformerExporter exporter(contextPtr);
     exporter.AppendBlendShapeDeltaStates(builder, meshPath, meshPoints, deltaStateElements);
 }
 

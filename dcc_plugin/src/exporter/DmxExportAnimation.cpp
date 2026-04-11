@@ -20,9 +20,9 @@ namespace dmx_export_impl
 {
 
 AnimationExporter::AnimationExporter(
-    DocumentBuilder &builder,
-    const std::vector<MDagPath> &exportRoots,
-    ExportContext &context)
+    std::shared_ptr<DocumentBuilder> builder,
+    std::shared_ptr<const std::vector<MDagPath>> exportRoots,
+    std::shared_ptr<ExportContext> context)
     : builder_(builder)
     , exportRoots_(exportRoots)
     , context_(context)
@@ -34,21 +34,21 @@ void AnimationExporter::bindCurrentDagContext(const MDagPath &dagPath)
     currentDagPath_ = dagPath;
     currentDagName_ = dagPath.partialPathName().asChar();
 
-    const auto transformIt = context_.transformElementByPath.find(DagPathKey(currentDagPath_));
-    currentTransformElement_ = transformIt != context_.transformElementByPath.end() ? transformIt->second : nullptr;
+    const auto transformIt = context_->transformElementByPath.find(DagPathKey(currentDagPath_));
+    currentTransformElement_ = transformIt != context_->transformElementByPath.end() ? transformIt->second : nullptr;
 }
 
 Element *AnimationExporter::findOrCreateFloatTargetElement(const std::string &targetName)
 {
-    auto targetIt = context_.floatTargetElementByName.find(targetName);
-    if (targetIt != context_.floatTargetElementByName.end())
+    auto targetIt = context_->floatTargetElementByName.find(targetName);
+    if (targetIt != context_->floatTargetElementByName.end())
     {
         return targetIt->second;
     }
 
-    Element *targetElement = builder_.CreateElement("DmElement", targetName);
+    Element *targetElement = builder_->CreateElement("DmElement", targetName);
     SetAttr(*targetElement, "flexWeight", ScalarAttr("float", "0.000000"));
-    context_.floatTargetElementByName[targetName] = targetElement;
+    context_->floatTargetElementByName[targetName] = targetElement;
     return targetElement;
 }
 
@@ -70,12 +70,12 @@ Element *AnimationExporter::buildFloatLog(
         valueStrings.push_back(FormatFloat(values[keyIndex]));
     }
 
-    Element *logLayer = builder_.CreateElement("DmeFloatLogLayer", "base");
+    Element *logLayer = builder_->CreateElement("DmeFloatLogLayer", "base");
     SetAttr(*logLayer, "times", ScalarArrayAttr("time_array", std::move(timeStrings)));
     SetAttr(*logLayer, "values", ScalarArrayAttr("float_array", std::move(valueStrings)));
 
-    Element *logElement = builder_.CreateElement("DmeFloatLog", logName);
-    SetAttr(*logElement, "layers", builder_.ElementRefArray({logLayer}));
+    Element *logElement = builder_->CreateElement("DmeFloatLog", logName);
+    SetAttr(*logElement, "layers", builder_->ElementRefArray({logLayer}));
     return logElement;
 }
 
@@ -97,12 +97,12 @@ Element *AnimationExporter::buildVector3Log(
         valueStrings.push_back(FormatVector3(values[keyIndex][0], values[keyIndex][1], values[keyIndex][2]));
     }
 
-    Element *logLayer = builder_.CreateElement("DmeVector3LogLayer", "base");
+    Element *logLayer = builder_->CreateElement("DmeVector3LogLayer", "base");
     SetAttr(*logLayer, "times", ScalarArrayAttr("time_array", std::move(timeStrings)));
     SetAttr(*logLayer, "values", ScalarArrayAttr("vector3_array", std::move(valueStrings)));
 
-    Element *logElement = builder_.CreateElement("DmeVector3Log", logName);
-    SetAttr(*logElement, "layers", builder_.ElementRefArray({logLayer}));
+    Element *logElement = builder_->CreateElement("DmeVector3Log", logName);
+    SetAttr(*logElement, "layers", builder_->ElementRefArray({logLayer}));
     return logElement;
 }
 
@@ -124,12 +124,12 @@ Element *AnimationExporter::buildQuaternionLog(
         valueStrings.push_back(FormatQuaternion(values[keyIndex].x, values[keyIndex].y, values[keyIndex].z, values[keyIndex].w));
     }
 
-    Element *logLayer = builder_.CreateElement("DmeQuaternionLogLayer", "base");
+    Element *logLayer = builder_->CreateElement("DmeQuaternionLogLayer", "base");
     SetAttr(*logLayer, "times", ScalarArrayAttr("time_array", std::move(timeStrings)));
     SetAttr(*logLayer, "values", ScalarArrayAttr("quaternion_array", std::move(valueStrings)));
 
-    Element *logElement = builder_.CreateElement("DmeQuaternionLog", logName);
-    SetAttr(*logElement, "layers", builder_.ElementRefArray({logLayer}));
+    Element *logElement = builder_->CreateElement("DmeQuaternionLog", logName);
+    SetAttr(*logElement, "layers", builder_->ElementRefArray({logLayer}));
     return logElement;
 }
 
@@ -144,10 +144,10 @@ Element *AnimationExporter::buildFloatChannel(
         return nullptr;
     }
 
-    Element *channelElement = builder_.CreateElement("DmeChannel", name);
-    SetAttr(*channelElement, "toElement", builder_.ElementRef(targetElement));
+    Element *channelElement = builder_->CreateElement("DmeChannel", name);
+    SetAttr(*channelElement, "toElement", builder_->ElementRef(targetElement));
     SetAttr(*channelElement, "toAttribute", ScalarAttr("string", attributeName));
-    SetAttr(*channelElement, "log", builder_.ElementRef(logElement));
+    SetAttr(*channelElement, "log", builder_->ElementRef(logElement));
     return channelElement;
 }
 
@@ -555,12 +555,12 @@ void AnimationExporter::appendAnimationChannelsRecursive(const MDagPath &dagPath
 
 Element *AnimationExporter::BuildAnimationListElement()
 {
-    for (const MDagPath &rootPath : exportRoots_)
+    for (const MDagPath &rootPath : *exportRoots_)
     {
         collectControlAnimationChannelsRecursive(rootPath);
     }
 
-    for (const MDagPath &rootPath : exportRoots_)
+    for (const MDagPath &rootPath : *exportRoots_)
     {
         appendAnimationChannelsRecursive(rootPath);
     }
@@ -570,22 +570,25 @@ Element *AnimationExporter::BuildAnimationListElement()
         return nullptr;
     }
 
-    Element *timeFrameElement = builder_.CreateElement("DmeTimeFrame");
+    Element *timeFrameElement = builder_->CreateElement("DmeTimeFrame");
     SetAttr(*timeFrameElement, "duration", ScalarAttr("time", FormatTimeSeconds(clipDurationSeconds_)));
     SetAttr(*timeFrameElement, "frameRate", ScalarAttr("float", "30.0"));
 
-    Element *clipElement = builder_.CreateElement("DmeChannelsClip", "maya_export_animation");
-    SetAttr(*clipElement, "channels", builder_.ElementRefArray(channels_));
-    SetAttr(*clipElement, "timeFrame", builder_.ElementRef(timeFrameElement));
+    Element *clipElement = builder_->CreateElement("DmeChannelsClip", "maya_export_animation");
+    SetAttr(*clipElement, "channels", builder_->ElementRefArray(channels_));
+    SetAttr(*clipElement, "timeFrame", builder_->ElementRef(timeFrameElement));
 
-    Element *animationListElement = builder_.CreateElement("DmeAnimationList", "animationList");
-    SetAttr(*animationListElement, "animations", builder_.ElementRefArray({clipElement}));
+    Element *animationListElement = builder_->CreateElement("DmeAnimationList", "animationList");
+    SetAttr(*animationListElement, "animations", builder_->ElementRefArray({clipElement}));
     return animationListElement;
 }
 
 Element *BuildAnimationListElement(DocumentBuilder &builder, const std::vector<MDagPath> &exportRoots, ExportContext &context)
 {
-    AnimationExporter exporter(builder, exportRoots, context);
+    auto builderPtr = std::shared_ptr<DocumentBuilder>(&builder, [](DocumentBuilder *) {});
+    auto exportRootsPtr = std::shared_ptr<const std::vector<MDagPath>>(&exportRoots, [](const std::vector<MDagPath> *) {});
+    auto contextPtr = std::shared_ptr<ExportContext>(&context, [](ExportContext *) {});
+    AnimationExporter exporter(builderPtr, exportRootsPtr, contextPtr);
     return exporter.BuildAnimationListElement();
 }
 

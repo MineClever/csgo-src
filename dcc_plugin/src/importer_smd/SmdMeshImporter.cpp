@@ -113,8 +113,8 @@ MObject FindNodeByName(const MString &nodeName)
 }
 
 SmdMeshImporter::SmdMeshImporter(
-    const simple_smd::Document &document,
-    const std::unordered_map<int, MDagPath> &jointPathsByBone)
+    std::shared_ptr<const simple_smd::Document> document,
+    std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone)
     : document_(document)
     , jointPathsByBone_(jointPathsByBone)
 {
@@ -122,14 +122,14 @@ SmdMeshImporter::SmdMeshImporter(
 
 MStatus SmdMeshImporter::Import(MObject parent) const
 {
-    if (document_.triangles.empty())
+    if (document_->triangles.empty())
     {
         return MS::kSuccess;
     }
 
     std::vector<std::string> materialNames;
-    materialNames.reserve(document_.triangles.size());
-    for (const simple_smd::Triangle &triangle : document_.triangles)
+    materialNames.reserve(document_->triangles.size());
+    for (const simple_smd::Triangle &triangle : document_->triangles)
     {
         if (std::find(materialNames.begin(), materialNames.end(), triangle.materialName) == materialNames.end())
         {
@@ -165,7 +165,7 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
     bool hasWeights = false;
     int nextVertexIndex = 0;
     int faceIndex = 0;
-    for (const simple_smd::Triangle &triangle : document_.triangles)
+    for (const simple_smd::Triangle &triangle : document_->triangles)
     {
         if (triangle.materialName != materialName || triangle.vertices.size() != 3)
         {
@@ -555,7 +555,7 @@ MStatus SmdMeshImporter::applySkinning(
                 continue;
             }
 
-            if (jointPathsByBone_.find(weight.boneIndex) == jointPathsByBone_.end())
+            if (jointPathsByBone_->find(weight.boneIndex) == jointPathsByBone_->end())
             {
                 continue;
             }
@@ -575,8 +575,8 @@ MStatus SmdMeshImporter::applySkinning(
     MDagPathArray activeInfluencePaths;
     for (int boneIndex : activeBoneIndices)
     {
-        const auto jointIt = jointPathsByBone_.find(boneIndex);
-        if (jointIt == jointPathsByBone_.end())
+        const auto jointIt = jointPathsByBone_->find(boneIndex);
+        if (jointIt == jointPathsByBone_->end())
         {
             continue;
         }
@@ -634,8 +634,8 @@ MStatus SmdMeshImporter::applySkinning(
 
         for (int boneIndex : activeBoneIndices)
         {
-            const auto jointIt = jointPathsByBone_.find(boneIndex);
-            if (jointIt == jointPathsByBone_.end())
+            const auto jointIt = jointPathsByBone_->find(boneIndex);
+            if (jointIt == jointPathsByBone_->end())
             {
                 continue;
             }

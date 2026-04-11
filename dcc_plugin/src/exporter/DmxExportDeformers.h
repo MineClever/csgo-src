@@ -3,6 +3,7 @@
 #include "../common/SimpleDmxDocument.h"
 #include "DmxExportTranslatorTypes.h"
 
+#include <memory>
 #include <vector>
 
 #include <maya/MDagPath.h>
@@ -17,7 +18,7 @@ using dmx_export_translator::ExportContext;
 class DeformerExporter
 {
 public:
-    explicit DeformerExporter(ExportContext &context);
+    explicit DeformerExporter(std::shared_ptr<ExportContext> context);
 
     void AppendSkinningData(const MDagPath &meshPath, simple_dmx::Element &vertexDataElement);
     void AppendBlendShapeDeltaStates(
@@ -28,7 +29,7 @@ public:
 
 private:
     void bindMeshContext(const MDagPath &meshPath);
-    ExportContext &context_;
+    std::shared_ptr<ExportContext> context_;
     simple_dmx::DocumentBuilder *builder_ = nullptr;
     simple_dmx::Element *vertexDataElement_ = nullptr;
     std::vector<simple_dmx::Element *> *deltaStateElements_ = nullptr;

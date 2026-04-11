@@ -2,6 +2,8 @@
 
 #include "../common_smd/SimpleSmdDocument.h"
 
+#include <memory>
+
 #include <maya/MDagPath.h>
 #include <maya/MObject.h>
 #include <maya/MStatus.h>
@@ -12,8 +14,8 @@ class SmdMeshImporter
 {
 public:
     SmdMeshImporter(
-        const simple_smd::Document &document,
-        const std::unordered_map<int, MDagPath> &jointPathsByBone);
+        std::shared_ptr<const simple_smd::Document> document,
+        std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone);
 
     MStatus Import(MObject parent) const;
 
@@ -30,6 +32,6 @@ private:
         const std::vector<std::vector<simple_smd::TriangleWeight>> &vertexLinks,
         const MDagPath &meshTransformPath) const;
 
-    const simple_smd::Document &document_;
-    const std::unordered_map<int, MDagPath> &jointPathsByBone_;
+    std::shared_ptr<const simple_smd::Document> document_;
+    std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone_;
 };

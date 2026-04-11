@@ -4,6 +4,8 @@
 
 #include "../common_smd/SimpleSmdDocument.h"
 
+#include <memory>
+
 #include <maya/MDagPath.h>
 #include <maya/MObject.h>
 #include <maya/MStatus.h>
@@ -13,7 +15,7 @@
 class SmdSceneImporter
 {
 public:
-    SmdSceneImporter(const simple_smd::Document &document, const SmdImportOptions &importOptions);
+    SmdSceneImporter(std::shared_ptr<const simple_smd::Document> document, const SmdImportOptions &importOptions);
 
     MStatus Import();
 
@@ -28,7 +30,7 @@ private:
     MObject findParentObject(const simple_smd::Node &node) const;
     const simple_smd::SkeletonPose *findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const;
 
-    const simple_smd::Document &document_;
+    std::shared_ptr<const simple_smd::Document> document_;
     SmdImportOptions importOptions_;
     MObject importRoot_ = MObject::kNullObj;
     std::unordered_map<int, MDagPath> jointPathsByBone_;

@@ -4,6 +4,7 @@
 #include "DmxExportTranslatorTypes.h"
 
 #include <array>
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -19,9 +20,9 @@ class AnimationExporter
 {
 public:
     AnimationExporter(
-        simple_dmx::DocumentBuilder &builder,
-        const std::vector<MDagPath> &exportRoots,
-        ExportContext &context);
+        std::shared_ptr<simple_dmx::DocumentBuilder> builder,
+        std::shared_ptr<const std::vector<MDagPath>> exportRoots,
+        std::shared_ptr<ExportContext> context);
 
     simple_dmx::Element *BuildAnimationListElement();
 
@@ -59,9 +60,9 @@ private:
     void collectControlAnimationChannelsRecursive(const MDagPath &dagPath);
     void appendAnimationChannelsRecursive(const MDagPath &dagPath);
 
-    simple_dmx::DocumentBuilder &builder_;
-    const std::vector<MDagPath> &exportRoots_;
-    ExportContext &context_;
+    std::shared_ptr<simple_dmx::DocumentBuilder> builder_;
+    std::shared_ptr<const std::vector<MDagPath>> exportRoots_;
+    std::shared_ptr<ExportContext> context_;
     std::unordered_set<std::string> exportedFlexTargets_;
     std::vector<simple_dmx::Element *> channels_;
     double clipDurationSeconds_ = 0.0;

@@ -35,7 +35,7 @@ namespace dmx_import_impl
 {
 
 
-DeformerImporter::DeformerImporter(ImportContext &context)
+DeformerImporter::DeformerImporter(std::shared_ptr<ImportContext> context)
     : context_(context)
 {
 }
@@ -130,7 +130,7 @@ MStatus DeformerImporter::createSkinClusterWithApi(
     const std::string requestedSkinClusterName = FindAttributeString(vertexData_, "mayaSkinClusterName");
     if (!requestedSkinClusterName.empty())
     {
-        skinClusterNodeFn.setName(requestedSkinClusterName.c_str(), &status);
+        skinClusterNodeFn.setName(requestedSkinClusterName.c_str(), false, &status);
         status = MS::kSuccess;
     }
 
@@ -388,7 +388,7 @@ MStatus DeformerImporter::ApplySkinning(
     AppendImportDebugLog("skinning: begin");
     const std::vector<std::string> weightStrings = FindAttributeStringArray(vertexData_, "jointWeights");
     const std::vector<std::string> indexStrings = FindAttributeStringArray(vertexData_, "jointIndices");
-    if (weightStrings.empty() || indexStrings.empty() || context_.jointOrder.empty())
+    if (weightStrings.empty() || indexStrings.empty() || context_->jointOrder.empty())
     {
         return MS::kSuccess;
     }
@@ -436,7 +436,7 @@ MStatus DeformerImporter::ApplySkinning(
         return maya_dmx::ReportWarning("maya_dmx: skipped skinning because joint weight layout did not match jointCount.");
     }
 
-    std::vector<bool> referencedJointMask(context_.jointOrder.size(), false);
+    std::vector<bool> referencedJointMask(context_->jointOrder.size(), false);
     size_t skippedJointReferenceCount = 0;
     for (unsigned int vertexIndex = 0; vertexIndex < static_cast<unsigned int>(vertexCount); ++vertexIndex)
     {
@@ -444,7 +444,7 @@ MStatus DeformerImporter::ApplySkinning(
         for (int slot = 0; slot < jointCount; ++slot)
         {
             const int dmxJointIndex = jointIndices[baseOffset + slot];
-            if (dmxJointIndex < 0 || static_cast<size_t>(dmxJointIndex) >= context_.jointOrder.size())
+            if (dmxJointIndex < 0 || static_cast<size_t>(dmxJointIndex) >= context_->jointOrder.size())
             {
                 ++skippedJointReferenceCount;
                 continue;
@@ -461,15 +461,15 @@ MStatus DeformerImporter::ApplySkinning(
 
     MDagPathArray activeInfluencePaths;
     std::vector<int> activeDmxJointIndices;
-    for (size_t dmxJointIndex = 0; dmxJointIndex < context_.jointOrder.size(); ++dmxJointIndex)
+    for (size_t dmxJointIndex = 0; dmxJointIndex < context_->jointOrder.size(); ++dmxJointIndex)
     {
         if (!referencedJointMask[dmxJointIndex])
         {
             continue;
         }
 
-        auto it = context_.importedDagPaths.find(context_.jointOrder[dmxJointIndex]);
-        if (it == context_.importedDagPaths.end())
+        auto it = context_->importedDagPaths.find(context_->jointOrder[dmxJointIndex]);
+        if (it == context_->importedDagPaths.end())
         {
             continue;
         }
@@ -506,7 +506,7 @@ MStatus DeformerImporter::ApplySkinning(
     }
 
     MIntArray vertexIds;
-    for (unsigned int vertexIndex = 0; vertexIndex < static_cast<unsigned int>(vertexCount); ++vertexIndex)
+    for (int vertexIndex = 0; vertexIndex < static_cast<int>(vertexCount); ++vertexIndex)
     {
         vertexIds.append(vertexIndex);
     }
@@ -814,7 +814,7 @@ MStatus DeformerImporter::ApplyDeltaStates(
         const bool hasWeightPlug = weightPlugStatus && !weightArrayPlug.isNull();
         for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
         {
-            context_.importedBlendShapeTargets[targetNames[targetIndex]].push_back(BlendShapeTargetBinding{blendShapeObject, targetIndex});
+            context_->importedBlendShapeTargets[targetNames[targetIndex]].push_back(BlendShapeTargetBinding{blendShapeObject, targetIndex});
 
             MString deleteCommand("delete \"");
             deleteCommand += targetTransforms[targetIndex];
@@ -850,8 +850,8 @@ MStatus ApplySkinning(
     const MObject &meshObject,
     const MObject &meshParentObject)
 {
-    ImportContext &mutableContext = const_cast<ImportContext &>(context);
-    DeformerImporter importer(mutableContext);
+    auto contextPtr = std::shared_ptr<ImportContext>(&const_cast<ImportContext &>(context), [](ImportContext *) {});
+    DeformerImporter importer(contextPtr);
     return importer.ApplySkinning(vertexData, meshObject, meshParentObject);
 }
 
@@ -863,7 +863,8 @@ MStatus ApplyDeltaStates(
     const MObject &meshParentObject,
     const MPointArray &basePoints)
 {
-    DeformerImporter importer(context);
+    auto contextPtr = std::shared_ptr<ImportContext>(&context, [](ImportContext *) {});
+    DeformerImporter importer(contextPtr);
     return importer.ApplyDeltaStates(document, meshElement, meshObject, meshParentObject, basePoints);
 }
 

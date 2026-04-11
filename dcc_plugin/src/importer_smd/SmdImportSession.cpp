@@ -4,6 +4,7 @@
 #include "../common_smd/MayaSmdCommon.h"
 #include "../common_smd/SimpleSmdDocument.h"
 
+#include <memory>
 #include <string>
 
 SmdImportSession::SmdImportSession(const MFileObject &fileObject, const MString &options)
@@ -19,14 +20,14 @@ MStatus SmdImportSession::Run()
         return MStatus::kFailure;
     }
 
-    simple_smd::Document document;
+    auto document = std::make_shared<simple_smd::Document>();
     std::string errorMessage;
-    if (!document.ParseFromFile(fileObject_.resolvedFullName().asChar(), &errorMessage))
+    if (!document->ParseFromFile(fileObject_.resolvedFullName().asChar(), &errorMessage))
     {
         return maya_smd::ReportError(MString("maya_smd: failed to parse SMD file: ") + errorMessage.c_str());
     }
 
-    if (document.nodes.empty())
+    if (document->nodes.empty())
     {
         return maya_smd::ReportError(MString("maya_smd: SMD file did not contain any nodes: ") + fileObject_.rawFullName());
     }

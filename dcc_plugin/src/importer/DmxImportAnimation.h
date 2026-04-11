@@ -4,6 +4,7 @@
 
 #include "../common/SimpleDmxDocument.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,7 +21,7 @@ using dmx_import_translator::ImportContext;
 class AnimationImporter
 {
 public:
-    explicit AnimationImporter(ImportContext &context);
+    explicit AnimationImporter(std::shared_ptr<ImportContext> context);
 
     void setLookupRoots(
         const simple_dmx::Element *documentRoot,
@@ -58,7 +59,7 @@ private:
     MStatus applyFloatAnimation(const std::vector<MPlug> &targetPlugs, const simple_dmx::Element *logLayer) const;
     void bindCurrentChannel(const simple_dmx::Element *channel);
 
-    ImportContext &context_;
+    std::shared_ptr<ImportContext> context_;
     const simple_dmx::Element *documentRoot_ = nullptr;
     const simple_dmx::Element *importRoot_ = nullptr;
     const simple_dmx::Element *modelRoot_ = nullptr;

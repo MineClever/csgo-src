@@ -4,6 +4,8 @@
 
 #include "../common/SimpleDmxDocument.h"
 
+#include <memory>
+
 #include <maya/MObject.h>
 #include <maya/MPointArray.h>
 #include <maya/MStatus.h>
@@ -15,7 +17,7 @@ using dmx_import_translator::ImportContext;
 class DeformerImporter
 {
 public:
-    explicit DeformerImporter(ImportContext &context);
+    explicit DeformerImporter(std::shared_ptr<ImportContext> context);
 
     MStatus ApplySkinning(
         const simple_dmx::Element *vertexData,
@@ -35,7 +37,7 @@ private:
     MStatus createSkinClusterWithApi(const MDagPathArray &influencePaths, MObject &skinClusterObject) const;
     MStatus restoreSkinClusterSettings(const MObject &skinClusterObject) const;
 
-    ImportContext &context_;
+    std::shared_ptr<ImportContext> context_;
     const simple_dmx::Document *document_ = nullptr;
     const simple_dmx::Element *meshElement_ = nullptr;
     const simple_dmx::Element *vertexData_ = nullptr;

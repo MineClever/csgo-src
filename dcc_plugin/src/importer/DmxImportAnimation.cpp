@@ -19,7 +19,7 @@ namespace dmx_import_impl
 {
 
 
-AnimationImporter::AnimationImporter(ImportContext &context)
+AnimationImporter::AnimationImporter(std::shared_ptr<ImportContext> context)
     : context_(context)
 {
 }
@@ -41,7 +41,7 @@ const simple_dmx::Element *AnimationImporter::findFirstLogLayer(const simple_dmx
         return nullptr;
     }
 
-    const std::vector<const simple_dmx::Element *> layers = FindAttributeElementArray(context_.document, logElement, "layers");
+    const std::vector<const simple_dmx::Element *> layers = FindAttributeElementArray(context_->document, logElement, "layers");
     return layers.empty() ? nullptr : layers.front();
 }
 
@@ -310,18 +310,18 @@ MStatus AnimationImporter::addScalarAnimationTarget(
 
 MStatus AnimationImporter::ensureControlAttributeTargets(const std::string &targetName)
 {
-    if (targetName.empty() || context_.importedControlPaths.empty())
+    if (targetName.empty() || context_->importedControlPaths.empty())
     {
         return MS::kSuccess;
     }
 
-    auto existingIt = context_.importedScalarTargets.find(targetName);
-    if (existingIt != context_.importedScalarTargets.end() && !existingIt->second.empty())
+    auto existingIt = context_->importedScalarTargets.find(targetName);
+    if (existingIt != context_->importedScalarTargets.end() && !existingIt->second.empty())
     {
         return MS::kSuccess;
     }
 
-    for (const MDagPath &controlPath : context_.importedControlPaths)
+    for (const MDagPath &controlPath : context_->importedControlPaths)
     {
         MStatus status;
         MFnDependencyNode nodeFn(controlPath.node(), &status);
@@ -356,7 +356,7 @@ MStatus AnimationImporter::ensureControlAttributeTargets(const std::string &targ
             }
         }
 
-        context_.importedScalarTargets[targetName].push_back(ScalarAttributeBinding{controlPath.node(), targetName});
+        context_->importedScalarTargets[targetName].push_back(ScalarAttributeBinding{controlPath.node(), targetName});
     }
 
     return MS::kSuccess;
@@ -373,8 +373,8 @@ MStatus AnimationImporter::collectFloatAnimationTargets(
         return MS::kSuccess;
     }
 
-    auto transformIt = context_.importedTransformPaths.find(ElementKey(targetElement));
-    if (transformIt != context_.importedTransformPaths.end())
+    auto transformIt = context_->importedTransformPaths.find(ElementKey(targetElement));
+    if (transformIt != context_->importedTransformPaths.end())
     {
         MStatus status = addScalarAnimationTarget(targets, transformIt->second.node(), attributeName);
         if (!status)
@@ -385,8 +385,8 @@ MStatus AnimationImporter::collectFloatAnimationTargets(
 
     if (attributeName == "flexWeight")
     {
-        auto blendShapeIt = context_.importedBlendShapeTargets.find(targetElement->name);
-        if (blendShapeIt != context_.importedBlendShapeTargets.end())
+        auto blendShapeIt = context_->importedBlendShapeTargets.find(targetElement->name);
+        if (blendShapeIt != context_->importedBlendShapeTargets.end())
         {
             for (const BlendShapeTargetBinding &binding : blendShapeIt->second)
             {
@@ -432,8 +432,8 @@ MStatus AnimationImporter::collectFloatAnimationTargets(
             return MStatus::kFailure;
         }
 
-        auto scalarIt = context_.importedScalarTargets.find(targetElement->name);
-        if (scalarIt != context_.importedScalarTargets.end())
+        auto scalarIt = context_->importedScalarTargets.find(targetElement->name);
+        if (scalarIt != context_->importedScalarTargets.end())
         {
             for (const ScalarAttributeBinding &binding : scalarIt->second)
             {
@@ -502,17 +502,17 @@ MStatus AnimationImporter::applyFloatAnimation(const std::vector<MPlug> &targetP
 
 const simple_dmx::Element *AnimationImporter::FindAnimationList() const
 {
-    if (const simple_dmx::Element *animationList = FindAttributeElement(context_.document, documentRoot_, "animationList"))
+    if (const simple_dmx::Element *animationList = FindAttributeElement(context_->document, documentRoot_, "animationList"))
     {
         return animationList;
     }
 
-    if (const simple_dmx::Element *animationList = FindAttributeElement(context_.document, importRoot_, "animationList"))
+    if (const simple_dmx::Element *animationList = FindAttributeElement(context_->document, importRoot_, "animationList"))
     {
         return animationList;
     }
 
-    if (const simple_dmx::Element *animationList = FindAttributeElement(context_.document, modelRoot_, "animationList"))
+    if (const simple_dmx::Element *animationList = FindAttributeElement(context_->document, modelRoot_, "animationList"))
     {
         return animationList;
     }
@@ -522,17 +522,17 @@ const simple_dmx::Element *AnimationImporter::FindAnimationList() const
 
 const simple_dmx::Element *AnimationImporter::FindCombinationOperator() const
 {
-    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(context_.document, documentRoot_, "combinationOperator"))
+    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(context_->document, documentRoot_, "combinationOperator"))
     {
         return combinationOperator;
     }
 
-    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(context_.document, importRoot_, "combinationOperator"))
+    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(context_->document, importRoot_, "combinationOperator"))
     {
         return combinationOperator;
     }
 
-    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(context_.document, modelRoot_, "combinationOperator"))
+    if (const simple_dmx::Element *combinationOperator = FindAttributeElement(context_->document, modelRoot_, "combinationOperator"))
     {
         return combinationOperator;
     }
@@ -554,8 +554,8 @@ void AnimationImporter::bindCurrentChannel(const simple_dmx::Element *channel)
     }
 
     currentTargetAttribute_ = FindAttributeString(currentChannel_, "toAttribute");
-    currentTargetElement_ = FindAttributeElement(context_.document, currentChannel_, "toElement");
-    currentLogElement_ = FindAttributeElement(context_.document, currentChannel_, "log");
+    currentTargetElement_ = FindAttributeElement(context_->document, currentChannel_, "toElement");
+    currentLogElement_ = FindAttributeElement(context_->document, currentChannel_, "log");
     currentLogLayer_ = findFirstLogLayer(currentLogElement_);
 }
 
@@ -566,7 +566,7 @@ MStatus AnimationImporter::ApplyChannelsClipAnimation(const simple_dmx::Element 
         return MS::kSuccess;
     }
 
-    const std::vector<const simple_dmx::Element *> channels = FindAttributeElementArray(context_.document, channelsClip, "channels");
+    const std::vector<const simple_dmx::Element *> channels = FindAttributeElementArray(context_->document, channelsClip, "channels");
     for (const simple_dmx::Element *channel : channels)
     {
         if (!channel)
@@ -581,12 +581,12 @@ MStatus AnimationImporter::ApplyChannelsClipAnimation(const simple_dmx::Element 
         }
 
         MStatus status = MS::kSuccess;
-        auto targetIt = context_.importedTransformPaths.find(ElementKey(currentTargetElement_));
-        if (targetIt != context_.importedTransformPaths.end() && currentTargetAttribute_ == "position")
+        auto targetIt = context_->importedTransformPaths.find(ElementKey(currentTargetElement_));
+        if (targetIt != context_->importedTransformPaths.end() && currentTargetAttribute_ == "position")
         {
             status = applyVector3Animation(targetIt->second, currentLogLayer_);
         }
-        else if (targetIt != context_.importedTransformPaths.end() && currentTargetAttribute_ == "orientation")
+        else if (targetIt != context_->importedTransformPaths.end() && currentTargetAttribute_ == "orientation")
         {
             status = applyQuaternionAnimation(targetIt->second, currentLogLayer_);
         }
@@ -610,7 +610,7 @@ MStatus AnimationImporter::ApplyChannelsClipAnimation(const simple_dmx::Element 
         }
     }
 
-    const simple_dmx::Element *timeFrame = FindAttributeElement(context_.document, channelsClip, "timeFrame");
+    const simple_dmx::Element *timeFrame = FindAttributeElement(context_->document, channelsClip, "timeFrame");
     const std::vector<double> durationValues = ParseNumberList(FindAttributeString(timeFrame, "duration"));
     if (!durationValues.empty())
     {
@@ -635,7 +635,7 @@ MStatus AnimationImporter::CreateCombinationControls(
     }
 
     const std::vector<const simple_dmx::Element *> controls =
-        FindAttributeElementArray(context_.document, combinationOperator, "controls");
+        FindAttributeElementArray(context_->document, combinationOperator, "controls");
     if (controls.empty())
     {
         return MS::kSuccess;
@@ -731,10 +731,10 @@ MStatus AnimationImporter::CreateCombinationControls(
         }
 
         ScalarAttributeBinding binding{controlNodeObject, controlName};
-        context_.importedScalarTargets[control->name].push_back(binding);
+        context_->importedScalarTargets[control->name].push_back(binding);
         for (const std::string &rawControlName : FindAttributeStringArray(control, "rawControlNames"))
         {
-            context_.importedScalarTargets[rawControlName].push_back(binding);
+            context_->importedScalarTargets[rawControlName].push_back(binding);
         }
     }
 
@@ -748,7 +748,8 @@ const simple_dmx::Element *FindAnimationList(
     const simple_dmx::Element *modelRoot)
 {
     ImportContext proxyContext{document};
-    AnimationImporter importer(proxyContext);
+    auto contextPtr = std::shared_ptr<ImportContext>(&proxyContext, [](ImportContext *) {});
+    AnimationImporter importer(contextPtr);
     importer.setLookupRoots(documentRoot, importRoot, modelRoot);
     return importer.FindAnimationList();
 }
@@ -760,14 +761,16 @@ const simple_dmx::Element *FindCombinationOperator(
     const simple_dmx::Element *modelRoot)
 {
     ImportContext proxyContext{document};
-    AnimationImporter importer(proxyContext);
+    auto contextPtr = std::shared_ptr<ImportContext>(&proxyContext, [](ImportContext *) {});
+    AnimationImporter importer(contextPtr);
     importer.setLookupRoots(documentRoot, importRoot, modelRoot);
     return importer.FindCombinationOperator();
 }
 
 MStatus ApplyChannelsClipAnimation(ImportContext &context, const simple_dmx::Element *channelsClip)
 {
-    AnimationImporter importer(context);
+    auto contextPtr = std::shared_ptr<ImportContext>(&context, [](ImportContext *) {});
+    AnimationImporter importer(contextPtr);
     return importer.ApplyChannelsClipAnimation(channelsClip);
 }
 
@@ -776,7 +779,8 @@ MStatus CreateCombinationControls(
     const simple_dmx::Element *combinationOperator,
     const MObject &sceneRoot)
 {
-    AnimationImporter importer(context);
+    auto contextPtr = std::shared_ptr<ImportContext>(&context, [](ImportContext *) {});
+    AnimationImporter importer(contextPtr);
     return importer.CreateCombinationControls(combinationOperator, sceneRoot);
 }
 

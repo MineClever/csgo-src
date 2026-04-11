@@ -94,7 +94,7 @@ MStatus SetCurveKeys(
 }
 }
 
-SmdSceneImporter::SmdSceneImporter(const simple_smd::Document &document, const SmdImportOptions &importOptions)
+SmdSceneImporter::SmdSceneImporter(std::shared_ptr<const simple_smd::Document> document, const SmdImportOptions &importOptions)
     : document_(document)
     , importOptions_(importOptions)
 {
@@ -132,14 +132,17 @@ MStatus SmdSceneImporter::Import()
         return MStatus::kFailure;
     }
 
-    SmdMeshImporter meshImporter(document_, jointPathsByBone_);
+    auto jointPathsByBonePtr = std::shared_ptr<const std::unordered_map<int, MDagPath>>(
+        &jointPathsByBone_,
+        [](const std::unordered_map<int, MDagPath> *) {});
+    SmdMeshImporter meshImporter(document_, jointPathsByBonePtr);
     status = meshImporter.Import(importRoot_);
     if (!status)
     {
         return MStatus::kFailure;
     }
 
-    if (document_.hasVertexAnimation)
+    if (document_->hasVertexAnimation)
     {
         maya_smd::ReportWarning("maya_smd: vertexanimation section detected but not implemented yet");
     }
@@ -194,7 +197,7 @@ MStatus SmdSceneImporter::applyImportRotation()
 
 MStatus SmdSceneImporter::createJointHierarchy()
 {
-    for (const simple_smd::Node &node : document_.nodes)
+    for (const simple_smd::Node &node : document_->nodes)
     {
         const MStatus status = createJoint(node);
         if (!status)
@@ -254,13 +257,13 @@ const simple_smd::SkeletonPose *SmdSceneImporter::findPose(const simple_smd::Ske
 
 MStatus SmdSceneImporter::applyBindPose()
 {
-    if (document_.skeletonFrames.empty())
+    if (document_->skeletonFrames.empty())
     {
         return MS::kSuccess;
     }
 
-    const simple_smd::SkeletonFrame &bindFrame = document_.skeletonFrames.front();
-    for (const simple_smd::Node &node : document_.nodes)
+    const simple_smd::SkeletonFrame &bindFrame = document_->skeletonFrames.front();
+    for (const simple_smd::Node &node : document_->nodes)
     {
         const simple_smd::SkeletonPose *pose = findPose(bindFrame, node.index);
         if (!pose)
@@ -286,12 +289,12 @@ MStatus SmdSceneImporter::applyBindPose()
 
 MStatus SmdSceneImporter::applyAnimation()
 {
-    if (document_.skeletonFrames.size() <= 1)
+    if (document_->skeletonFrames.size() <= 1)
     {
         return MS::kSuccess;
     }
 
-    for (const simple_smd::Node &node : document_.nodes)
+    for (const simple_smd::Node &node : document_->nodes)
     {
         const auto pathIt = jointPathsByBone_.find(node.index);
         if (pathIt == jointPathsByBone_.end())
@@ -314,7 +317,7 @@ MStatus SmdSceneImporter::applyAnimation()
         std::vector<double> ryValues;
         std::vector<double> rzValues;
 
-        for (const simple_smd::SkeletonFrame &frame : document_.skeletonFrames)
+        for (const simple_smd::SkeletonFrame &frame : document_->skeletonFrames)
         {
             const simple_smd::SkeletonPose *pose = findPose(frame, node.index);
             if (!pose)
@@ -398,8 +401,8 @@ MStatus SmdSceneImporter::applyAnimation()
         }
     }
 
-    MAnimControl::setMinTime(MTime(static_cast<double>(document_.skeletonFrames.front().time), MTime::uiUnit()));
-    MAnimControl::setMaxTime(MTime(static_cast<double>(document_.skeletonFrames.back().time), MTime::uiUnit()));
-    MAnimControl::setCurrentTime(MTime(static_cast<double>(document_.skeletonFrames.front().time), MTime::uiUnit()));
+    MAnimControl::setMinTime(MTime(static_cast<double>(document_->skeletonFrames.front().time), MTime::uiUnit()));
+    MAnimControl::setMaxTime(MTime(static_cast<double>(document_->skeletonFrames.back().time), MTime::uiUnit()));
+    MAnimControl::setCurrentTime(MTime(static_cast<double>(document_->skeletonFrames.front().time), MTime::uiUnit()));
     return MS::kSuccess;
 }

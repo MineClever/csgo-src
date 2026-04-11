@@ -412,11 +412,75 @@
   - exporter 的 root/node/mesh 遍历边界仍需继续整理。
   - DMX / SMD 统一的“场景根导入 / 名称空间 / 更新或附加策略 / 动画层导入”仍停留在计划层，尚未开始实现。
 
+- 下一阶段执行顺序：
+  - 第一步：先收口 SMD 当前 roundtrip
+    - 目标：先把 `chr_mesh.smd` 在真实宿主下的 `nodes / triangles / skin / materialName` roundtrip 跑通。
+    - 具体动作：
+      - 继续整理 exporter 的骨架节点收集与 mesh 搜索根逻辑
+      - 固化 `mayaSmdMaterialName` 回传路径
+      - 把当前真实宿主错误转成可稳定复现的专项 case
+    - 完成标准：
+      - `MostComplexSampleSet/chr_mesh.smd` 批回归通过
+
+  - 第二步：补 SMD 动画专项回归
+    - 目标：把 `vcaanim_VertexAnim.smd` 从“可导入导出”提升到“可稳定回归”。
+    - 具体动作：
+      - 补动画 key 数量、时间范围、源节点映射检查
+      - 明确静态 SMD 与动画 SMD 在导入 UI 上的最小选项边界
+    - 完成标准：
+      - `MostComplexSampleSet/vcaanim_VertexAnim.smd` 动画 gate 通过
+
+  - 第三步：给 DMX / SMD 抽统一 importer 策略对象
+    - 目标：不要在 DMX 和 SMD 各自临时散落实现“场景根 / 名称空间 / 更新或附加”逻辑。
+    - 具体动作：
+      - 新增统一 importer options 模型
+      - 明确同名对象匹配规则
+      - 明确“包装根导入”与“场景根导入”的共享决策入口
+    - 完成标准：
+      - DMX / SMD importer 都能消费同一套高层导入策略字段
+
+  - 第四步：落地“使用场景作为根节点”
+    - 目标：让 DMX / SMD 都能直接并入当前场景。
+    - 具体动作：
+      - 增加导入选项与默认策略
+      - 在 scene-root 模式下禁用或绕过有冲突的轴向/旋转修正
+      - 建立多次连续导入的层级与命名回归
+    - 完成标准：
+      - 连续导入多个文件时，不会强制生成额外包装根，也不会串挂已有层级
+
+  - 第五步：落地 FBX 风格“更新 / 附加”对象策略
+    - 目标：让 importer 从“只会新增”升级为“会合并场景”。
+    - 具体动作：
+      - 支持“更新当前场景”
+      - 支持“仅附加当前场景不存在的对象”
+      - 对层级对象支持“命中同名父级时继续补子层级”
+    - 完成标准：
+      - 同一 skeleton / mesh 二次导入时，行为可预测且可回归
+
+  - 第六步：落地动画层导入
+    - 目标：避免导入动画直接破坏当前场景已有动画。
+    - 具体动作：
+      - 增加“仅导入动画”选项
+      - 对命中同名对象的动画支持写入动画层
+      - 增加动画层模式选项，并先固定一个默认模式
+    - 完成标准：
+      - 同名对象动画导入默认不破坏 base animation
+
+  - 第七步：回头评估扩展项
+    - 目标：在主线稳定后，再看高复杂度能力是否值得推进。
+    - 具体动作：
+      - 评估 `vertexanimation / VTA / flex`
+      - 评估更强材质恢复
+      - 评估更细的 scene-merge 策略模板
+    - 完成标准：
+      - 扩展项有明确“纳入 / 暂缓 / 放弃”结论
+
 - 最近任务同步：
   - 2026-04-11：完成 `maya_smd.mll` 独立骨架、`common_smd` 重命名、最小 importer/exporter 主线、批处理构建/部署脚本扩展。
   - 2026-04-11：完成 SMD 导入最小材质绑定、自定义导入根欧拉旋转、SMD MEL 导入界面与 module 部署修正。
   - 2026-04-11：完成 SMD 样例接入 Maya 专项回归，并在真实 `mayapy` 宿主下开始收敛 `chr_mesh.smd` roundtrip。
   - 2026-04-11：明确后续 DMX / SMD 共用导入路线，新增“场景根导入、名称空间兼容、更新/附加策略、动画层导入”统一规划。
+  - 2026-04-11：完成 `dcc_plugin` 内部一轮面向对象收口，已将 DMX/SMD importer/exporter 中仍使用类成员引用保存 `ImportContext / ExportContext / DocumentBuilder / Document` 的 helper 统一改为智能指针句柄，避免在类内部继续保留引用成员。
 
 ## 环境与工具链说明
 
