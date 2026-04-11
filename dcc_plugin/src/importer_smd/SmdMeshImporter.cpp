@@ -23,6 +23,7 @@
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MGlobal.h>
 #include <maya/MIntArray.h>
+#include <maya/MItDag.h>
 #include <maya/MMatrix.h>
 #include <maya/MPointArray.h>
 #include <maya/MPlug.h>
@@ -114,9 +115,11 @@ MObject FindNodeByName(const MString &nodeName)
 
 SmdMeshImporter::SmdMeshImporter(
     std::shared_ptr<const simple_smd::Document> document,
-    std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone)
+    std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone,
+    dcc_import_policy::SceneImportPolicy scenePolicy)
     : document_(document)
     , jointPathsByBone_(jointPathsByBone)
+    , scenePolicy_(std::move(scenePolicy))
 {
 }
 
@@ -197,13 +200,28 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
     }
 
     MStatus status;
-    MFnTransform transformFn;
-    const MObject transformObject = transformFn.create(parent, &status);
-    if (!status)
+    MObject transformObject = MObject::kNullObj;
+    if (dcc_import_policy::UsesAppendMissingObjects(scenePolicy_))
     {
-        return maya_smd::ReportError(MString("maya_smd: failed to create mesh transform for material group ") + materialName.c_str(), status);
+        transformObject = findExistingMeshGroup(parent, materialName);
     }
-    transformFn.setName((smd_mesh_import_impl::SanitizeMeshName(materialName) + "_grp#").c_str());
+
+    const bool reusedExistingGroup = !transformObject.isNull();
+    if (!reusedExistingGroup)
+    {
+        MFnTransform transformFn;
+        transformObject = transformFn.create(parent, &status);
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to create mesh transform for material group ") + materialName.c_str(), status);
+        }
+        transformFn.setName((smd_mesh_import_impl::SanitizeMeshName(materialName) + "_grp#").c_str());
+    }
+
+    if (reusedExistingGroup && !findPrimaryMeshChild(transformObject).isNull())
+    {
+        return MS::kSuccess;
+    }
 
     MFnMesh meshFn;
     const MObject meshObject = meshFn.create(points.length(), polygonCounts.length(), points, polygonCounts, polygonConnects, transformObject, &status);
@@ -267,6 +285,62 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
     }
 
     return MS::kSuccess;
+}
+
+MObject SmdMeshImporter::findExistingMeshGroup(MObject parent, const std::string &materialName) const
+{
+    const std::string expectedName = smd_mesh_import_impl::SanitizeMeshName(materialName) + "_grp";
+
+    MStatus status;
+    if (parent.isNull())
+    {
+        MItDag dagIterator(MItDag::kDepthFirst);
+        for (; !dagIterator.isDone(); dagIterator.next())
+        {
+            if (dagIterator.depth() != 1)
+            {
+                continue;
+            }
+
+            MDagPath dagPath;
+            if (dagIterator.getPath(dagPath) != MS::kSuccess || !dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint))
+            {
+                continue;
+            }
+
+            MFnDagNode dagNode(dagPath, &status);
+            if (status && std::string(dagNode.name().asChar()).rfind(expectedName, 0) == 0)
+            {
+                return dagPath.node();
+            }
+        }
+        return MObject::kNullObj;
+    }
+
+    MFnDagNode parentDagNode(parent, &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
+    {
+        const MObject childObject = parentDagNode.child(childIndex, &status);
+        if (!status || !childObject.hasFn(MFn::kTransform) || childObject.hasFn(MFn::kJoint))
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        MFnDagNode childDagNode(childObject, &status);
+        if (status && std::string(childDagNode.name().asChar()).rfind(expectedName, 0) == 0)
+        {
+            return childObject;
+        }
+        status = MS::kSuccess;
+    }
+
+    return MObject::kNullObj;
 }
 
 MStatus SmdMeshImporter::assignMaterial(const std::string &materialName, const MObject &meshObject) const

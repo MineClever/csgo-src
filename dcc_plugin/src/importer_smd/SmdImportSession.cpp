@@ -40,7 +40,7 @@ MStatus SmdImportSession::Run()
     }
     else if (dcc_import_policy::UsesAppendMissingObjects(importOptions.scenePolicy))
     {
-        maya_smd::ReportWarning("maya_smd: importMode=append is parsed but not implemented yet; falling back to create-new import behavior.");
+        maya_smd::ReportWarning("maya_smd: importMode=append currently reuses matching hierarchy and existing mesh groups, but full scene-merge behavior is not implemented yet.");
     }
     else if (dcc_import_policy::UsesAnimationOnlyImport(importOptions.scenePolicy))
     {

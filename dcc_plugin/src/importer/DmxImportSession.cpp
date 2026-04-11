@@ -94,7 +94,7 @@ MStatus DmxImportSession::LoadDocument()
     }
     else if (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy))
     {
-        maya_dmx::ReportWarning("maya_dmx: importMode=append is parsed but not implemented yet; falling back to create-new import behavior.");
+        maya_dmx::ReportWarning("maya_dmx: importMode=append currently reuses matching hierarchy and existing mesh carriers, but full scene-merge behavior is not implemented yet.");
     }
     else if (dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy))
     {

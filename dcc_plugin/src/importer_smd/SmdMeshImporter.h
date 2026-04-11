@@ -2,6 +2,8 @@
 
 #include "../common_smd/SimpleSmdDocument.h"
 
+#include <common/ImportPolicy.h>
+
 #include <memory>
 
 #include <maya/MDagPath.h>
@@ -15,7 +17,8 @@ class SmdMeshImporter
 public:
     SmdMeshImporter(
         std::shared_ptr<const simple_smd::Document> document,
-        std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone);
+        std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone,
+        dcc_import_policy::SceneImportPolicy scenePolicy);
 
     MStatus Import(MObject parent) const;
 
@@ -31,7 +34,9 @@ private:
     MStatus applySkinning(
         const std::vector<std::vector<simple_smd::TriangleWeight>> &vertexLinks,
         const MDagPath &meshTransformPath) const;
+    MObject findExistingMeshGroup(MObject parent, const std::string &materialName) const;
 
     std::shared_ptr<const simple_smd::Document> document_;
     std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone_;
+    dcc_import_policy::SceneImportPolicy scenePolicy_;
 };

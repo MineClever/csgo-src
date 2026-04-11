@@ -10,9 +10,11 @@
 #include <maya/MAngle.h>
 #include <maya/MEulerRotation.h>
 #include <maya/MFnAnimCurve.h>
+#include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnIkJoint.h>
 #include <maya/MFnTransform.h>
+#include <maya/MItDag.h>
 #include <maya/MPlug.h>
 #include <maya/MTime.h>
 #include <maya/MVector.h>
@@ -92,6 +94,61 @@ MStatus SetCurveKeys(
 
     return MS::kSuccess;
 }
+
+MObject FindAppendTargetChild(const MObject &parent, const std::string &nodeName)
+{
+    MStatus status;
+    if (parent.isNull())
+    {
+        MItDag dagIterator(MItDag::kDepthFirst);
+        for (; !dagIterator.isDone(); dagIterator.next())
+        {
+            if (dagIterator.depth() != 1)
+            {
+                continue;
+            }
+
+            MDagPath dagPath;
+            if (dagIterator.getPath(dagPath) != MS::kSuccess || !dagPath.hasFn(MFn::kJoint))
+            {
+                continue;
+            }
+
+            MFnDagNode dagNode(dagPath, &status);
+            if (status && std::string(dagNode.name().asChar()) == nodeName)
+            {
+                return dagPath.node();
+            }
+        }
+
+        return MObject::kNullObj;
+    }
+
+    MFnDagNode parentDagNode(parent, &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
+    {
+        const MObject childObject = parentDagNode.child(childIndex, &status);
+        if (!status || !childObject.hasFn(MFn::kJoint))
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        MFnDagNode childDagNode(childObject, &status);
+        if (status && std::string(childDagNode.name().asChar()) == nodeName)
+        {
+            return childObject;
+        }
+        status = MS::kSuccess;
+    }
+
+    return MObject::kNullObj;
+}
 }
 
 SmdSceneImporter::SmdSceneImporter(std::shared_ptr<const simple_smd::Document> document, const SmdImportOptions &importOptions)
@@ -135,7 +192,7 @@ MStatus SmdSceneImporter::Import()
     auto jointPathsByBonePtr = std::shared_ptr<const std::unordered_map<int, MDagPath>>(
         &jointPathsByBone_,
         [](const std::unordered_map<int, MDagPath> *) {});
-    SmdMeshImporter meshImporter(document_, jointPathsByBonePtr);
+    SmdMeshImporter meshImporter(document_, jointPathsByBonePtr, importOptions_.scenePolicy);
     status = meshImporter.Import(importRoot_);
     if (!status)
     {
@@ -223,14 +280,26 @@ MStatus SmdSceneImporter::createJointHierarchy()
 MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
 {
     MStatus status;
-    MFnIkJoint jointFn;
-    const MObject jointObject = jointFn.create(findParentObject(node), &status);
-    if (!status)
+    const MObject parentObject = findParentObject(node);
+    MObject jointObject = MObject::kNullObj;
+    const bool appendMissingMode = dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy);
+    if (appendMissingMode)
     {
-        return maya_smd::ReportError(MString("maya_smd: failed to create joint for node ") + node.name.c_str(), status);
+        jointObject = findExistingJoint(node);
     }
 
-    jointFn.setName(SanitizeNodeName(node.name).c_str());
+    const bool reusedExistingJoint = !jointObject.isNull();
+    if (!reusedExistingJoint)
+    {
+        MFnIkJoint jointFn;
+        jointObject = jointFn.create(parentObject, &status);
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to create joint for node ") + node.name.c_str(), status);
+        }
+
+        jointFn.setName(SanitizeNodeName(node.name).c_str());
+    }
 
     MDagPath jointPath;
     status = MDagPath::getAPathTo(jointObject, jointPath);
@@ -241,6 +310,11 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
 
     jointPathsByBone_[node.index] = jointPath;
     return MS::kSuccess;
+}
+
+MObject SmdSceneImporter::findExistingJoint(const simple_smd::Node &node) const
+{
+    return FindAppendTargetChild(findParentObject(node), SanitizeNodeName(node.name));
 }
 
 MObject SmdSceneImporter::findParentObject(const simple_smd::Node &node) const

@@ -485,6 +485,7 @@
   - 2026-04-11：开始落地 DMX / SMD 共用 importer 策略层，已抽出统一 `SceneImportPolicy` 解析，并接通 `useSceneRoot=1`。当前 DMX 与 SMD 都支持跳过包装根直接导入到 Maya 场景根；当该模式与根旋转/轴向修正冲突时，当前实现优先保留 scene-root 导入并跳过相关修正。
   - 2026-04-11：统一新引入公共头的 include 约束，`ImportPolicy.h` 已改为 `<common/ImportPolicy.h>` 非相对引用形式；后续新增公共头引用时，避免继续使用 `../` 相对路径 include。
   - 2026-04-11：继续扩展 DMX / SMD 共用 importer 策略模型，已统一加入 `importMode(update/append/animationOnly)`、`importAnimationToLayer`、`animationLayerMode`、当前 Maya 名称空间捕获等解析入口；现阶段这些高阶模式已可被宿主识别并给出明确 warning，但对象合并与动画层实际行为仍待后续实现。
+  - 2026-04-11：补上 `importMode=append` 的首批真实行为。DMX 与 SMD 现在都已支持“命中同名父级时复用已有层级节点，并避免重复创建已有 mesh carrier / mesh group”；其中 SMD 已通过 `mayapy` 连续两次导入 `MostComplexSampleSet/chr_mesh.smd` 验证顶层骨架与材质 mesh group 不再重复生成。当前 append 仍未覆盖权重合并、动画合并、名称空间冲突解算等更完整场景合并逻辑。
 
 ## 环境与工具链说明
 
