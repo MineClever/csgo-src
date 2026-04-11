@@ -80,6 +80,28 @@ ANIMATION_GATE_EXPECTATIONS = {
     },
 }
 
+APPEND_GATE_EXPECTATIONS = {
+    "simple_blendshape_animation": {
+        "import_options": "useSceneRoot=1;importMode=append",
+        "retain_values": [
+            {"plug": "|combinationOperator_controls.smile", "value": 0.75},
+        ],
+        "single_nodes": [
+            {"pattern": "|combinationOperator_controls", "type": "transform"},
+        ],
+        "single_node_types": [
+            {"type": "blendShape", "name": "blendshapeAnimMeshShape_blendShape"},
+        ],
+    },
+    "MostComplexSampleSet/chr_mesh.smd": {
+        "import_options": "useSceneRoot=1;importMode=append",
+        "single_nodes": [
+            {"pattern": "|pelvis", "type": "joint"},
+            {"pattern": "|tex_d_bmp_grp1", "type": "transform"},
+        ],
+    },
+}
+
 
 def snapshot_imported_node_types(root_paths):
     import maya.api.OpenMaya as om
@@ -506,6 +528,64 @@ def validate_animation_gate(case_name, animation_snapshots):
             )
 
 
+def validate_append_gate(cmds, plugin_paths, format_config, input_path, case_name):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = APPEND_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, plugin_paths)
+
+    import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        options=expectation["import_options"],
+    )
+
+    cmds.file(input_path, **import_kwargs)
+    for retain_value in expectation.get("retain_values", []):
+        if not cmds.objExists(retain_value["plug"]):
+            raise RuntimeError(
+                f"Append gate failed for {normalized_case_name}. "
+                f"missing plug before second append: {retain_value['plug']}"
+            )
+        cmds.setAttr(retain_value["plug"], retain_value["value"])
+
+    cmds.file(input_path, **import_kwargs)
+
+    for single_node in expectation.get("single_nodes", []):
+        matching_nodes = cmds.ls(single_node["pattern"], long=True, type=single_node["type"]) or []
+        if len(matching_nodes) != 1:
+            raise RuntimeError(
+                f"Append gate failed for {normalized_case_name}. "
+                f"expected exactly one {single_node['type']} matching {single_node['pattern']}, got {matching_nodes}"
+            )
+
+    for single_node_type in expectation.get("single_node_types", []):
+        matching_nodes = [
+            node_name
+            for node_name in (cmds.ls(type=single_node_type["type"]) or [])
+            if node_name == single_node_type["name"]
+        ]
+        if len(matching_nodes) != 1:
+            raise RuntimeError(
+                f"Append gate failed for {normalized_case_name}. "
+                f"expected exactly one {single_node_type['type']} named {single_node_type['name']}, got {matching_nodes}"
+            )
+
+    for retain_value in expectation.get("retain_values", []):
+        current_value = cmds.getAttr(retain_value["plug"])
+        if abs(float(current_value) - float(retain_value["value"])) > 1.0e-6:
+            raise RuntimeError(
+                f"Append gate failed for {normalized_case_name}. "
+                f"expected preserved value {retain_value['plug']}={retain_value['value']}, got {current_value}"
+            )
+
+
 def verify_roundtrip(
     cmds,
     plugin_paths,
@@ -621,20 +701,17 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
         safe_options = import_options.replace("=", "").replace(";", "_").replace(" ", "")
         options_suffix = f".{safe_options}"
     import_animation_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.import_animgate.txt")
+    append_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.append_gate.txt")
 
-    cmds.file(new=True, force=True)
-    ensure_plugins_loaded(cmds, [plugin_path])
-
-    before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
     import_kwargs = dict(i=True, type=format_config["import_type"], ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
     if import_options:
         import_kwargs["options"] = import_options
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, [plugin_path])
+    before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
     cmds.file(input_path, **import_kwargs)
     imported_roots = collect_imported_roots(cmds, before_assemblies)
-    if imported_roots:
-        cmds.select(imported_roots, replace=True)
-    else:
-        cmds.select(clear=True)
 
     original_meshes = snapshot_scene_meshes()
     original_node_types = snapshot_imported_node_types(imported_roots)
@@ -645,6 +722,11 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     with open(import_animation_gate_marker, "w", encoding="utf-8") as marker_file:
         marker_file.write("ok\n")
     for export_variant in format_config["export_variants"]:
+        cmds.file(new=True, force=True)
+        ensure_plugins_loaded(cmds, [plugin_path])
+        before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+        cmds.file(input_path, **import_kwargs)
+        imported_roots = collect_imported_roots(cmds, before_assemblies)
         exported_path = os.path.join(
             output_dir,
             f"{case_output_name}{options_suffix}.maya_export{export_variant['extension']}",
@@ -655,6 +737,10 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
         blendshape_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.{export_variant['blendshape_marker_suffix']}")
         animation_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.{export_variant['animation_marker_suffix']}")
 
+        if imported_roots:
+            cmds.select(imported_roots, replace=True)
+        else:
+            cmds.select(clear=True)
         cmds.file(rename=exported_path)
         export_kwargs = dict(force=True, exportSelected=True, type=format_config["export_type"])
         if export_variant["options"]:
@@ -678,6 +764,11 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
             animation_marker,
             import_options=import_options,
         )
+
+    if not import_options:
+        validate_append_gate(cmds, [plugin_path], format_config, input_path, case_name)
+        with open(append_gate_marker, "w", encoding="utf-8") as marker_file:
+            marker_file.write("ok\n")
 
     # For samples that contain skinned meshes, automatically run a second pass with
     # applyAxisCorrection=0 to verify that roundtrip is consistent regardless of the
