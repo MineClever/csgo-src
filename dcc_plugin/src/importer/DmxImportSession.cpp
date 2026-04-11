@@ -33,6 +33,7 @@ MStatus DmxImportSession::Run()
 
     ImportContext context{document_};
     context.modelRoot = importRoot_->type == "DmeModel" ? importRoot_ : nullptr;
+    context.scenePolicy = importOptions_.scenePolicy;
     context.importSkin = importOptions_.importSkin;
     context.importMaterials = importOptions_.importMaterials;
     context.importDeltaStates = importOptions_.importDeltaStates;

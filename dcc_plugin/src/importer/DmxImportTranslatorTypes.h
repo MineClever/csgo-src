@@ -28,6 +28,7 @@ struct ImportContext
 {
     const simple_dmx::Document &document;
     const simple_dmx::Element *modelRoot = nullptr;
+    dcc_import_policy::SceneImportPolicy scenePolicy;
     std::vector<std::string> jointOrder;
     std::unordered_map<std::string, MDagPath> importedDagPaths;
     std::unordered_map<std::string, MDagPath> importedTransformPaths;

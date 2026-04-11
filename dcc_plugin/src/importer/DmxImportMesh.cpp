@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <maya/MFloatArray.h>
+#include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnMesh.h>
 #include <maya/MFnTypedAttribute.h>
@@ -85,6 +86,31 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
     if (!vertexData)
     {
         return maya_dmx::ReportWarning(MString("maya_dmx: mesh has no bind/base state: ") + dagElement->name.c_str());
+    }
+
+    if (dcc_import_policy::UsesAppendMissingObjects(context.scenePolicy))
+    {
+        MStatus status;
+        MFnDagNode parentDagNode(parent, &status);
+        if (status)
+        {
+            for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
+            {
+                const MObject childObject = parentDagNode.child(childIndex, &status);
+                if (!status || !childObject.hasFn(MFn::kMesh))
+                {
+                    status = MS::kSuccess;
+                    continue;
+                }
+
+                MFnDagNode meshDagNode(childObject, &status);
+                if (status && !meshDagNode.isIntermediateObject())
+                {
+                    return MS::kSuccess;
+                }
+                status = MS::kSuccess;
+            }
+        }
     }
 
     const std::vector<std::string> positionStrings = FindAttributeStringArray(vertexData, "positions");

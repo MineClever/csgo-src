@@ -5,14 +5,104 @@
 #include <string>
 
 #include <maya/MDagPath.h>
+#include <maya/MFnDagNode.h>
 #include <maya/MFnIkJoint.h>
 #include <maya/MFnTransform.h>
+#include <maya/MItDag.h>
 #include <maya/MQuaternion.h>
 #include <maya/MStatus.h>
 #include <maya/MVector.h>
 
 namespace dmx_import_impl
 {
+
+namespace
+{
+MObject FindAppendTargetChild(const MObject &parent, const std::string &nodeName, bool requireJoint)
+{
+    MStatus status;
+    if (parent.isNull())
+    {
+        MItDag dagIterator(MItDag::kDepthFirst);
+        for (; !dagIterator.isDone(); dagIterator.next())
+        {
+            if (dagIterator.depth() != 1)
+            {
+                continue;
+            }
+
+            MDagPath dagPath;
+            if (dagIterator.getPath(dagPath) != MS::kSuccess)
+            {
+                continue;
+            }
+
+            MFnDagNode dagNode(dagPath, &status);
+            if (!status || std::string(dagNode.name().asChar()) != nodeName)
+            {
+                continue;
+            }
+
+            if (requireJoint)
+            {
+                if (dagPath.hasFn(MFn::kJoint))
+                {
+                    return dagPath.node();
+                }
+                continue;
+            }
+
+            if (dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint))
+            {
+                return dagPath.node();
+            }
+        }
+
+        return MObject::kNullObj;
+    }
+
+    MFnDagNode parentDagNode(parent, &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
+    {
+        const MObject childObject = parentDagNode.child(childIndex, &status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        if (!(childObject.hasFn(MFn::kTransform) || childObject.hasFn(MFn::kJoint)))
+        {
+            continue;
+        }
+
+        MFnDagNode childDagNode(childObject, &status);
+        if (!status || std::string(childDagNode.name().asChar()) != nodeName)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        if (requireJoint)
+        {
+            if (childObject.hasFn(MFn::kJoint))
+            {
+                return childObject;
+            }
+            continue;
+        }
+
+        return childObject;
+    }
+
+    return MObject::kNullObj;
+}
+}
 
 
 MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::Element *dagElement, MObject object)
@@ -108,7 +198,18 @@ MStatus ImportDagHierarchyRecursive(
     const std::string nodeName = dagElement->name.empty() ? dagElement->type : dagElement->name;
 
     MStatus status;
-    const MObject nodeObject = CreateDagNode(nodeName, isJoint, parent, status);
+    MObject nodeObject = MObject::kNullObj;
+    const bool appendMissingMode = dcc_import_policy::UsesAppendMissingObjects(context.scenePolicy);
+    if (appendMissingMode)
+    {
+        nodeObject = FindAppendTargetChild(parent, nodeName, isJoint);
+    }
+
+    const bool reusedExistingNode = !nodeObject.isNull();
+    if (!reusedExistingNode)
+    {
+        nodeObject = CreateDagNode(nodeName, isJoint, parent, status);
+    }
     if (!status)
     {
         return MStatus::kFailure;
@@ -131,10 +232,13 @@ MStatus ImportDagHierarchyRecursive(
         context.importedControlPaths.push_back(nodePath);
     }
 
-    status = ApplyTransform(context.document, dagElement, nodeObject);
-    if (!status)
+    if (!reusedExistingNode || !appendMissingMode)
     {
-        return MStatus::kFailure;
+        status = ApplyTransform(context.document, dagElement, nodeObject);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
     }
 
     for (const simple_dmx::Element *child : FindAttributeElementArray(context.document, dagElement, "children"))
