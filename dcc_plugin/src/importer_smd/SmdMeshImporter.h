@@ -19,6 +19,7 @@ public:
 
 private:
     MStatus importMaterialGroup(const std::string &materialName, MObject parent) const;
+    MStatus assignMaterial(const std::string &materialName, const MObject &meshObject) const;
     MObject findPrimaryMeshChild(const MObject &transformObject) const;
     MStatus createSkinClusterWithApi(
         const MDagPathArray &influencePaths,

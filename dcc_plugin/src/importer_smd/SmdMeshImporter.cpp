@@ -21,6 +21,7 @@
 #include <maya/MFnStringData.h>
 #include <maya/MFnTransform.h>
 #include <maya/MFnTypedAttribute.h>
+#include <maya/MGlobal.h>
 #include <maya/MIntArray.h>
 #include <maya/MMatrix.h>
 #include <maya/MPointArray.h>
@@ -30,7 +31,7 @@
 #include <maya/MString.h>
 #include <maya/MVectorArray.h>
 
-namespace
+namespace smd_mesh_import_impl
 {
 constexpr const char *kSmdMaterialNameAttribute = "mayaSmdMaterialName";
 
@@ -91,6 +92,23 @@ MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const 
     }
 
     return attributePlug.setString(value.c_str());
+}
+
+MObject FindNodeByName(const MString &nodeName)
+{
+    MSelectionList selection;
+    if (selection.add(nodeName) != MS::kSuccess)
+    {
+        return MObject::kNullObj;
+    }
+
+    MObject object;
+    if (selection.getDependNode(0, object) != MS::kSuccess)
+    {
+        return MObject::kNullObj;
+    }
+
+    return object;
 }
 }
 
@@ -185,7 +203,7 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
     {
         return maya_smd::ReportError(MString("maya_smd: failed to create mesh transform for material group ") + materialName.c_str(), status);
     }
-    transformFn.setName((SanitizeMeshName(materialName) + "_grp#").c_str());
+    transformFn.setName((smd_mesh_import_impl::SanitizeMeshName(materialName) + "_grp#").c_str());
 
     MFnMesh meshFn;
     const MObject meshObject = meshFn.create(points.length(), polygonCounts.length(), points, polygonCounts, polygonConnects, transformObject, &status);
@@ -194,15 +212,15 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
         return maya_smd::ReportError(MString("maya_smd: failed to create mesh shape for material group ") + materialName.c_str(), status);
     }
 
-    meshFn.setName((SanitizeMeshName(materialName) + "Shape#").c_str());
+    meshFn.setName((smd_mesh_import_impl::SanitizeMeshName(materialName) + "Shape#").c_str());
 
-    status = SetStringAttribute(transformObject, kSmdMaterialNameAttribute, materialName);
+    status = smd_mesh_import_impl::SetStringAttribute(transformObject, smd_mesh_import_impl::kSmdMaterialNameAttribute, materialName);
     if (!status)
     {
         return maya_smd::ReportError(MString("maya_smd: failed to tag mesh transform with SMD material name for ") + materialName.c_str(), status);
     }
 
-    status = SetStringAttribute(meshObject, kSmdMaterialNameAttribute, materialName);
+    status = smd_mesh_import_impl::SetStringAttribute(meshObject, smd_mesh_import_impl::kSmdMaterialNameAttribute, materialName);
     if (!status)
     {
         return maya_smd::ReportError(MString("maya_smd: failed to tag mesh shape with SMD material name for ") + materialName.c_str(), status);
@@ -233,6 +251,12 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
         return maya_smd::ReportError(MString("maya_smd: failed to resolve transform path for material group ") + materialName.c_str(), status);
     }
 
+    status = assignMaterial(materialName, meshObject);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     if (hasWeights)
     {
         status = applySkinning(vertexLinks, meshTransformPath);
@@ -240,6 +264,66 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
         {
             return MStatus::kFailure;
         }
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus SmdMeshImporter::assignMaterial(const std::string &materialName, const MObject &meshObject) const
+{
+    const std::string sanitizedBaseName = smd_mesh_import_impl::SanitizeMeshName(materialName);
+    const MString shaderName = (sanitizedBaseName.empty() ? std::string("smdMaterial") : sanitizedBaseName).c_str();
+    const MString shadingGroupName = shaderName + "_SG";
+
+    MStatus status;
+
+    MObject shaderObject = smd_mesh_import_impl::FindNodeByName(shaderName);
+    if (shaderObject.isNull())
+    {
+        MString createdShaderName;
+        status = MGlobal::executeCommand(
+            MString("shadingNode -asShader lambert -name \"") + shaderName + "\"",
+            createdShaderName);
+        if (!status || createdShaderName.length() == 0)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to create lambert shader for material group ") + materialName.c_str(), status);
+        }
+        shaderObject = smd_mesh_import_impl::FindNodeByName(createdShaderName);
+    }
+
+    MObject shadingGroupObject = smd_mesh_import_impl::FindNodeByName(shadingGroupName);
+    if (shadingGroupObject.isNull())
+    {
+        MString createdShadingGroupName;
+        status = MGlobal::executeCommand(
+            MString("sets -renderable true -noSurfaceShader true -empty -name \"") + shadingGroupName + "\"",
+            createdShadingGroupName);
+        if (!status || createdShadingGroupName.length() == 0)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to create shading group for material group ") + materialName.c_str(), status);
+        }
+        shadingGroupObject = smd_mesh_import_impl::FindNodeByName(createdShadingGroupName);
+    }
+
+    MDagPath meshPath;
+    status = MDagPath::getAPathTo(meshObject, meshPath);
+    if (!status)
+    {
+        return maya_smd::ReportError(MString("maya_smd: failed to resolve mesh path for material binding ") + materialName.c_str(), status);
+    }
+
+    status = MGlobal::executeCommand(
+        MString("connectAttr -f \"") + shaderName + ".outColor\" \"" + shadingGroupName + ".surfaceShader\"");
+    if (!status)
+    {
+        return maya_smd::ReportError(MString("maya_smd: failed to connect shader to shading group for material group ") + materialName.c_str(), status);
+    }
+
+    status = MGlobal::executeCommand(
+        MString("sets -e -forceElement \"") + shadingGroupName + "\" \"" + meshPath.fullPathName() + "\"");
+    if (!status)
+    {
+        return maya_smd::ReportError(MString("maya_smd: failed to assign mesh to shading group for material group ") + materialName.c_str(), status);
     }
 
     return MS::kSuccess;

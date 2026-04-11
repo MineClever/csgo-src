@@ -94,9 +94,6 @@ global proc string SmdImportOptionsUI(string $parent)
             floatFieldGrp
                 -numberOfFields 3
                 -label "Root Rotation"
-                -label1 "X"
-                -label2 "Y"
-                -label3 "Z"
                 -annotation "Degrees. Applied as an extra XYZ Euler rotation on the SMD import root."
                 smdImportEulerRotation;
         setParent ..;
