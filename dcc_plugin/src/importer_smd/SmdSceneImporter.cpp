@@ -287,7 +287,7 @@ MObject SmdSceneImporter::findAppendTargetChild(const MObject &parent, const std
             }
 
             MFnDagNode dagNode(dagPath, &status);
-            if (status && std::string(dagNode.name().asChar()) == nodeName)
+            if (status && dcc_import_policy::MatchesNodeNameForAppend(importOptions_.scenePolicy, dagNode.name().asChar(), nodeName))
             {
                 return dagPath.node();
             }
@@ -312,7 +312,7 @@ MObject SmdSceneImporter::findAppendTargetChild(const MObject &parent, const std
         }
 
         MFnDagNode childDagNode(childObject, &status);
-        if (status && std::string(childDagNode.name().asChar()) == nodeName)
+        if (status && dcc_import_policy::MatchesNodeNameForAppend(importOptions_.scenePolicy, childDagNode.name().asChar(), nodeName))
         {
             return childObject;
         }

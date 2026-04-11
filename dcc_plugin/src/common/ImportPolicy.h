@@ -163,6 +163,66 @@ inline void CaptureCurrentNamespace(SceneImportPolicy &policy)
     policy.currentNamespace = currentNamespace.asChar();
 }
 
+inline std::string StripNamespace(std::string nodeName)
+{
+    const size_t lastNamespaceSeparator = nodeName.rfind(':');
+    if (lastNamespaceSeparator == std::string::npos)
+    {
+        return nodeName;
+    }
+
+    return nodeName.substr(lastNamespaceSeparator + 1);
+}
+
+inline std::string ComposeNamespacedName(const SceneImportPolicy &policy, const std::string &nodeName)
+{
+    if (policy.currentNamespace.empty())
+    {
+        return nodeName;
+    }
+
+    return policy.currentNamespace + ":" + nodeName;
+}
+
+inline bool MatchesNodeNameForAppend(
+    const SceneImportPolicy &policy,
+    const std::string &sceneNodeName,
+    const std::string &targetNodeName)
+{
+    if (sceneNodeName == targetNodeName)
+    {
+        return true;
+    }
+
+    if (StripNamespace(sceneNodeName) == targetNodeName)
+    {
+        return true;
+    }
+
+    const std::string namespacedTargetName = ComposeNamespacedName(policy, targetNodeName);
+    if (sceneNodeName == namespacedTargetName)
+    {
+        return true;
+    }
+
+    return StripNamespace(sceneNodeName) == StripNamespace(namespacedTargetName);
+}
+
+inline bool MatchesNodePrefixForAppend(
+    const SceneImportPolicy &policy,
+    const std::string &sceneNodeName,
+    const std::string &targetNodePrefix)
+{
+    const std::string strippedSceneNodeName = StripNamespace(sceneNodeName);
+    if (strippedSceneNodeName.rfind(targetNodePrefix, 0) == 0)
+    {
+        return true;
+    }
+
+    const std::string namespacedTargetName = ComposeNamespacedName(policy, targetNodePrefix);
+    return sceneNodeName.rfind(namespacedTargetName, 0) == 0;
+}
+
 inline bool UsesDedicatedRoot(const SceneImportPolicy &policy)
 {
     return policy.rootMode == RootMode::DedicatedRoot;

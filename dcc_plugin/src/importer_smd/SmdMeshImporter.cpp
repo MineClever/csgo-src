@@ -309,7 +309,7 @@ MObject SmdMeshImporter::findExistingMeshGroup(MObject parent, const std::string
             }
 
             MFnDagNode dagNode(dagPath, &status);
-            if (status && std::string(dagNode.name().asChar()).rfind(expectedName, 0) == 0)
+            if (status && dcc_import_policy::MatchesNodePrefixForAppend(scenePolicy_, dagNode.name().asChar(), expectedName))
             {
                 return dagPath.node();
             }
@@ -333,7 +333,7 @@ MObject SmdMeshImporter::findExistingMeshGroup(MObject parent, const std::string
         }
 
         MFnDagNode childDagNode(childObject, &status);
-        if (status && std::string(childDagNode.name().asChar()).rfind(expectedName, 0) == 0)
+        if (status && dcc_import_policy::MatchesNodePrefixForAppend(scenePolicy_, childDagNode.name().asChar(), expectedName))
         {
             return childObject;
         }

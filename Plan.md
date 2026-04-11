@@ -488,6 +488,7 @@
   - 2026-04-11：补上 `importMode=append` 的首批真实行为。DMX 与 SMD 现在都已支持“命中同名父级时复用已有层级节点，并避免重复创建已有 mesh carrier / mesh group”；其中 SMD 已通过 `mayapy` 连续两次导入 `MostComplexSampleSet/chr_mesh.smd` 验证顶层骨架与材质 mesh group 不再重复生成。当前 append 仍未覆盖权重合并、动画合并、名称空间冲突解算等更完整场景合并逻辑。
   - 2026-04-11：继续收紧 `importMode=append` 语义。当前 DMX 与 SMD 在复用已有层级节点时，已不会再回写这些已有节点的 bind pose / transform 动画；已通过 `mayapy` 验证二次 append 导入后，手工修改过的 `|pelvis.translateX` 与 `|joint_root.translateX` 仍被保留。当前尚未覆盖的仍是动画层写入、已有 skin/shape 精细合并、名称空间命中策略等更高阶合并行为。
   - 2026-04-11：整理新增 helper 的落点，已将 `append` 相关的新判定/查找逻辑从匿名 namespace 收回 `AnimationImporter`、`SmdSceneImporter` 等类内，优先复用类上下文并避免继续扩散文件级匿名 helper。
+  - 2026-04-11：补上 `append` 的名称空间兼容。当前 DMX / SMD 在 `readNamespaceFromScene=1` 下，已可结合当前 Maya 名称空间命中 `ns:node` 形式的现有对象并继续复用；已通过 `mayapy` 验证 `|testns:joint_root`、`|testns:pelvis`、`|testns:tex_d_bmp_grp1` 等对象在二次 append 导入时不会重复生成。
 
 ## 环境与工具链说明
 

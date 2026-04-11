@@ -18,7 +18,11 @@ namespace dmx_import_impl
 
 namespace
 {
-MObject FindAppendTargetChild(const MObject &parent, const std::string &nodeName, bool requireJoint)
+MObject FindAppendTargetChild(
+    const dmx_import_translator::ImportContext &context,
+    const MObject &parent,
+    const std::string &nodeName,
+    bool requireJoint)
 {
     MStatus status;
     if (parent.isNull())
@@ -38,7 +42,7 @@ MObject FindAppendTargetChild(const MObject &parent, const std::string &nodeName
             }
 
             MFnDagNode dagNode(dagPath, &status);
-            if (!status || std::string(dagNode.name().asChar()) != nodeName)
+            if (!status || !dcc_import_policy::MatchesNodeNameForAppend(context.scenePolicy, dagNode.name().asChar(), nodeName))
             {
                 continue;
             }
@@ -82,7 +86,7 @@ MObject FindAppendTargetChild(const MObject &parent, const std::string &nodeName
         }
 
         MFnDagNode childDagNode(childObject, &status);
-        if (!status || std::string(childDagNode.name().asChar()) != nodeName)
+        if (!status || !dcc_import_policy::MatchesNodeNameForAppend(context.scenePolicy, childDagNode.name().asChar(), nodeName))
         {
             status = MS::kSuccess;
             continue;
@@ -202,7 +206,7 @@ MStatus ImportDagHierarchyRecursive(
     const bool appendMissingMode = dcc_import_policy::UsesAppendMissingObjects(context.scenePolicy);
     if (appendMissingMode)
     {
-        nodeObject = FindAppendTargetChild(parent, nodeName, isJoint);
+        nodeObject = FindAppendTargetChild(context, parent, nodeName, isJoint);
     }
 
     const bool reusedExistingNode = !nodeObject.isNull();
