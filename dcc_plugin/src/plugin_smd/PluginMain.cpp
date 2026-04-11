@@ -6,14 +6,22 @@
 
 namespace
 {
-MStatus RegisterTranslator(MFnPlugin &plugin, const char *name, MCreatorFunction creator)
+constexpr const char *kImportOptionsScriptName = "mayaSmdTranslatorImport";
+constexpr const char *kImportDefaultOptions = "rotateX=0;rotateY=0;rotateZ=0";
+
+MStatus RegisterTranslator(
+    MFnPlugin &plugin,
+    const char *name,
+    MCreatorFunction creator,
+    const char *optionsScriptName = nullptr,
+    const char *defaultOptionsString = nullptr)
 {
     const MStatus status = plugin.registerFileTranslator(
         name,
         "",
         creator,
-        nullptr,
-        nullptr,
+        optionsScriptName,
+        defaultOptionsString,
         true);
     if (!status)
     {
@@ -39,7 +47,12 @@ MStatus initializePlugin(MObject object)
 {
     MFnPlugin plugin(object, maya_smd::kPluginVendor, maya_smd::kPluginVersion, "Any");
 
-    MStatus status = RegisterTranslator(plugin, maya_smd::kImporterTranslatorName, &SmdImportTranslator::Create);
+    MStatus status = RegisterTranslator(
+        plugin,
+        maya_smd::kImporterTranslatorName,
+        &SmdImportTranslator::Create,
+        kImportOptionsScriptName,
+        kImportDefaultOptions);
     if (!status)
     {
         return MStatus::kFailure;

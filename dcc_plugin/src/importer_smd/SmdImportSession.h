@@ -4,6 +4,13 @@
 #include <maya/MStatus.h>
 #include <maya/MString.h>
 
+struct SmdImportOptions
+{
+    double rotateXDegrees = 0.0;
+    double rotateYDegrees = 0.0;
+    double rotateZDegrees = 0.0;
+};
+
 class SmdImportSession
 {
 public:
@@ -13,7 +20,7 @@ public:
 
 private:
     MStatus validateInputFile() const;
-    MStatus reportNotImplemented() const;
+    SmdImportOptions parseOptions() const;
 
     MFileObject fileObject_;
     MString options_;

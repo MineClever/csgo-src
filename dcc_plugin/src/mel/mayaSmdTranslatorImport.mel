@@ -1,0 +1,28 @@
+global proc int mayaSmdTranslatorImport(string $parent,
+                                        string $action,
+                                        string $initialSettings,
+                                        string $resultCallback)
+{
+    if (!`exists MayaSmdImport_applyOptionsString`) {
+        source "performSmdImport.mel";
+    }
+
+    if ($action == "post") {
+        SmdImportOptionsUI($parent);
+        MayaSmdImport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "fill") {
+        MayaSmdImport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "query") {
+        string $optionsString = MayaSmdImport_collectOptionsString();
+        eval($resultCallback + " \"" + $optionsString + "\"");
+        return 1;
+    }
+
+    return 0;
+}

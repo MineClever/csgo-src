@@ -10,7 +10,7 @@ set PLATFORM=x64
 if not "%~1"=="" set PLATFORM=%~1
 
 echo ============================================================
-echo  Generating Maya DMX plugin solution (%PLATFORM%)
+echo  Generating Maya plugin solution (%PLATFORM%)
 echo ============================================================
 echo.
 

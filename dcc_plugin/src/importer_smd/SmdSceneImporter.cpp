@@ -7,6 +7,7 @@
 #include <string>
 
 #include <maya/MAnimControl.h>
+#include <maya/MAngle.h>
 #include <maya/MEulerRotation.h>
 #include <maya/MFnAnimCurve.h>
 #include <maya/MFnDependencyNode.h>
@@ -93,14 +94,21 @@ MStatus SetCurveKeys(
 }
 }
 
-SmdSceneImporter::SmdSceneImporter(const simple_smd::Document &document)
+SmdSceneImporter::SmdSceneImporter(const simple_smd::Document &document, const SmdImportOptions &importOptions)
     : document_(document)
+    , importOptions_(importOptions)
 {
 }
 
 MStatus SmdSceneImporter::Import()
 {
     MStatus status = createImportRoot();
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    status = applyImportRotation();
     if (!status)
     {
         return MStatus::kFailure;
@@ -150,6 +158,36 @@ MStatus SmdSceneImporter::createImportRoot()
     }
 
     rootTransformFn.setName("smd_import_root#");
+
+    return MS::kSuccess;
+}
+
+MStatus SmdSceneImporter::applyImportRotation()
+{
+    if (importOptions_.rotateXDegrees == 0.0
+        && importOptions_.rotateYDegrees == 0.0
+        && importOptions_.rotateZDegrees == 0.0)
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MFnTransform rootTransformFn(importRoot_, &status);
+    if (!status)
+    {
+        return maya_smd::ReportError("maya_smd: failed to access SMD import root for custom rotation.", status);
+    }
+
+    const MEulerRotation importRotation(
+        MAngle(importOptions_.rotateXDegrees, MAngle::kDegrees).asRadians(),
+        MAngle(importOptions_.rotateYDegrees, MAngle::kDegrees).asRadians(),
+        MAngle(importOptions_.rotateZDegrees, MAngle::kDegrees).asRadians(),
+        MEulerRotation::kXYZ);
+    status = rootTransformFn.setRotation(importRotation);
+    if (!status)
+    {
+        return maya_smd::ReportError("maya_smd: failed to apply custom import rotation to SMD root.", status);
+    }
 
     return MS::kSuccess;
 }

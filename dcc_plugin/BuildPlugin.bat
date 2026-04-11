@@ -13,7 +13,7 @@ if not "%~1"=="" set CONFIG=%~1
 if not "%~2"=="" set PLATFORM=%~2
 
 echo ============================================================
-echo  Building Maya DMX plugin (%CONFIG%, %PLATFORM%)
+echo  Building Maya plugins (%CONFIG%, %PLATFORM%)
 echo ============================================================
 echo.
 
@@ -44,7 +44,7 @@ echo.
 echo Building plugin...
 echo. >> "%BUILD_LOG%"
 echo [BUILD] cmake --build "%BUILD_DIR%" --config %CONFIG% >> "%BUILD_LOG%"
-cmake --build "%BUILD_DIR%" --config %CONFIG% >> "%BUILD_LOG%" 2>&1
+cmake --build "%BUILD_DIR%" --config %CONFIG% --target maya_dmx maya_smd >> "%BUILD_LOG%" 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo ERROR: Build failed. See "%BUILD_LOG%"
@@ -53,6 +53,8 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo Build succeeded. Output: "%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll"
+echo Build succeeded. Outputs:
+echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll"
+echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.mll"
 echo Log: "%BUILD_LOG%"
 pause

@@ -7,8 +7,10 @@ set CONFIG=Release
 set MODULE_NAME=maya_dmx
 set MODULE_VERSION=0.1.0
 set MAYA_VERSION=2022
-set SOURCE_PLUGIN=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll
-set SOURCE_PDB=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.pdb
+set SOURCE_DMX_PLUGIN=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll
+set SOURCE_DMX_PDB=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.pdb
+set SOURCE_SMD_PLUGIN=%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.mll
+set SOURCE_SMD_PDB=%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.pdb
 set SOURCE_MEL_DIR=%PLUGIN_ROOT%\src\mel
 set MODULE_ROOT=%PLUGIN_ROOT%\maya_module
 set MODULE_PLUGIN_DIR=%MODULE_ROOT%\plug-ins\windows\%MAYA_VERSION%
@@ -20,24 +22,30 @@ set USER_MODULE_FILE=%USER_MODULE_DIR%\%MODULE_NAME%.mod
 if not "%~1"=="" set CONFIG=%~1
 
 echo ============================================================
-echo  Installing Maya DMX plugin module (%CONFIG%)
+echo  Installing Maya plugin module (%CONFIG%)
 echo ============================================================
 echo.
 
 taskkill /f /im maya.exe 2>nul
 timeout /t 2
 
-if not exist "%SOURCE_PLUGIN%" (
-    echo WARNING: Built plugin not found: "%SOURCE_PLUGIN%"
-    ::REM TODO: Check if valid maya_dmx.mll in MODULE_PLUGIN_DIR
-    if exist "%MODULE_PLUGIN_DIR%\maya_dmx.mll" (
-        echo NOTE: Using existing plugin binary found in module directory:
-        echo   "%MODULE_PLUGIN_DIR%\maya_dmx.mll"
-        echo Skipping copy of plugin binary.
-        goto :skip_plugin_copy
-    ) else (
-        echo ERROR: No plugin binary available in build output or module directory.
-        echo Run "%PLUGIN_ROOT%\BuildPlugin.bat" first.
+if not exist "%SOURCE_DMX_PLUGIN%" (
+    echo ERROR: Built DMX plugin not found: "%SOURCE_DMX_PLUGIN%"
+    echo Run "%PLUGIN_ROOT%\BuildPlugin.bat" first.
+    pause
+    exit /b 1
+)
+
+if not exist "%SOURCE_SMD_PLUGIN%" (
+    echo ERROR: Built SMD plugin not found: "%SOURCE_SMD_PLUGIN%"
+    echo Run "%PLUGIN_ROOT%\BuildPlugin.bat" first.
+    pause
+    exit /b 1
+)
+
+if not exist "%MODULE_SCRIPTS_DIR%" (
+    if not exist "%MODULE_ROOT%\scripts" (
+        echo ERROR: Maya module scripts directory not found: "%MODULE_ROOT%\scripts"
         pause
         exit /b 1
     )
@@ -75,24 +83,40 @@ if %ERRORLEVEL% GTR 1 (
     exit /b %ERRORLEVEL%
 )
 
-copy /Y "%SOURCE_PLUGIN%" "%MODULE_PLUGIN_DIR%\maya_dmx.mll" >nul
+copy /Y "%SOURCE_DMX_PLUGIN%" "%MODULE_PLUGIN_DIR%\maya_dmx.mll" >nul
 if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Failed to copy plugin binary.
+    echo ERROR: Failed to copy DMX plugin binary.
     pause
     exit /b %ERRORLEVEL%
 )
 
-:skip_plugin_copy
+copy /Y "%SOURCE_SMD_PLUGIN%" "%MODULE_PLUGIN_DIR%\maya_smd.mll" >nul
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Failed to copy SMD plugin binary.
+    pause
+    exit /b %ERRORLEVEL%
+)
 
-if exist "%SOURCE_PDB%" (
-    copy /Y "%SOURCE_PDB%" "%MODULE_PLUGIN_DIR%\maya_dmx.pdb" >nul
+if exist "%SOURCE_DMX_PDB%" (
+    copy /Y "%SOURCE_DMX_PDB%" "%MODULE_PLUGIN_DIR%\maya_dmx.pdb" >nul
     if %ERRORLEVEL% NEQ 0 (
-        echo ERROR: Failed to copy plugin debug symbols.
+        echo ERROR: Failed to copy DMX plugin debug symbols.
         pause
         exit /b %ERRORLEVEL%
     )
 ) else (
-    echo NOTE: Debug symbols not found, skipping PDB copy.
+    echo NOTE: DMX debug symbols not found, skipping PDB copy.
+)
+
+if exist "%SOURCE_SMD_PDB%" (
+    copy /Y "%SOURCE_SMD_PDB%" "%MODULE_PLUGIN_DIR%\maya_smd.pdb" >nul
+    if %ERRORLEVEL% NEQ 0 (
+        echo ERROR: Failed to copy SMD plugin debug symbols.
+        pause
+        exit /b %ERRORLEVEL%
+    )
+) else (
+    echo NOTE: SMD debug symbols not found, skipping PDB copy.
 )
 
 copy /Y "%SOURCE_MEL_DIR%\*.mel" "%MODULE_SCRIPTS_DIR%\" >nul
@@ -120,13 +144,18 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 echo Installed module file:
 echo   "%USER_MODULE_FILE%"
-echo Plugin binary:
+echo Plugin binaries:
 echo   "%MODULE_PLUGIN_DIR%\maya_dmx.mll"
+echo   "%MODULE_PLUGIN_DIR%\maya_smd.mll"
 echo MEL scripts:
 echo   "%MODULE_SCRIPTS_DIR%\*.mel"
 if exist "%MODULE_PLUGIN_DIR%\maya_dmx.pdb" (
-    echo Debug symbols:
+    echo DMX debug symbols:
     echo   "%MODULE_PLUGIN_DIR%\maya_dmx.pdb"
+)
+if exist "%MODULE_PLUGIN_DIR%\maya_smd.pdb" (
+    echo SMD debug symbols:
+    echo   "%MODULE_PLUGIN_DIR%\maya_smd.pdb"
 )
 echo.
 echo Restart Maya 2022.5 to discover the new module.

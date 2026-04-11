@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SmdImportSession.h"
+
 #include "../common_smd/SimpleSmdDocument.h"
 
 #include <maya/MDagPath.h>
@@ -11,12 +13,13 @@
 class SmdSceneImporter
 {
 public:
-    explicit SmdSceneImporter(const simple_smd::Document &document);
+    SmdSceneImporter(const simple_smd::Document &document, const SmdImportOptions &importOptions);
 
     MStatus Import();
 
 private:
     MStatus createImportRoot();
+    MStatus applyImportRotation();
     MStatus createJointHierarchy();
     MStatus applyBindPose();
     MStatus applyAnimation();
@@ -26,6 +29,7 @@ private:
     const simple_smd::SkeletonPose *findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const;
 
     const simple_smd::Document &document_;
+    SmdImportOptions importOptions_;
     MObject importRoot_ = MObject::kNullObj;
     std::unordered_map<int, MDagPath> jointPathsByBone_;
 };
