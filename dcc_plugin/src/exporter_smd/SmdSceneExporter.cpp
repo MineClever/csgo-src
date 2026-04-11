@@ -9,6 +9,7 @@
 
 #include <maya/MDagPathArray.h>
 #include <maya/MEulerRotation.h>
+#include <maya/MFnAnimCurve.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnMesh.h>
@@ -22,14 +23,128 @@
 #include <maya/MDoubleArray.h>
 #include <maya/MPointArray.h>
 #include <maya/MObjectArray.h>
+#include <maya/MPlug.h>
+#include <maya/MPlugArray.h>
 #include <maya/MSelectionList.h>
+#include <maya/MTime.h>
 #include <maya/MVector.h>
 
-namespace
+namespace smd_export_impl
 {
+constexpr const char *kSmdMaterialNameAttribute = "mayaSmdMaterialName";
+
 std::string DagPathKey(const MDagPath &dagPath)
 {
     return dagPath.fullPathName().asChar();
+}
+
+void AppendUniqueFrameTime(std::vector<double> &frameTimes, double frameTime)
+{
+    for (double existingFrameTime : frameTimes)
+    {
+        if (std::abs(existingFrameTime - frameTime) <= 1.0e-4)
+        {
+            return;
+        }
+    }
+    frameTimes.push_back(frameTime);
+}
+
+MObject FindAnimationCurveForPlug(const MPlug &plug)
+{
+    if (plug.isNull())
+    {
+        return MObject::kNullObj;
+    }
+
+    MPlugArray sourcePlugs;
+    plug.connectedTo(sourcePlugs, true, false);
+    for (unsigned int sourceIndex = 0; sourceIndex < sourcePlugs.length(); ++sourceIndex)
+    {
+        MStatus status;
+        const MObject sourceNode = sourcePlugs[sourceIndex].node(&status);
+        if (status && !sourceNode.isNull() && sourceNode.hasFn(MFn::kAnimCurve))
+        {
+            return sourceNode;
+        }
+    }
+
+    return MObject::kNullObj;
+}
+
+void AppendCurveFrameTimes(const MObject &curveObject, std::vector<double> &frameTimes)
+{
+    if (curveObject.isNull())
+    {
+        return;
+    }
+
+    MStatus status;
+    MFnAnimCurve curveFn(curveObject, &status);
+    if (!status)
+    {
+        return;
+    }
+
+    const unsigned int keyCount = curveFn.numKeys(&status);
+    if (!status)
+    {
+        return;
+    }
+
+    for (unsigned int keyIndex = 0; keyIndex < keyCount; ++keyIndex)
+    {
+        const MTime keyTime = curveFn.time(keyIndex, &status);
+        if (!status)
+        {
+            break;
+        }
+
+        AppendUniqueFrameTime(frameTimes, keyTime.as(MTime::uiUnit()));
+    }
+}
+
+double EvaluateCurveOrPlugValue(const MObject &curveObject, const MPlug &plug, double frameTime)
+{
+    if (!curveObject.isNull())
+    {
+        MStatus status;
+        MFnAnimCurve curveFn(curveObject, &status);
+        if (status)
+        {
+            return curveFn.evaluate(MTime(frameTime, MTime::uiUnit()), &status);
+        }
+    }
+
+    double value = 0.0;
+    plug.getValue(value);
+    return value;
+}
+
+bool ReadStringAttribute(const MObject &nodeObject, const char *attributeName, std::string &value)
+{
+    MStatus status;
+    MFnDependencyNode nodeFn(nodeObject, &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    MPlug attributePlug = nodeFn.findPlug(attributeName, true, &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    MString mayaValue;
+    status = attributePlug.getValue(mayaValue);
+    if (!status || mayaValue.length() == 0)
+    {
+        return false;
+    }
+
+    value = mayaValue.asChar();
+    return true;
 }
 }
 
@@ -43,6 +158,7 @@ MStatus SmdSceneExporter::Build()
     document_ = simple_smd::Document();
     document_.version = 1;
     exportRoots_.clear();
+    meshRoots_.clear();
     exportNodes_.clear();
     nodeIndexByPath_.clear();
 
@@ -107,7 +223,7 @@ MStatus SmdSceneExporter::buildNodes()
         if (parentPath.length() > 0)
         {
             parentPath.pop();
-            auto parentIt = nodeIndexByPath_.find(DagPathKey(parentPath));
+            auto parentIt = nodeIndexByPath_.find(smd_export_impl::DagPathKey(parentPath));
             node.parentIndex = parentIt == nodeIndexByPath_.end() ? -1 : parentIt->second;
         }
 
@@ -130,12 +246,77 @@ bool SmdSceneExporter::shouldExportRoot(const MDagPath &dagPath) const
         return false;
     }
 
+    if (isImportWrapperRoot(dagPath))
+    {
+        return true;
+    }
+
     return shouldExportNode(dagPath);
 }
 
 bool SmdSceneExporter::shouldExportNode(const MDagPath &dagPath) const
 {
-    return dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint);
+    if (dagPath.hasFn(MFn::kJoint))
+    {
+        return true;
+    }
+
+    if (!dagPath.hasFn(MFn::kTransform))
+    {
+        return false;
+    }
+
+    if (isImportWrapperRoot(dagPath) || hasRenderableMeshChild(dagPath))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool SmdSceneExporter::isImportWrapperRoot(const MDagPath &dagPath) const
+{
+    if (!dagPath.isValid() || !dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint))
+    {
+        return false;
+    }
+
+    MStatus status;
+    MFnDagNode dagNode(dagPath, &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    const MString nodeName = dagNode.name();
+    return nodeName.indexW("smd_import_root") == 0;
+}
+
+bool SmdSceneExporter::hasRenderableMeshChild(const MDagPath &dagPath) const
+{
+    MStatus status;
+    MFnDagNode dagNode(dagPath, &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    for (unsigned int childIndex = 0; childIndex < dagNode.childCount(); ++childIndex)
+    {
+        const MObject childObject = dagNode.child(childIndex, &status);
+        if (!status || !childObject.hasFn(MFn::kMesh))
+        {
+            continue;
+        }
+
+        MFnDagNode childDagNode(childObject, &status);
+        if (status && !childDagNode.isIntermediateObject())
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 MStatus SmdSceneExporter::collectExportRoots()
@@ -158,9 +339,36 @@ MStatus SmdSceneExporter::collectExportRoots()
                     dagPath.pop();
                 }
 
-                if (shouldExportRoot(dagPath))
+                if (isImportWrapperRoot(dagPath))
+                {
+                    MStatus status;
+                    MFnDagNode dagNode(dagPath, &status);
+                    if (!status)
+                    {
+                        continue;
+                    }
+
+                    for (unsigned int childIndex = 0; childIndex < dagNode.childCount(); ++childIndex)
+                    {
+                        const MObject childObject = dagNode.child(childIndex, &status);
+                        if (!status || !(childObject.hasFn(MFn::kTransform) || childObject.hasFn(MFn::kJoint)))
+                        {
+                            continue;
+                        }
+
+                        MDagPath childPath = dagPath;
+                        childPath.push(childObject);
+                        if (shouldExportNode(childPath))
+                        {
+                            exportRoots_.push_back(childPath);
+                        }
+                    }
+                    meshRoots_.push_back(dagPath);
+                }
+                else if (shouldExportRoot(dagPath))
                 {
                     exportRoots_.push_back(dagPath);
+                    meshRoots_.push_back(dagPath);
                 }
             }
         }
@@ -180,6 +388,7 @@ MStatus SmdSceneExporter::collectExportRoots()
             if (dagIterator.getPath(dagPath) == MS::kSuccess && shouldExportRoot(dagPath))
             {
                 exportRoots_.push_back(dagPath);
+                meshRoots_.push_back(dagPath);
             }
         }
     }
@@ -221,7 +430,7 @@ MStatus SmdSceneExporter::collectNodesRecursive(const MDagPath &dagPath, int)
         return MS::kSuccess;
     }
 
-    const std::string pathKey = DagPathKey(dagPath);
+    const std::string pathKey = smd_export_impl::DagPathKey(dagPath);
     if (nodeIndexByPath_.find(pathKey) == nodeIndexByPath_.end())
     {
         nodeIndexByPath_[pathKey] = static_cast<int>(exportNodes_.size());
@@ -257,46 +466,104 @@ MStatus SmdSceneExporter::collectNodesRecursive(const MDagPath &dagPath, int)
 
 MStatus SmdSceneExporter::buildSkeleton()
 {
-    simple_smd::SkeletonFrame bindFrame;
-    bindFrame.time = 0;
-    bindFrame.poses.reserve(exportNodes_.size());
+    document_.skeletonFrames.clear();
 
-    for (size_t nodeIndex = 0; nodeIndex < exportNodes_.size(); ++nodeIndex)
+    std::vector<double> frameTimes;
+    collectAnimationFrameTimes(frameTimes);
+    if (frameTimes.empty())
     {
-        MStatus status;
-        MFnTransform transformFn(exportNodes_[nodeIndex], &status);
-        if (!status)
+        frameTimes.push_back(0.0);
+    }
+    std::sort(frameTimes.begin(), frameTimes.end());
+
+    for (double frameTime : frameTimes)
+    {
+        simple_smd::SkeletonFrame frame;
+        frame.time = static_cast<int>(std::lround(frameTime));
+        frame.poses.reserve(exportNodes_.size());
+
+        for (size_t nodeIndex = 0; nodeIndex < exportNodes_.size(); ++nodeIndex)
         {
-            return MStatus::kFailure;
+            MStatus status;
+            MFnDependencyNode nodeFn(exportNodes_[nodeIndex].node(), &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+
+            MPlug txPlug = nodeFn.findPlug("translateX", true, &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+            MPlug tyPlug = nodeFn.findPlug("translateY", true, &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+            MPlug tzPlug = nodeFn.findPlug("translateZ", true, &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+            MPlug rxPlug = nodeFn.findPlug("rotateX", true, &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+            MPlug ryPlug = nodeFn.findPlug("rotateY", true, &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+            MPlug rzPlug = nodeFn.findPlug("rotateZ", true, &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+
+            simple_smd::SkeletonPose pose;
+            pose.boneIndex = static_cast<int>(nodeIndex);
+            pose.tx = smd_export_impl::EvaluateCurveOrPlugValue(smd_export_impl::FindAnimationCurveForPlug(txPlug), txPlug, frameTime);
+            pose.ty = smd_export_impl::EvaluateCurveOrPlugValue(smd_export_impl::FindAnimationCurveForPlug(tyPlug), tyPlug, frameTime);
+            pose.tz = smd_export_impl::EvaluateCurveOrPlugValue(smd_export_impl::FindAnimationCurveForPlug(tzPlug), tzPlug, frameTime);
+            pose.rx = smd_export_impl::EvaluateCurveOrPlugValue(smd_export_impl::FindAnimationCurveForPlug(rxPlug), rxPlug, frameTime);
+            pose.ry = smd_export_impl::EvaluateCurveOrPlugValue(smd_export_impl::FindAnimationCurveForPlug(ryPlug), ryPlug, frameTime);
+            pose.rz = smd_export_impl::EvaluateCurveOrPlugValue(smd_export_impl::FindAnimationCurveForPlug(rzPlug), rzPlug, frameTime);
+            frame.poses.push_back(pose);
         }
 
-        const MVector translation = transformFn.translation(MSpace::kTransform, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MEulerRotation rotation;
-        status = transformFn.getRotation(rotation);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        simple_smd::SkeletonPose pose;
-        pose.boneIndex = static_cast<int>(nodeIndex);
-        pose.tx = translation.x;
-        pose.ty = translation.y;
-        pose.tz = translation.z;
-        pose.rx = rotation.x;
-        pose.ry = rotation.y;
-        pose.rz = rotation.z;
-        bindFrame.poses.push_back(pose);
+        document_.skeletonFrames.push_back(frame);
     }
 
-    document_.skeletonFrames.clear();
-    document_.skeletonFrames.push_back(bindFrame);
     return MS::kSuccess;
+}
+
+void SmdSceneExporter::collectAnimationFrameTimes(std::vector<double> &frameTimes) const
+{
+    frameTimes.clear();
+
+    for (const MDagPath &dagPath : exportNodes_)
+    {
+        MStatus status;
+        MFnDependencyNode nodeFn(dagPath.node(), &status);
+        if (!status)
+        {
+            continue;
+        }
+
+        for (const char *attributeName : {"translateX", "translateY", "translateZ", "rotateX", "rotateY", "rotateZ"})
+        {
+            MPlug plug = nodeFn.findPlug(attributeName, true, &status);
+            if (!status)
+            {
+                status = MS::kSuccess;
+                continue;
+            }
+
+            smd_export_impl::AppendCurveFrameTimes(smd_export_impl::FindAnimationCurveForPlug(plug), frameTimes);
+        }
+    }
 }
 
 int SmdSceneExporter::findOwningNodeIndex(const MDagPath &dagPath) const
@@ -304,7 +571,7 @@ int SmdSceneExporter::findOwningNodeIndex(const MDagPath &dagPath) const
     MDagPath currentPath = dagPath;
     while (currentPath.length() > 0)
     {
-        auto nodeIt = nodeIndexByPath_.find(DagPathKey(currentPath));
+        auto nodeIt = nodeIndexByPath_.find(smd_export_impl::DagPathKey(currentPath));
         if (nodeIt != nodeIndexByPath_.end())
         {
             return nodeIt->second;
@@ -320,7 +587,7 @@ MStatus SmdSceneExporter::buildTriangles()
     std::unordered_set<std::string> visitedMeshes;
     document_.triangles.clear();
 
-    for (const MDagPath &rootPath : exportRoots_)
+    for (const MDagPath &rootPath : meshRoots_)
     {
         MItDag dagIterator(MItDag::kDepthFirst, MFn::kMesh);
         dagIterator.reset(rootPath, MItDag::kDepthFirst, MFn::kMesh);
@@ -339,7 +606,7 @@ MStatus SmdSceneExporter::buildTriangles()
                 continue;
             }
 
-            const std::string meshKey = DagPathKey(meshPath);
+            const std::string meshKey = smd_export_impl::DagPathKey(meshPath);
             if (!visitedMeshes.insert(meshKey).second)
             {
                 continue;
@@ -381,13 +648,19 @@ MStatus SmdSceneExporter::buildTriangles()
                 }
 
                 std::string materialName = "defaultMaterial";
+                if (!smd_export_impl::ReadStringAttribute(meshPath.node(), smd_export_impl::kSmdMaterialNameAttribute, materialName))
+                {
+                    MDagPath meshParentPath = meshPath;
+                    meshParentPath.pop();
+                    smd_export_impl::ReadStringAttribute(meshParentPath.node(), smd_export_impl::kSmdMaterialNameAttribute, materialName);
+                }
                 if (polygonIt.index() < static_cast<int>(faceShaderIndices.length()))
                 {
                     const int shaderIndex = faceShaderIndices[polygonIt.index()];
                     if (shaderIndex >= 0 && shaderIndex < static_cast<int>(shadingGroups.length()))
                     {
                         MFnDependencyNode shaderNode(shadingGroups[shaderIndex], &status);
-                        if (status)
+                        if (status && materialName == "defaultMaterial")
                         {
                             materialName = shaderNode.name().asChar();
                         }
@@ -524,7 +797,7 @@ MStatus SmdSceneExporter::collectSkinWeights(
     std::vector<int> influenceToBoneIndex(influenceCount, -1);
     for (unsigned int influenceIndex = 0; influenceIndex < influenceCount; ++influenceIndex)
     {
-        auto nodeIt = nodeIndexByPath_.find(DagPathKey(influencePaths[influenceIndex]));
+        auto nodeIt = nodeIndexByPath_.find(smd_export_impl::DagPathKey(influencePaths[influenceIndex]));
         if (nodeIt != nodeIndexByPath_.end())
         {
             influenceToBoneIndex[influenceIndex] = nodeIt->second;

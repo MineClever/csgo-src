@@ -12,6 +12,7 @@ set MAYA_PYTHON_EXE=C:\Program Files\Autodesk\Maya2022\bin\mayapy.exe
 if not "%MAYA_PYTHON_EXE_OVERRIDE%"=="" set MAYA_PYTHON_EXE=%MAYA_PYTHON_EXE_OVERRIDE%
 
 set PLUGIN_BINARY=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll
+set SMD_PLUGIN_BINARY=%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.mll
 set SAMPLE_DIR=%PLUGIN_ROOT%\samples
 set OUTPUT_DIR=%REPO_ROOT%\build\maya_dmx\maya_batch_regression\%CONFIG%
 set SCRIPT_PATH=%PLUGIN_ROOT%\tools\MayaBatchRegression.py
@@ -20,8 +21,9 @@ echo ============================================================
 echo  Running Maya batch DMX regression (%CONFIG%)
 echo ============================================================
 echo.
-echo This regression verifies mesh roundtrip, transform/joint type stability,
-echo and animation import gates for the dedicated DMX animation samples.
+echo This regression verifies Maya roundtrip for DMX and SMD samples,
+echo including mesh, transform/joint type stability, skin retention,
+echo and animation import gates for dedicated animation samples.
 echo.
 
 if not exist "%MAYA_PYTHON_EXE%" (
@@ -41,6 +43,14 @@ if not exist "%PLUGIN_BINARY%" (
     exit /b 1
 )
 
+if not exist "%SMD_PLUGIN_BINARY%" (
+    echo ERROR: Built SMD plugin was not found:
+    echo   "%SMD_PLUGIN_BINARY%"
+    echo Build the plugin first so SMD cases can participate in regression.
+    pause
+    exit /b 1
+)
+
 if not exist "%SCRIPT_PATH%" (
     echo ERROR: Regression script was not found:
     echo   "%SCRIPT_PATH%"
@@ -54,9 +64,10 @@ set MAYA_SKIP_USERSETUP_PY=1
 
 "%MAYA_PYTHON_EXE%" "%SCRIPT_PATH%" ^
     --plugin "%PLUGIN_BINARY%" ^
+    --plugin-smd "%SMD_PLUGIN_BINARY%" ^
     --samples "%SAMPLE_DIR%" ^
     --output "%OUTPUT_DIR%" ^
-    --cases simple_hierarchy simple_blendshape simple_mesh simple_skinned_mesh complex_chr_mesh MostComplexSampleSet/chr_mesh simple_ngon_mesh MostComplexSampleSet/vcaanim_VertexAnim simple_float_animation simple_blendshape_animation
+    --cases simple_hierarchy simple_blendshape simple_mesh simple_skinned_mesh complex_chr_mesh MostComplexSampleSet/chr_mesh simple_ngon_mesh MostComplexSampleSet/vcaanim_VertexAnim simple_float_animation simple_blendshape_animation MostComplexSampleSet/chr_mesh.smd MostComplexSampleSet/vcaanim_VertexAnim.smd Ellis/DMX/RAGDOLL.smd
 if errorlevel 1 (
     echo.
     echo Maya batch regression failed.

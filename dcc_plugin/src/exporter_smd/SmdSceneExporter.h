@@ -23,17 +23,21 @@ private:
     MStatus buildNodes();
     MStatus buildSkeleton();
     MStatus buildTriangles();
+    void collectAnimationFrameTimes(std::vector<double> &frameTimes) const;
     MStatus collectSkinWeights(
         const MDagPath &meshPath,
         std::unordered_map<int, std::vector<simple_smd::TriangleWeight>> &weightsByVertex) const;
 
     bool shouldExportRoot(const MDagPath &dagPath) const;
     bool shouldExportNode(const MDagPath &dagPath) const;
+    bool isImportWrapperRoot(const MDagPath &dagPath) const;
+    bool hasRenderableMeshChild(const MDagPath &dagPath) const;
     int findOwningNodeIndex(const MDagPath &dagPath) const;
 
     MPxFileTranslator::FileAccessMode mode_;
     simple_smd::Document document_;
     std::vector<MDagPath> exportRoots_;
+    std::vector<MDagPath> meshRoots_;
     std::vector<MDagPath> exportNodes_;
     std::unordered_map<std::string, int> nodeIndexByPath_;
 };

@@ -4,6 +4,53 @@ import sys
 
 import maya.standalone
 
+FORMAT_CONFIGS = {
+    "dmx": {
+        "extensions": (".dmx", ".dmxb", ".dmxbin"),
+        "import_type": "Valve DMX Import",
+        "export_type": "Valve DMX Export",
+        "export_variants": [
+            {
+                "name": "text",
+                "extension": ".dmx",
+                "options": "",
+                "mesh_marker_suffix": "roundtrip_text_meshcheck.txt",
+                "type_marker_suffix": "roundtrip_text_typecheck.txt",
+                "skin_marker_suffix": "roundtrip_text_skincheck.txt",
+                "blendshape_marker_suffix": "roundtrip_text_blendshapecheck.txt",
+                "animation_marker_suffix": "roundtrip_text_animcheck.txt",
+            },
+            {
+                "name": "binary",
+                "extension": ".dmxb",
+                "options": "binary=1",
+                "mesh_marker_suffix": "roundtrip_binary_meshcheck.txt",
+                "type_marker_suffix": "roundtrip_binary_typecheck.txt",
+                "skin_marker_suffix": "roundtrip_binary_skincheck.txt",
+                "blendshape_marker_suffix": "roundtrip_binary_blendshapecheck.txt",
+                "animation_marker_suffix": "roundtrip_binary_animcheck.txt",
+            },
+        ],
+    },
+    "smd": {
+        "extensions": (".smd",),
+        "import_type": "Valve SMD Import",
+        "export_type": "Valve SMD Export",
+        "export_variants": [
+            {
+                "name": "text",
+                "extension": ".smd",
+                "options": "",
+                "mesh_marker_suffix": "roundtrip_text_meshcheck.txt",
+                "type_marker_suffix": "roundtrip_text_typecheck.txt",
+                "skin_marker_suffix": "roundtrip_text_skincheck.txt",
+                "blendshape_marker_suffix": "roundtrip_text_blendshapecheck.txt",
+                "animation_marker_suffix": "roundtrip_text_animcheck.txt",
+            },
+        ],
+    },
+}
+
 ANIMATION_GATE_EXPECTATIONS = {
     "MostComplexSampleSet/vcaanim_VertexAnim": {
         "min_animated_plugs": 2,
@@ -23,6 +70,12 @@ ANIMATION_GATE_EXPECTATIONS = {
         "required_substrings": [
             "combinationOperator_controls.smile",
             "_blendShape.smile",
+        ],
+    },
+    "MostComplexSampleSet/vcaanim_VertexAnim.smd": {
+        "min_animated_plugs": 1,
+        "required_any_suffix_groups": [
+            [".translateX", ".translateY", ".translateZ"],
         ],
     },
 }
@@ -455,7 +508,8 @@ def validate_animation_gate(case_name, animation_snapshots):
 
 def verify_roundtrip(
     cmds,
-    plugin_path,
+    plugin_paths,
+    import_type,
     exported_path,
     reference_meshes,
     reference_node_types,
@@ -470,11 +524,10 @@ def verify_roundtrip(
     import_options="",
 ):
     cmds.file(new=True, force=True)
-    if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
-        cmds.loadPlugin(plugin_path)
+    ensure_plugins_loaded(cmds, plugin_paths)
 
     before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
-    import_kwargs = dict(i=True, type="Valve DMX Import", ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
+    import_kwargs = dict(i=True, type=import_type, ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
     if import_options:
         import_kwargs["options"] = import_options
     cmds.file(exported_path, **import_kwargs)
@@ -508,10 +561,24 @@ def collect_imported_roots(cmds, before_assemblies):
     return imported_roots
 
 
+def detect_format(input_path):
+    ext = os.path.splitext(input_path)[1].lower()
+    for format_name, config in FORMAT_CONFIGS.items():
+        if ext in config["extensions"]:
+            return format_name
+    raise RuntimeError(f"Unsupported sample extension: {input_path}")
+
+
+def ensure_plugins_loaded(cmds, plugin_paths):
+    for plugin_path in plugin_paths:
+        if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
+            cmds.loadPlugin(plugin_path)
+
+
 def make_case_output_name(case_name):
     normalized_name = case_name.replace("\\", "/")
     root, ext = os.path.splitext(normalized_name)
-    if ext.lower() in (".dmx", ".dmxb", ".dmxbin"):
+    if ext.lower() in (".dmx", ".dmxb", ".dmxbin", ".smd"):
         normalized_name = root
     return normalized_name.replace("\\", "__").replace("/", "__")
 
@@ -520,12 +587,13 @@ def resolve_input_path(sample_dir, case_name):
     normalized_name = case_name.replace("\\", "/")
     root, ext = os.path.splitext(normalized_name)
     candidate_paths = []
-    if ext.lower() in (".dmx", ".dmxb", ".dmxbin"):
+    if ext.lower() in (".dmx", ".dmxb", ".dmxbin", ".smd"):
         candidate_paths.append(os.path.join(sample_dir, normalized_name))
     else:
         candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.dmx"))
         candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.dmxb"))
         candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.dmxbin"))
+        candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.smd"))
 
     for candidate_path in candidate_paths:
         if os.path.isfile(candidate_path):
@@ -534,38 +602,31 @@ def resolve_input_path(sample_dir, case_name):
     raise RuntimeError(f"Missing sample file: {candidate_paths[0]}")
 
 
-def run_case(cmds, plugin_path, sample_dir, output_dir, case_name, import_options=""):
+def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, import_options=""):
     label = case_name if not import_options else f"{case_name} [{import_options}]"
     sys.stdout.write(f"[maya_dmx_case] {label}\n")
     sys.stdout.flush()
 
     input_path = resolve_input_path(sample_dir, case_name)
+    format_name = detect_format(input_path)
+    format_config = FORMAT_CONFIGS[format_name]
+    plugin_path = plugin_paths_by_format.get(format_name)
+    if not plugin_path:
+        raise RuntimeError(f"Missing plugin for format '{format_name}' while running case '{case_name}'")
+
     case_output_name = make_case_output_name(case_name)
     # Append a suffix for non-default import options so markers don't collide.
     options_suffix = ""
     if import_options:
         safe_options = import_options.replace("=", "").replace(";", "_").replace(" ", "")
         options_suffix = f".{safe_options}"
-    exported_text = os.path.join(output_dir, f"{case_output_name}{options_suffix}.maya_export.dmx")
-    exported_binary = os.path.join(output_dir, f"{case_output_name}{options_suffix}.maya_export.dmxb")
-    roundtrip_text_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_meshcheck.txt")
-    roundtrip_binary_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_meshcheck.txt")
-    roundtrip_text_type_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_typecheck.txt")
-    roundtrip_binary_type_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_typecheck.txt")
-    roundtrip_text_skin_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_skincheck.txt")
-    roundtrip_binary_skin_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_skincheck.txt")
-    roundtrip_text_blendshape_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_blendshapecheck.txt")
-    roundtrip_binary_blendshape_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_blendshapecheck.txt")
-    roundtrip_text_animation_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_text_animcheck.txt")
-    roundtrip_binary_animation_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.roundtrip_binary_animcheck.txt")
     import_animation_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.import_animgate.txt")
 
     cmds.file(new=True, force=True)
-    if not cmds.pluginInfo(plugin_path, query=True, loaded=True):
-        cmds.loadPlugin(plugin_path)
+    ensure_plugins_loaded(cmds, [plugin_path])
 
     before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
-    import_kwargs = dict(i=True, type="Valve DMX Import", ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
+    import_kwargs = dict(i=True, type=format_config["import_type"], ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
     if import_options:
         import_kwargs["options"] = import_options
     cmds.file(input_path, **import_kwargs)
@@ -583,54 +644,50 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name, import_option
     validate_animation_gate(case_name, original_animations)
     with open(import_animation_gate_marker, "w", encoding="utf-8") as marker_file:
         marker_file.write("ok\n")
-    cmds.file(rename=exported_text)
-    cmds.file(force=True, exportSelected=True, type="Valve DMX Export")
+    for export_variant in format_config["export_variants"]:
+        exported_path = os.path.join(
+            output_dir,
+            f"{case_output_name}{options_suffix}.maya_export{export_variant['extension']}",
+        )
+        mesh_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.{export_variant['mesh_marker_suffix']}")
+        type_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.{export_variant['type_marker_suffix']}")
+        skin_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.{export_variant['skin_marker_suffix']}")
+        blendshape_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.{export_variant['blendshape_marker_suffix']}")
+        animation_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.{export_variant['animation_marker_suffix']}")
 
-    cmds.file(rename=exported_binary)
-    cmds.file(force=True, options="binary=1", exportSelected=True, type="Valve DMX Export")
+        cmds.file(rename=exported_path)
+        export_kwargs = dict(force=True, exportSelected=True, type=format_config["export_type"])
+        if export_variant["options"]:
+            export_kwargs["options"] = export_variant["options"]
+        cmds.file(**export_kwargs)
 
-    verify_roundtrip(
-        cmds,
-        plugin_path,
-        exported_text,
-        original_meshes,
-        original_node_types,
-        original_skins,
-        original_blendshapes,
-        original_animations,
-        roundtrip_text_marker,
-        roundtrip_text_type_marker,
-        roundtrip_text_skin_marker,
-        roundtrip_text_blendshape_marker,
-        roundtrip_text_animation_marker,
-        import_options=import_options,
-    )
-    verify_roundtrip(
-        cmds,
-        plugin_path,
-        exported_binary,
-        original_meshes,
-        original_node_types,
-        original_skins,
-        original_blendshapes,
-        original_animations,
-        roundtrip_binary_marker,
-        roundtrip_binary_type_marker,
-        roundtrip_binary_skin_marker,
-        roundtrip_binary_blendshape_marker,
-        roundtrip_binary_animation_marker,
-        import_options=import_options,
-    )
+        verify_roundtrip(
+            cmds,
+            [plugin_path],
+            format_config["import_type"],
+            exported_path,
+            original_meshes,
+            original_node_types,
+            original_skins,
+            original_blendshapes,
+            original_animations,
+            mesh_marker,
+            type_marker,
+            skin_marker,
+            blendshape_marker,
+            animation_marker,
+            import_options=import_options,
+        )
 
     # For samples that contain skinned meshes, automatically run a second pass with
     # applyAxisCorrection=0 to verify that roundtrip is consistent regardless of the
     # axis correction setting.  The no-correction import exports its own DMX and
     # re-imports with the same no-correction option so the reference and candidate
     # are always compared under matching settings.
-    if original_skins and not import_options:
+    if format_name == "dmx" and original_skins and not import_options:
         run_case(
             cmds,
-            plugin_path,
+            plugin_paths_by_format,
             sample_dir,
             output_dir,
             case_name,
@@ -640,23 +697,32 @@ def run_case(cmds, plugin_path, sample_dir, output_dir, case_name, import_option
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--plugin", required=True)
+    parser.add_argument("--plugin", dest="plugin_dmx", required=True)
+    parser.add_argument("--plugin-smd")
     parser.add_argument("--samples", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--cases", nargs="+", required=True)
     args = parser.parse_args()
 
-    args.plugin = os.path.abspath(args.plugin)
+    args.plugin_dmx = os.path.abspath(args.plugin_dmx)
+    if args.plugin_smd:
+        args.plugin_smd = os.path.abspath(args.plugin_smd)
     args.samples = os.path.abspath(args.samples)
     args.output = os.path.abspath(args.output)
     os.makedirs(args.output, exist_ok=True)
+
+    plugin_paths_by_format = {
+        "dmx": args.plugin_dmx,
+    }
+    if args.plugin_smd:
+        plugin_paths_by_format["smd"] = args.plugin_smd
 
     maya.standalone.initialize(name="python")
     try:
         import maya.cmds as cmds
 
         for case_name in args.cases:
-            run_case(cmds, args.plugin, args.samples, args.output, case_name)
+            run_case(cmds, plugin_paths_by_format, args.samples, args.output, case_name)
     finally:
         maya.standalone.uninitialize()
 

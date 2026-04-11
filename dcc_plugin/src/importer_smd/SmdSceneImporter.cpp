@@ -37,19 +37,19 @@ MStatus SetPoseOnObject(MObject object, const simple_smd::SkeletonPose &pose)
     MFnTransform transformFn(object, &status);
     if (!status)
     {
-        return MStatus::kFailure;
+        return maya_smd::ReportError("maya_smd: failed to access transform for skeleton pose.", status);
     }
 
     status = transformFn.setTranslation(MVector(pose.tx, pose.ty, pose.tz), MSpace::kTransform);
     if (!status)
     {
-        return MStatus::kFailure;
+        return maya_smd::ReportError("maya_smd: failed to apply skeleton translation.", status);
     }
 
     status = transformFn.setRotation(MEulerRotation(pose.rx, pose.ry, pose.rz));
     if (!status)
     {
-        return MStatus::kFailure;
+        return maya_smd::ReportError("maya_smd: failed to apply skeleton rotation.", status);
     }
 
     return MS::kSuccess;
@@ -71,7 +71,7 @@ MStatus SetCurveKeys(
     curveFn.create(plug, curveType, nullptr, &status);
     if (!status)
     {
-        return MStatus::kFailure;
+        return maya_smd::ReportError(MString("maya_smd: failed to create animation curve for ") + plug.name(), status);
     }
 
     for (size_t index = 0; index < times.size(); ++index)
@@ -85,7 +85,7 @@ MStatus SetCurveKeys(
             &status);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_smd::ReportError(MString("maya_smd: failed to add animation key for ") + plug.name(), status);
         }
     }
 
@@ -146,7 +146,7 @@ MStatus SmdSceneImporter::createImportRoot()
     importRoot_ = rootTransformFn.create(MObject::kNullObj, &status);
     if (!status)
     {
-        return MStatus::kFailure;
+        return maya_smd::ReportError("maya_smd: failed to create SMD import root.", status);
     }
 
     rootTransformFn.setName("smd_import_root#");
@@ -175,7 +175,7 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
     const MObject jointObject = jointFn.create(findParentObject(node), &status);
     if (!status)
     {
-        return MStatus::kFailure;
+        return maya_smd::ReportError(MString("maya_smd: failed to create joint for node ") + node.name.c_str(), status);
     }
 
     jointFn.setName(SanitizeNodeName(node.name).c_str());
@@ -184,7 +184,7 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
     status = MDagPath::getAPathTo(jointObject, jointPath);
     if (!status)
     {
-        return MStatus::kFailure;
+        return maya_smd::ReportError(MString("maya_smd: failed to resolve DAG path for joint ") + node.name.c_str(), status);
     }
 
     jointPathsByBone_[node.index] = jointPath;
@@ -265,7 +265,7 @@ MStatus SmdSceneImporter::applyAnimation()
         MFnDependencyNode dependencyNodeFn(pathIt->second.node(), &status);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_smd::ReportError(MString("maya_smd: failed to access dependency node for animated joint ") + node.name.c_str(), status);
         }
 
         std::vector<double> times;
@@ -301,32 +301,32 @@ MStatus SmdSceneImporter::applyAnimation()
         const MPlug translateXPlug = dependencyNodeFn.findPlug("translateX", true, &status);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_smd::ReportError("maya_smd: failed to find translateX plug for animated joint.", status);
         }
         status = SetCurveKeys(translateXPlug, times, txValues, MFnAnimCurve::kAnimCurveTL);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_smd::ReportError("maya_smd: failed to find translateY plug for animated joint.", status);
         }
         const MPlug translateYPlug = dependencyNodeFn.findPlug("translateY", true, &status);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_smd::ReportError("maya_smd: failed to find translateZ plug for animated joint.", status);
         }
         status = SetCurveKeys(translateYPlug, times, tyValues, MFnAnimCurve::kAnimCurveTL);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_smd::ReportError("maya_smd: failed to find rotateX plug for animated joint.", status);
         }
         const MPlug translateZPlug = dependencyNodeFn.findPlug("translateZ", true, &status);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_smd::ReportError("maya_smd: failed to find rotateY plug for animated joint.", status);
         }
         status = SetCurveKeys(translateZPlug, times, tzValues, MFnAnimCurve::kAnimCurveTL);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_smd::ReportError("maya_smd: failed to find rotateZ plug for animated joint.", status);
         }
         const MPlug rotateXPlug = dependencyNodeFn.findPlug("rotateX", true, &status);
         if (!status)

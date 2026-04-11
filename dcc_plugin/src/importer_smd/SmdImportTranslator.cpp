@@ -3,6 +3,8 @@
 
 #include "../common_smd/MayaSmdCommon.h"
 
+#include <exception>
+
 void *SmdImportTranslator::Create()
 {
     return new SmdImportTranslator();
@@ -35,6 +37,17 @@ MPxFileTranslator::MFileKind SmdImportTranslator::identifyFile(const MFileObject
 
 MStatus SmdImportTranslator::reader(const MFileObject &fileObject, const MString &options, FileAccessMode)
 {
-    SmdImportSession session(fileObject, options);
-    return session.Run();
+    try
+    {
+        SmdImportSession session(fileObject, options);
+        return session.Run();
+    }
+    catch (const std::exception &exception)
+    {
+        return maya_smd::ReportError(MString("maya_smd: import failed with C++ exception: ") + exception.what());
+    }
+    catch (...)
+    {
+        return maya_smd::ReportError("maya_smd: import failed with an unknown host exception.");
+    }
 }

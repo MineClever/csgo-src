@@ -300,7 +300,7 @@
   - 任务同步（2026-04-11，debug log 注释校正）：当前 `AppendImportDebugLog()` 与 exporter 侧 `AppendDebugLog()` 的实现都已位于各自的 internals `.cpp` 中，translator 不再承载这类基础工具；本轮同步修正了 [DmxImportInternals.h](dcc_plugin/src/importer/DmxImportInternals.h) 中过时的实现位置注释，并再次确认 `cmake --build build\maya_dmx --config Release --target maya_dmx` 通过。
 
 ### 10. 基于现有 DMX 插件规格探索 Maya SMD 导入导出插件
-- 状态：进行中（2026-04-11 已完成独立 `maya_smd.mll` 骨架、SMD 文本 parser、最小 `nodes + skeleton` 导入导出、基础 `triangles` 导入导出，以及最小 `skinCluster` 导入导出；export animation 与专项回归仍未收口）
+- 状态：进行中（2026-04-11 已完成独立 `maya_smd.mll` 骨架、SMD 文本 parser、最小 `nodes + skeleton + triangles + skin` 导入导出、最小骨骼动画导出，以及 Maya 专项回归脚本接线；宿主实跑验证仍未收口）
 - 优先级：中
 - 目标目录：优先沿用 [dcc_plugin](dcc_plugin) 现有 Maya 插件工程骨架与目录组织经验，但 **SMD 必须编译为独立的 `.mll` 插件**，不能继续并入现有 `maya_dmx.mll`
 
@@ -330,7 +330,7 @@
     - bind pose 或当前 pose -> `skeleton` 首帧。✅（当前已支持最小静态导出）
     - polygon mesh -> `triangles`。✅（当前已支持最小静态网格导出）
     - 基础 skin 权重导出，与 `studiomdl` 可接受的骨骼索引/权重格式对齐。✅（当前已支持最小权重导出）
-    - 独立动画导出先只覆盖骨骼位移/旋转，不混入 facial、材质、约束和复杂 rig metadata。
+    - 独立动画导出先只覆盖骨骼位移/旋转，不混入 facial、材质、约束和复杂 rig metadata。✅（当前已支持最小多帧 `skeleton` 导出）
   - UI / workflow：
     - 继续沿用 translator + MEL option box + workflow command 结构，但使用独立的 SMD translator 名称、独立的 options key、独立的 plugin entry，避免和 DMX 设置串扰。
     - batch 回归入口复用 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 的整体框架，新增 SMD 专用 sample gate，而不是另写一套 mayapy 测试脚本。
@@ -379,6 +379,9 @@
   - 任务同步（2026-04-11，SMD export session 成员化继续收口）：已将 [SmdExportSession](dcc_plugin/src/exporter_smd/SmdExportSession.h) 内部的导出流程对象化，新增成员 `sceneExporter_` 与 `serialized_`，并把 `Run()` 拆成 `buildDocument()`、`serialize()`、`writeOutput()` 三段；当前 session 不再依赖 `Run()` 内的局部 exporter/serialized 临时变量，后续继续补导出选项、动画导出或错误上下文时可以直接挂到 session 状态上。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
   - 任务同步（2026-04-11，SMD 最小 skin importer 接通）：已继续扩展 [SmdMeshImporter](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp)，当前在按材质组建出基础 Maya mesh 后，会从 SMD vertex links 收集活跃骨骼、创建最小 `skinCluster`，并通过 `MFnSkinCluster::setWeights()` 恢复顶点权重。当前方案优先保证 `mesh + skeleton + weights` 最小链路可用，尚未扩展到更复杂的 bind pose extras、权重裁剪策略或 skin 导出。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
   - 任务同步（2026-04-11，SMD 最小 skin exporter 接通）：已继续扩展 [SmdSceneExporter](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)，当前在导出 `triangles` 时会检测上游 `skinCluster`，通过 `MFnSkinCluster::getWeights()` 收集 mesh 顶点权重，并按当前 exporter 的 `nodeIndexByPath_` 映射写回 SMD vertex links。当前方案优先保证 `mesh + skeleton + weights` 最小闭环成立，尚未扩展到多帧骨骼动画导出、复杂 bind pose 元数据或更激进的权重裁剪策略。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
+  - 任务同步（2026-04-11，SMD 最小骨骼动画导出接通）：已继续扩展 [SmdSceneExporter](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)，当前会收集导出节点上 `translateX/Y/Z` 与 `rotateX/Y/Z` 的 animCurve 关键帧时间并集，并按帧采样写出多帧 `skeleton` time blocks；无动画时仍回退为单帧静态 skeleton。当前方案优先保证 `vcaanim_VertexAnim.smd` 这类纯骨骼动画样例进入导出闭环，尚未扩展到更高层 clip/sequence 语义或更复杂的动画压缩/去噪策略。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
+  - 任务同步（2026-04-11，SMD 样例接入 Maya 专项回归）：已更新 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py)，把回归入口从“仅 DMX”扩展为按格式驱动的 importer/exporter 选择：DMX 继续跑 text/binary 双变体，SMD 新增 text 变体，并支持 `--plugin-smd`。同时已更新 [RunMayaBatchRegression.bat](dcc_plugin/RunMayaBatchRegression.bat)，当前会同时要求 `maya_dmx.mll` 与 `maya_smd.mll`，并把 `MostComplexSampleSet/chr_mesh.smd`、`MostComplexSampleSet/vcaanim_VertexAnim.smd`、`Ellis/DMX/RAGDOLL.smd` 三个 SMD 样例加入 Maya 批回归 case 列表。当前已完成脚本语法校验（`python -m py_compile dcc_plugin\tools\MayaBatchRegression.py`）与插件复编；宿主 mayapy 实跑结果仍需在真实 Maya 环境下补验证。
+  - 任务同步（2026-04-11，SMD 真实宿主回归排障中）：已在真实 `mayapy` 宿主下复现并修正两类 importer/exporter 问题。其一，`chr_mesh.smd` 初次导入失败已定位并修复为法线 face-vertex 索引错误，以及 `skinCluster -tsb` 命令式创建不稳定；当前 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已改为更细粒度报错、修正法线索引，并切换为 API 方式创建 `skinCluster`。其二，SMD exporter 先前在 `cmds.file(... exportSelected ...)` 返回前出现宿主级中止，当前已在 [SmdImportTranslator.cpp](dcc_plugin/src/importer_smd/SmdImportTranslator.cpp) / [SmdExportTranslator.cpp](dcc_plugin/src/exporter_smd/SmdExportTranslator.cpp) 补上 C++ 异常边界后恢复为可回到 Python 调用侧。基于真实回归结果，当前又确认了两条 roundtrip 差异：一是 exporter 需要优先保留原始 SMD `materialName`，目前已通过 `mayaSmdMaterialName` 自定义属性在 importer/exporter 间回传；二是 exporter 的“骨架节点收集”与“mesh 搜索根”仍未完全收口，`chr_mesh.smd` 现阶段在 `nodes`/`triangles` 联合回归上仍处于排障中，后续优先继续稳定 `meshRoots_` 路径并消除导出期宿主中止。
 
 ## 环境与工具链说明
 
