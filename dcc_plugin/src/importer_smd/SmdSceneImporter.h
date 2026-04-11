@@ -11,6 +11,7 @@
 #include <maya/MStatus.h>
 
 #include <unordered_map>
+#include <unordered_set>
 
 class SmdSceneImporter
 {
@@ -35,4 +36,5 @@ private:
     SmdImportOptions importOptions_;
     MObject importRoot_ = MObject::kNullObj;
     std::unordered_map<int, MDagPath> jointPathsByBone_;
+    std::unordered_set<int> reusedBoneIndices_;
 };

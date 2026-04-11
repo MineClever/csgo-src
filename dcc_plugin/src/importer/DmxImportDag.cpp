@@ -222,9 +222,17 @@ MStatus ImportDagHierarchyRecursive(
         return MStatus::kFailure;
     }
     context.importedDagPaths[ElementKey(dagElement)] = nodePath;
+    if (reusedExistingNode)
+    {
+        context.reusedDagElementKeys.insert(ElementKey(dagElement));
+    }
     if (const simple_dmx::Element *transformElement = FindAttributeElement(context.document, dagElement, "transform"))
     {
         context.importedTransformPaths[ElementKey(transformElement)] = nodePath;
+        if (reusedExistingNode)
+        {
+            context.reusedTransformElementKeys.insert(ElementKey(transformElement));
+        }
     }
     if (SanitizeNodeName(dagElement->name).size() >= 9 &&
         SanitizeNodeName(dagElement->name).rfind("_controls") == SanitizeNodeName(dagElement->name).size() - 9)

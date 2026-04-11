@@ -300,6 +300,10 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
 
         jointFn.setName(SanitizeNodeName(node.name).c_str());
     }
+    else
+    {
+        reusedBoneIndices_.insert(node.index);
+    }
 
     MDagPath jointPath;
     status = MDagPath::getAPathTo(jointObject, jointPath);
@@ -350,6 +354,12 @@ MStatus SmdSceneImporter::applyBindPose()
     const simple_smd::SkeletonFrame &bindFrame = document_->skeletonFrames.front();
     for (const simple_smd::Node &node : document_->nodes)
     {
+        if (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy) &&
+            reusedBoneIndices_.find(node.index) != reusedBoneIndices_.end())
+        {
+            continue;
+        }
+
         const simple_smd::SkeletonPose *pose = findPose(bindFrame, node.index);
         if (!pose)
         {
@@ -381,6 +391,12 @@ MStatus SmdSceneImporter::applyAnimation()
 
     for (const simple_smd::Node &node : document_->nodes)
     {
+        if (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy) &&
+            reusedBoneIndices_.find(node.index) != reusedBoneIndices_.end())
+        {
+            continue;
+        }
+
         const auto pathIt = jointPathsByBone_.find(node.index);
         if (pathIt == jointPathsByBone_.end())
         {

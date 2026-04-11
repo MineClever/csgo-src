@@ -8,6 +8,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace dmx_import_translator
@@ -32,6 +33,8 @@ struct ImportContext
     std::vector<std::string> jointOrder;
     std::unordered_map<std::string, MDagPath> importedDagPaths;
     std::unordered_map<std::string, MDagPath> importedTransformPaths;
+    std::unordered_set<std::string> reusedDagElementKeys;
+    std::unordered_set<std::string> reusedTransformElementKeys;
     std::unordered_map<std::string, std::vector<BlendShapeTargetBinding>> importedBlendShapeTargets;
     std::unordered_map<std::string, std::vector<ScalarAttributeBinding>> importedScalarTargets;
     std::vector<MDagPath> importedControlPaths;
