@@ -728,6 +728,29 @@ MStatus SmdMeshImporter::applySkinning(
         return MS::kSuccess;
     }
 
+    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
+    if (!status)
+    {
+        return maya_smd::ReportError(MString("maya_smd: failed to bind dependency node for skinCluster on ") + meshTransformPath.fullPathName(), status);
+    }
+
+    MPlug maintainMaxInfluencesPlug = skinClusterNode.findPlug("maintainMaxInfluences", true, &status);
+    if (status)
+    {
+        maintainMaxInfluencesPlug.setBool(false);
+    }
+    status = MS::kSuccess;
+
+    MPlug normalizeWeightsPlug = skinClusterNode.findPlug("normalizeWeights", true, &status);
+    if (status)
+    {
+        normalizeWeightsPlug.setShort(0);
+    }
+    status = MS::kSuccess;
+
+    MPlug maxInfluencesPlug = skinClusterNode.findPlug("maxInfluences", true, &status);
+    status = MS::kSuccess;
+
     MFnSingleIndexedComponent componentFn;
     MObject vertexComponent = componentFn.create(MFn::kMeshVertComponent, &status);
     if (!status)
@@ -753,9 +776,11 @@ MStatus SmdMeshImporter::applySkinning(
         weights[weightIndex] = 0.0f;
     }
 
+    unsigned int maxAssignedInfluenceCount = 0;
     for (unsigned int vertexIndex = 0; vertexIndex < vertexLinks.size(); ++vertexIndex)
     {
         float totalWeight = 0.0f;
+        unsigned int assignedInfluenceCount = 0;
         for (const simple_smd::TriangleWeight &weight : vertexLinks[vertexIndex])
         {
             const auto influenceSlotIt = boneToInfluenceSlot.find(weight.boneIndex);
@@ -769,6 +794,15 @@ MStatus SmdMeshImporter::applySkinning(
             totalWeight += static_cast<float>(weight.weight);
         }
 
+        for (unsigned int influenceSlot = 0; influenceSlot < influenceIndices.length(); ++influenceSlot)
+        {
+            if (weights[vertexIndex * influenceIndices.length() + influenceSlot] > 1.0e-6f)
+            {
+                ++assignedInfluenceCount;
+            }
+        }
+        maxAssignedInfluenceCount = std::max(maxAssignedInfluenceCount, assignedInfluenceCount);
+
         if (totalWeight > 1.0e-6f)
         {
             const float invTotalWeight = 1.0f / totalWeight;
@@ -777,6 +811,11 @@ MStatus SmdMeshImporter::applySkinning(
                 weights[vertexIndex * influenceIndices.length() + influenceSlot] *= invTotalWeight;
             }
         }
+    }
+
+    if (!maxInfluencesPlug.isNull())
+    {
+        maxInfluencesPlug.setInt(static_cast<int>(std::max(1u, maxAssignedInfluenceCount)));
     }
 
     status = skinClusterFn.setWeights(meshDagPath, vertexComponent, influenceIndices, weights, false);
