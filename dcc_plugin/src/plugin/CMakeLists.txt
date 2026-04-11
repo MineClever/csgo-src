@@ -9,4 +9,4 @@ target_link_libraries(maya_dmx PRIVATE
     maya_dmx_workflow
 )
 
-maya_dmx_configure_plugin_target(maya_dmx)
+maya_dmx_configure_plugin_target(maya_dmx maya_dmx)

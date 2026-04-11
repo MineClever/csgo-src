@@ -66,13 +66,13 @@ function(maya_dmx_apply_common_target_settings target_name)
     )
 endfunction()
 
-function(maya_dmx_configure_plugin_target target_name)
+function(maya_dmx_configure_plugin_target target_name output_name)
     maya_dmx_apply_common_target_settings(${target_name})
     target_link_libraries(${target_name} PRIVATE ${MAYA_DMX_LIBRARIES})
     set_target_properties(${target_name} PROPERTIES
         PREFIX ""
         SUFFIX ".mll"
-        OUTPUT_NAME "maya_dmx"
+        OUTPUT_NAME "${output_name}"
         ARCHIVE_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
         LIBRARY_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
         RUNTIME_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
