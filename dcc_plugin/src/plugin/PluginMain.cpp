@@ -79,7 +79,7 @@ MStatus initializePlugin(MObject object)
         kImportDefaultOptions);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     status = RegisterTranslator(
@@ -91,7 +91,7 @@ MStatus initializePlugin(MObject object)
     if (!status)
     {
         plugin.deregisterFileTranslator(maya_dmx::kImporterTranslatorName);
-        return status;
+        return MStatus::kFailure;
     }
 
     status = RegisterCommand(plugin, kWorkflowCommandName, &MayaDmxWorkflowCommand::Create, &MayaDmxWorkflowCommand::CreateSyntax);
@@ -99,7 +99,7 @@ MStatus initializePlugin(MObject object)
     {
         plugin.deregisterFileTranslator(maya_dmx::kExporterTranslatorName);
         plugin.deregisterFileTranslator(maya_dmx::kImporterTranslatorName);
-        return status;
+        return MStatus::kFailure;
     }
 
     return MS::kSuccess;

@@ -237,7 +237,7 @@ MStatus GetBatchManifestDirectory(std::filesystem::path &directory)
     MStatus status = GetMayaUserPrefDirectory(userPrefDirectory);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     directory = userPrefDirectory / kBatchManifestDirectoryName;
@@ -325,7 +325,7 @@ MStatus CollectOptionVars(const char *prefix, MStringArray &names)
     const MStatus status = MGlobal::executeCommand("optionVar -list", optionVarNames);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     const MString prefixString(prefix);
@@ -703,7 +703,7 @@ MStatus ListBatchManifestNames(MStringArray &names)
     MStatus status = GetBatchManifestDirectory(directory);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     std::vector<MString> sorted;
@@ -752,7 +752,7 @@ MStatus MigrateLegacyBatchManifests(MStringArray &migratedNames)
     MStatus status = ListLegacyBatchManifestNames(legacyNames);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (unsigned int index = 0; index < legacyNames.length(); ++index)
@@ -775,13 +775,13 @@ MStatus MigrateLegacyBatchManifests(MStringArray &migratedNames)
         status = LoadLegacyBatchManifest(name, entries);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         status = SaveBatchManifest(name, entries);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         migratedNames.append(name);
@@ -798,7 +798,7 @@ MStatus CleanupBatchManifestStorage(MStringArray &removedItems)
     MStatus status = GetBatchManifestDirectory(directory);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory))
@@ -828,7 +828,7 @@ MStatus CleanupBatchManifestStorage(MStringArray &removedItems)
     status = ListLegacyBatchManifestNames(legacyNames);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (unsigned int index = 0; index < legacyNames.length(); ++index)
@@ -840,7 +840,7 @@ MStatus CleanupBatchManifestStorage(MStringArray &removedItems)
             status = RemoveOptionVar(MakeOptionVarName(kBatchVarPrefix, name));
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
 
             removedItems.append(MString("legacy_optionVar:") + name);
@@ -862,7 +862,7 @@ MStatus ExecuteExport(const ExportPreset &preset, const MString &outputPath, boo
     MStatus status = EnsureParentDirectory(normalizedOutputPath);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     {
@@ -937,14 +937,14 @@ MStatus ExecuteBatchExport(const ExportPreset &preset, const MStringArray &entri
         if (!status)
         {
             MGlobal::setActiveSelectionList(originalSelection);
-            return status;
+            return MStatus::kFailure;
         }
 
         status = ExecuteExport(preset, JoinPath(preset.outputDirectory, entry.outputPath), true);
         if (!status)
         {
             MGlobal::setActiveSelectionList(originalSelection);
-            return status;
+            return MStatus::kFailure;
         }
     }
 

@@ -118,7 +118,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::ListPresetNames(names);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MString result;
@@ -133,7 +133,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::ListBatchManifestNames(names);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MString result;
@@ -148,7 +148,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::ListLegacyBatchManifestNames(names);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MString result;
@@ -163,7 +163,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::MigrateLegacyBatchManifests(names);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MString result;
@@ -178,7 +178,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::CleanupBatchManifestStorage(removedItems);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MString result;
@@ -196,7 +196,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::LoadPreset(name, preset);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         setResult(maya_dmx::SerializePreset(preset));
@@ -247,7 +247,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::SavePreset(preset);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         setResult(maya_dmx::SerializePreset(preset));
@@ -263,7 +263,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::LoadBatchManifest(name, entries);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MString result;
@@ -299,7 +299,7 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::SaveBatchManifest(name, entries);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MString result;
@@ -324,20 +324,20 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::LoadPreset(presetName, preset);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MStringArray entries;
         status = maya_dmx::LoadBatchManifest(batchName, entries);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         status = maya_dmx::ExecuteBatchExport(preset, entries);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MString result;
@@ -368,13 +368,13 @@ MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
         MStatus status = maya_dmx::LoadPreset(presetName, preset);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         status = maya_dmx::ExecuteExport(preset, outputPath, !exportAll);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         setResult(outputPath);

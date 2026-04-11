@@ -280,6 +280,7 @@
   - 任务同步（2026-04-11，回归门槛补齐）：DMX 批回归已补上动画专项门槛，当前未完成主线更新为 `simple_blendshape_animation` 几何保真、复杂复合动画样例验证、材质网络补全、facial/rig 语义扩展、workflow 历史 batch 清理，以及中期的 translator/common 层重构。
   - 任务同步（2026-04-11，宿主环境查询与批回归）：已新增宿主环境查询脚本与文档，确认当前机器满足基础验证条件；在 `MAYA_SKIP_USERSETUP_PY=1` 条件下重新运行 Maya 批回归，全套当前样例通过。
   - 任务同步（2026-04-11，workflow 收尾）：已为 `mayaDmxWorkflow` 新增 `-listLegacyBatches`、`-migrateLegacyBatches`、`-cleanupBatchStorage` 三个入口；batch 文件读取错误已带 manifest 路径/行号，批量导出错误已带 entry index。`cmake --build build\maya_dmx --config Release --target maya_dmx` 复编通过；Maya standalone 下已实测 legacy optionVar batch 可迁移到文件存储，且无效 `.batch` 文件可被清理。
+  - 任务同步（2026-04-11，显式失败返回整理）：已将 `dcc_plugin/src/plugin` 与 `dcc_plugin/src/workflow` 中 `if (!status) { return status; }` 形式的返回整理为显式 `return MStatus::kFailure;`；`cmake --build build\maya_dmx --config Release --target maya_dmx` 复编通过。
 
 ## 环境与工具链说明
 
