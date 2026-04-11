@@ -458,6 +458,11 @@ MStatus AnimationImporter::applyFloatAnimation(const MPlug &targetPlug, const si
         return MS::kSuccess;
     }
 
+    if (shouldSkipAppendScalarAnimation(targetPlug))
+    {
+        return MS::kSuccess;
+    }
+
     const std::vector<std::string> timeStrings = FindAttributeStringArray(logLayer, "times");
     const std::vector<std::string> valueStrings = FindAttributeStringArray(logLayer, "values");
     if (timeStrings.empty() || valueStrings.empty() || timeStrings.size() != valueStrings.size())
@@ -510,6 +515,19 @@ bool AnimationImporter::shouldSkipAppendTransformAnimation(const simple_dmx::Ele
     }
 
     return context_->reusedTransformElementKeys.find(ElementKey(targetElement)) != context_->reusedTransformElementKeys.end();
+}
+
+bool AnimationImporter::shouldSkipAppendScalarAnimation(const MPlug &targetPlug) const
+{
+    if (!dcc_import_policy::UsesAppendMissingObjects(context_->scenePolicy) || targetPlug.isNull())
+    {
+        return false;
+    }
+
+    MPlugArray sourceConnections;
+    MStatus status;
+    const bool hasConnections = targetPlug.connectedTo(sourceConnections, true, false, &status);
+    return status && hasConnections && sourceConnections.length() > 0;
 }
 
 MObject AnimationImporter::findExistingControlNode(const std::string &controlNodeName, const MObject &sceneRoot) const

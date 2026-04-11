@@ -12,6 +12,7 @@
 #include <maya/MFnAnimCurve.h>
 #include <maya/MObject.h>
 #include <maya/MPlug.h>
+#include <maya/MPlugArray.h>
 #include <maya/MStatus.h>
 
 namespace dmx_import_impl
@@ -58,6 +59,7 @@ private:
     MStatus applyFloatAnimation(const MPlug &targetPlug, const simple_dmx::Element *logLayer) const;
     MStatus applyFloatAnimation(const std::vector<MPlug> &targetPlugs, const simple_dmx::Element *logLayer) const;
     bool shouldSkipAppendTransformAnimation(const simple_dmx::Element *targetElement) const;
+    bool shouldSkipAppendScalarAnimation(const MPlug &targetPlug) const;
     MObject findExistingControlNode(const std::string &controlNodeName, const MObject &sceneRoot) const;
     MStatus registerImportedControlPath(const MObject &controlNodeObject);
     void registerScalarTargetBinding(

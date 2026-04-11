@@ -2,10 +2,14 @@
 
 #include "DmxImportTranslatorTypes.h"
 
-#include "../common/SimpleDmxDocument.h"
+#include <common/SimpleDmxDocument.h>
 
 #include <memory>
+#include <string>
+#include <unordered_map>
 
+#include <maya/MFnBlendShapeDeformer.h>
+#include <maya/MString.h>
 #include <maya/MObject.h>
 #include <maya/MPointArray.h>
 #include <maya/MStatus.h>
@@ -32,10 +36,27 @@ public:
         const MPointArray &basePoints);
 
 private:
+    struct ExistingBlendShapeInfo
+    {
+        MObject node = MObject::kNullObj;
+        MString nodeName;
+        std::unordered_map<std::string, unsigned int> targetIndicesByAlias;
+        unsigned int nextTargetIndex = 0;
+    };
+
     MStatus bindMeshContext(const MObject &meshObject, const MObject &meshParentObject);
     MObject findPrimaryMeshChildForDeformers(const MObject &transformObject) const;
     MStatus createSkinClusterWithApi(const MDagPathArray &influencePaths, MObject &skinClusterObject) const;
     MStatus restoreSkinClusterSettings(const MObject &skinClusterObject) const;
+    MObject findExistingBlendShapeNode(const std::string &blendShapeName) const;
+    ExistingBlendShapeInfo inspectExistingBlendShape(const MObject &blendShapeObject) const;
+    void registerBlendShapeTargetBinding(
+        const std::string &targetName,
+        const dmx_import_translator::BlendShapeTargetBinding &binding);
+    MStatus applyBlendShapeAliases(
+        const MFnDependencyNode &blendShapeDependency,
+        const MString &blendShapeNodeName,
+        const std::vector<std::pair<unsigned int, std::string>> &newAliasBindings) const;
 
     std::shared_ptr<ImportContext> context_;
     const simple_dmx::Document *document_ = nullptr;

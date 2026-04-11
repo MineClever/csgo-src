@@ -4,6 +4,7 @@
 #include "../common/MayaDmxCommon.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -30,6 +31,7 @@
 #include <maya/MStatus.h>
 #include <maya/MString.h>
 #include <maya/MStringArray.h>
+#include <maya/MItDependencyGraph.h>
 
 namespace dmx_import_impl
 {
@@ -112,7 +114,7 @@ MStatus DeformerImporter::createSkinClusterWithApi(
     {
         return MStatus::kFailure;
     }
-    originalMeshNode.setName(originalShapeName);
+    originalMeshNode.setName(originalShapeName, false, &status);
 
     MPlug intermediatePlug = originalMeshNode.findPlug("intermediateObject", true, &status);
     if (status)
@@ -368,6 +370,187 @@ MStatus DeformerImporter::restoreSkinClusterSettings(const MObject &skinClusterO
         {
             normalizeWeightsPlug.setShort(static_cast<short>(values[0]));
         }
+    }
+
+    return MS::kSuccess;
+}
+
+MObject DeformerImporter::findExistingBlendShapeNode(const std::string &blendShapeName) const
+{
+    if (!dcc_import_policy::UsesAppendMissingObjects(context_->scenePolicy) || blendShapeName.empty() || meshObject_.isNull())
+    {
+        return MObject::kNullObj;
+    }
+
+    MObject rootObject = meshObject_;
+    MStatus status;
+    MItDependencyGraph iterator(
+        rootObject,
+        MFn::kBlendShape,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (; !iterator.isDone(); iterator.next())
+    {
+        MObject currentNode = iterator.currentItem(&status);
+        if (!status || currentNode.isNull())
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        MFnDependencyNode dependencyNode(currentNode, &status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        if (dcc_import_policy::MatchesNodeNameForAppend(context_->scenePolicy, dependencyNode.name().asChar(), blendShapeName))
+        {
+            return currentNode;
+        }
+    }
+
+    return MObject::kNullObj;
+}
+
+DeformerImporter::ExistingBlendShapeInfo DeformerImporter::inspectExistingBlendShape(const MObject &blendShapeObject) const
+{
+    ExistingBlendShapeInfo info;
+    if (blendShapeObject.isNull())
+    {
+        return info;
+    }
+
+    MStatus status;
+    MFnDependencyNode dependencyNode(blendShapeObject, &status);
+    if (!status)
+    {
+        return info;
+    }
+
+    info.node = blendShapeObject;
+    info.nodeName = dependencyNode.name();
+
+    MPlug weightArrayPlug = dependencyNode.findPlug("weight", true, &status);
+    if (!status || weightArrayPlug.isNull())
+    {
+        return info;
+    }
+
+    unsigned int maxLogicalIndex = 0;
+    bool hasAnyTarget = false;
+    for (unsigned int elementIndex = 0; elementIndex < weightArrayPlug.numElements(); ++elementIndex)
+    {
+        MPlug weightElement = weightArrayPlug.elementByPhysicalIndex(elementIndex, &status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        const unsigned int logicalIndex = weightElement.logicalIndex(&status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        hasAnyTarget = true;
+        maxLogicalIndex = std::max(maxLogicalIndex, logicalIndex);
+    }
+    info.nextTargetIndex = hasAnyTarget ? (maxLogicalIndex + 1) : 0;
+
+    MStringArray aliasPairs;
+    MString queryCommand("aliasAttr -q \"");
+    queryCommand += info.nodeName;
+    queryCommand += "\"";
+    status = MGlobal::executeCommand(queryCommand, aliasPairs, false, false);
+    if (!status)
+    {
+        return info;
+    }
+
+    for (unsigned int pairIndex = 0; pairIndex + 1 < aliasPairs.length(); pairIndex += 2)
+    {
+        const std::string aliasName = aliasPairs[pairIndex].asChar();
+        const std::string plugName = aliasPairs[pairIndex + 1].asChar();
+        const size_t leftBracket = plugName.find('[');
+        const size_t rightBracket = plugName.find(']', leftBracket);
+        if (leftBracket == std::string::npos || rightBracket == std::string::npos || rightBracket <= leftBracket + 1)
+        {
+            continue;
+        }
+
+        const unsigned int logicalIndex = static_cast<unsigned int>(std::strtoul(
+            plugName.substr(leftBracket + 1, rightBracket - leftBracket - 1).c_str(),
+            nullptr,
+            10));
+        info.targetIndicesByAlias[aliasName] = logicalIndex;
+        info.nextTargetIndex = std::max(info.nextTargetIndex, logicalIndex + 1);
+    }
+
+    return info;
+}
+
+void DeformerImporter::registerBlendShapeTargetBinding(
+    const std::string &targetName,
+    const dmx_import_translator::BlendShapeTargetBinding &binding)
+{
+    if (targetName.empty() || binding.node.isNull())
+    {
+        return;
+    }
+
+    std::vector<BlendShapeTargetBinding> &bindings = context_->importedBlendShapeTargets[targetName];
+    for (const BlendShapeTargetBinding &existingBinding : bindings)
+    {
+        if (existingBinding.node == binding.node && existingBinding.weightIndex == binding.weightIndex)
+        {
+            return;
+        }
+    }
+
+    bindings.push_back(binding);
+}
+
+MStatus DeformerImporter::applyBlendShapeAliases(
+    const MFnDependencyNode &blendShapeDependency,
+    const MString &blendShapeNodeName,
+    const std::vector<std::pair<unsigned int, std::string>> &newAliasBindings) const
+{
+    MStatus weightPlugStatus;
+    MPlug weightArrayPlug = blendShapeDependency.findPlug("weight", true, &weightPlugStatus);
+    if (!weightPlugStatus || weightArrayPlug.isNull())
+    {
+        return MS::kSuccess;
+    }
+
+    for (const std::pair<unsigned int, std::string> &binding : newAliasBindings)
+    {
+        MStatus elementStatus;
+        MPlug weightElement = weightArrayPlug.elementByLogicalIndex(binding.first, &elementStatus);
+        if (!elementStatus)
+        {
+            continue;
+        }
+
+        MString attrName = weightElement.partialName();
+        MString aliasCmd("aliasAttr ");
+        aliasCmd += binding.second.c_str();
+        aliasCmd += " \"";
+        aliasCmd += blendShapeNodeName;
+        aliasCmd += ".";
+        aliasCmd += attrName;
+        aliasCmd += "\"";
+        MGlobal::executeCommand(aliasCmd, false, false);
     }
 
     return MS::kSuccess;
@@ -673,13 +856,26 @@ MStatus DeformerImporter::ApplyDeltaStates(
 
     for (const DeltaStateGroup &group : deltaStateGroups)
     {
+        const std::string blendShapeName = SanitizeNodeName(group.nodeName);
+        ExistingBlendShapeInfo existingBlendShape = inspectExistingBlendShape(findExistingBlendShapeNode(blendShapeName));
         MStringArray targetTransforms;
         std::vector<MObject> targetMeshObjects;
-        std::vector<std::string> targetNames;
+        std::vector<std::pair<unsigned int, std::string>> newTargetBindings;
         for (const simple_dmx::Element *deltaState : group.states)
         {
             if (!deltaState)
             {
+                continue;
+            }
+
+            const std::string targetName =
+                deltaState->name.empty() ? std::string("delta") : SanitizeNodeName(deltaState->name);
+            auto existingTargetIt = existingBlendShape.targetIndicesByAlias.find(targetName);
+            if (existingTargetIt != existingBlendShape.targetIndicesByAlias.end())
+            {
+                registerBlendShapeTargetBinding(
+                    targetName,
+                    BlendShapeTargetBinding{existingBlendShape.node, existingTargetIt->second});
                 continue;
             }
 
@@ -752,31 +948,47 @@ MStatus DeformerImporter::ApplyDeltaStates(
 
             targetTransforms.append(duplicateResult[0]);
             targetMeshObjects.push_back(duplicateMeshObject);
-            targetNames.push_back(deltaState->name.empty() ? std::string("delta") : SanitizeNodeName(deltaState->name));
+            newTargetBindings.push_back({existingBlendShape.nextTargetIndex++, targetName});
         }
 
-        if (targetTransforms.length() == 0)
+        if (targetTransforms.length() == 0 && existingBlendShape.node.isNull())
         {
             continue;
         }
 
         MFnBlendShapeDeformer blendShapeFn;
-        const MObject blendShapeObject = blendShapeFn.create(meshObject_, MFnBlendShapeDeformer::kLocalOrigin, &status);
-        if (!status)
+        MObject blendShapeObject = existingBlendShape.node;
+        MFnDependencyNode blendShapeDependency;
+        MString blendShapeNodeName;
+        const bool reusedExistingBlendShape = !blendShapeObject.isNull();
+        if (!reusedExistingBlendShape)
         {
-            return maya_dmx::ReportError(MString("maya_dmx: failed to create blendShape for ") + meshParentPath_.fullPathName(), status);
+            blendShapeObject = blendShapeFn.create(meshObject_, MFnBlendShapeDeformer::kLocalOrigin, &status);
+            if (!status)
+            {
+                return maya_dmx::ReportError(MString("maya_dmx: failed to create blendShape for ") + meshParentPath_.fullPathName(), status);
+            }
+
+            blendShapeDependency.setObject(blendShapeObject);
+            if (blendShapeDependency.object().isNull())
+            {
+                return MStatus::kFailure;
+            }
+            blendShapeDependency.setName(blendShapeName.c_str(), false, &status);
+            blendShapeNodeName = blendShapeDependency.name();
+        }
+        else
+        {
+            blendShapeFn.setObject(blendShapeObject);
+            blendShapeDependency.setObject(blendShapeObject);
+            if (blendShapeDependency.object().isNull())
+            {
+                return MStatus::kFailure;
+            }
+            blendShapeNodeName = blendShapeDependency.name();
         }
 
-        const std::string blendShapeName = SanitizeNodeName(group.nodeName);
-        MFnDependencyNode blendShapeDependency(blendShapeObject, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        blendShapeDependency.setName(blendShapeName.c_str());
-        const MString blendShapeNodeName = blendShapeDependency.name();
-
-        if (!group.states.empty())
+        if (!reusedExistingBlendShape && !group.states.empty())
         {
             const simple_dmx::Element *metadataState = group.states.front();
             MPlug envelopePlug = blendShapeDependency.findPlug("envelope", true, &status);
@@ -802,42 +1014,33 @@ MStatus DeformerImporter::ApplyDeltaStates(
 
         for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
         {
-            status = blendShapeFn.addTarget(meshObject_, static_cast<int>(targetIndex), targetMeshObjects[targetIndex], 1.0);
+            status = blendShapeFn.addTarget(
+                meshObject_,
+                static_cast<int>(newTargetBindings[targetIndex].first),
+                targetMeshObjects[targetIndex],
+                1.0);
             if (!status)
             {
                 return maya_dmx::ReportError(MString("maya_dmx: failed to add blendShape target to ") + blendShapeNodeName, status);
             }
         }
 
-        MStatus weightPlugStatus;
-        MPlug weightArrayPlug = blendShapeDependency.findPlug("weight", true, &weightPlugStatus);
-        const bool hasWeightPlug = weightPlugStatus && !weightArrayPlug.isNull();
         for (unsigned int targetIndex = 0; targetIndex < targetTransforms.length(); ++targetIndex)
         {
-            context_->importedBlendShapeTargets[targetNames[targetIndex]].push_back(BlendShapeTargetBinding{blendShapeObject, targetIndex});
+            registerBlendShapeTargetBinding(
+                newTargetBindings[targetIndex].second,
+                BlendShapeTargetBinding{blendShapeObject, newTargetBindings[targetIndex].first});
 
             MString deleteCommand("delete \"");
             deleteCommand += targetTransforms[targetIndex];
             deleteCommand += "\"";
             MGlobal::executeCommand(deleteCommand, false, false);
+        }
 
-            if (hasWeightPlug)
-            {
-                MStatus elemStatus;
-                MPlug weightElemPlug = weightArrayPlug.elementByLogicalIndex(targetIndex, &elemStatus);
-                if (elemStatus)
-                {
-                    MString attrName = weightElemPlug.partialName();
-                    MString aliasCmd("aliasAttr ");
-                    aliasCmd += targetNames[targetIndex].c_str();
-                    aliasCmd += " \"";
-                    aliasCmd += blendShapeNodeName;
-                    aliasCmd += ".";
-                    aliasCmd += attrName;
-                    aliasCmd += "\"";
-                    MGlobal::executeCommand(aliasCmd, false, false);
-                }
-            }
+        status = applyBlendShapeAliases(blendShapeDependency, blendShapeNodeName, newTargetBindings);
+        if (!status)
+        {
+            return MStatus::kFailure;
         }
     }
 
