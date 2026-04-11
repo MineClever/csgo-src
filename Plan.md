@@ -300,94 +300,123 @@
   - 任务同步（2026-04-11，debug log 注释校正）：当前 `AppendImportDebugLog()` 与 exporter 侧 `AppendDebugLog()` 的实现都已位于各自的 internals `.cpp` 中，translator 不再承载这类基础工具；本轮同步修正了 [DmxImportInternals.h](dcc_plugin/src/importer/DmxImportInternals.h) 中过时的实现位置注释，并再次确认 `cmake --build build\maya_dmx --config Release --target maya_dmx` 通过。
 
 ### 10. 基于现有 DMX 插件规格探索 Maya SMD 导入导出插件
-- 状态：进行中（2026-04-11 已完成独立 `maya_smd.mll` 骨架、SMD 文本 parser、最小 `nodes + skeleton + triangles + skin` 导入导出、最小骨骼动画导出，以及 Maya 专项回归脚本接线；宿主实跑验证仍未收口）
+- 状态：进行中
 - 优先级：中
-- 目标目录：优先沿用 [dcc_plugin](dcc_plugin) 现有 Maya 插件工程骨架与目录组织经验，但 **SMD 必须编译为独立的 `.mll` 插件**，不能继续并入现有 `maya_dmx.mll`
+- 总目标：
+  - 在 [dcc_plugin](dcc_plugin) 内形成一套清晰的 Valve Maya 插件路线：`maya_dmx.mll` 负责 DMX，`maya_smd.mll` 负责 SMD，二者共享宿主基础设施，但独立构建、独立加载、独立回归、独立发布。
+  - 让 DMX / SMD 后续都具备“可单文件导入导出”和“可混合并入现有场景”两条工作流，并把后者作为中期主线能力，而不是只停留在单次导入包装根模式。
 
-- 立项依据：
-  - 现有 DMX 插件已经沉淀出可复用的 Maya 宿主集成资产：构建/部署脚本、module 安装、file translator 注册、MEL option box、workflow 命令、batch 回归入口、交互宿主验证入口；这些基础设施可以复用，但二进制产物必须与 DMX 插件解耦。
-  - 仓库现有 `studiomdl` 已明确保留 SMD 一线解析入口；[v1support.cpp](src/utils/studiomdl/v1support.cpp) 的 `Load_SMD()` 当前直接支持 `version / nodes / skeleton / triangles / vertexanimation` 五类主段落，可作为 SMD Maya 插件的最低兼容规格基线。
-  - 仓库样例集中已存在可直接复用的 SMD/VTA 资产：`dcc_plugin/samples/MostComplexSampleSet/chr_mesh.smd`、`dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.smd`、`dcc_plugin/samples/Ellis/DMX/RAGDOLL.smd`、`dcc_plugin/samples/MostComplexSampleSet/flex.vta`，足以支撑第一阶段导入验证与后续最小 roundtrip 回归。
-  - [dmemodel.h](src/public/movieobjects/dmemodel.h) 已明确说明 `upAxis=Z` 的 DmeModel 与典型 SMD 坐标系兼容；这意味着 SMD 插件与 DMX 插件之间可以共享一部分坐标系策略，但不能直接假设使用 Maya 的默认 `Y-up` 数据布局。
-  - 当前 [dcc_plugin/CMakeLists.txt](dcc_plugin/CMakeLists.txt) 仍以单一 DMX 插件工程为中心；如果把 SMD 继续塞进同一 `.mll`，translator 注册、默认 options、安装产物、调试入口和故障隔离都会与 DMX 互相污染。
+- 范围边界：
+  - 当前主线只覆盖 `nodes / skeleton / triangles / basic skin / basic animation`。
+  - 不把 `vertexanimation`、`VTA/flex`、复杂材质网络、blendShape/facial rig、QC 联动、统一 DMX/SMD DOM 纳入当前主线里程碑。
+  - SMD 必须保持独立 `.mll`，不能并入 `maya_dmx.mll`。
 
-- 规格探索结论：
-  - SMD 更适合定义为“比 DMX 更窄、更旧、更偏编译输入格式”的插件目标，而不是 DMX 插件的简化开关模式。
-  - SMD 插件应作为 **独立加载、独立发布、独立回归** 的 Maya 插件存在；共享的是源码层 helper 与宿主接入经验，不是统一 `.mll`。
-  - 第一阶段应聚焦 `skeleton + mesh + basic skin + transform animation`，并把 `vertexanimation` 视为单独能力面；不要一开始就试图复制 DMX 插件已有的材质网络、blendShape、metadata、workflow 语义深度。
-  - SMD 是文本格式，适合优先实现稳定的 parser / writer / roundtrip；没有必要先做类似 `SimpleDmx*` 那样的通用 DOM 大层。
-  - facial/flex 不应混入首批 SMD 范围。Valve 资产链路里 flex 更接近 `VTA + QC` 协同而不是“单靠 SMD 一把梭”，因此应作为第二阶段扩展，不要在首期计划里与 mesh/skeleton 主线绑定。
+- 统一设计约束：
+  - DMX / SMD 都要允许读取 Maya 当前名称空间设置。
+  - DMX / SMD importer 后续都要支持两种根策略：
+    - 导入到包装根
+    - 直接导入到当前场景
+  - 一旦“场景根导入”和“自动旋转 / 轴线修正 / 自定义欧拉旋转”冲突，优先保证场景混合导入正确；必要时关闭或弱化旋转/轴向兼容。
+  - 导入策略应向 FBX 导入器靠拢，至少预留：
+    - 更新当前场景
+    - 仅附加当前场景不存在的对象
+    - 仅导入动画
+    - 将动画写入动画层
+  - 在“附加”模式下，如果当前场景已存在同名父级，则应在该父级下继续创建缺失子层级，而不是重新起一套平级树。
+  - 如果当前场景已存在同名对象，动画导入优先走动画层，而不是直接覆盖 base animation。
 
-- 建议实现边界（第一阶段）：
-  - importer：
-    - `nodes` -> Maya joint / transform 层级。✅（当前已按 joint 层级导入）
-    - `skeleton` bind pose -> Maya 局部 transform。✅（当前已支持首帧 pose 应用）
-    - `triangles` -> Maya mesh、法线、UV、按材质名分组的基础 shading assignment。
-    - 顶点骨骼权重 -> `skinCluster` 最小恢复。✅（当前已支持最小权重恢复）
-    - 单文件骨骼动画 SMD -> Maya `animCurveTL / animCurveTA` 最小导入。✅（当前已为多帧 `skeleton` 生成最小平移/旋转曲线）
-  - exporter：
-    - Maya joint hierarchy -> `nodes`。✅（当前已支持）
-    - bind pose 或当前 pose -> `skeleton` 首帧。✅（当前已支持最小静态导出）
-    - polygon mesh -> `triangles`。✅（当前已支持最小静态网格导出）
-    - 基础 skin 权重导出，与 `studiomdl` 可接受的骨骼索引/权重格式对齐。✅（当前已支持最小权重导出）
-    - 独立动画导出先只覆盖骨骼位移/旋转，不混入 facial、材质、约束和复杂 rig metadata。✅（当前已支持最小多帧 `skeleton` 导出）
-  - UI / workflow：
-    - 继续沿用 translator + MEL option box + workflow command 结构，但使用独立的 SMD translator 名称、独立的 options key、独立的 plugin entry，避免和 DMX 设置串扰。
-    - batch 回归入口复用 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 的整体框架，新增 SMD 专用 sample gate，而不是另写一套 mayapy 测试脚本。
-    - 安装与加载层要能同时存在 `maya_dmx.mll` 与未来的 `maya_smd.mll`，并支持分别加载、分别验证、分别卸载。
+- 关键风险：
+  - SMD 的真实兼容面最终要以 `studiomdl` 的读取容忍度为准，不能只按民间 SMD 描述实现。
+  - SMD 坐标系和 Maya `Y-up` 的冲突比 DMX 更尖锐，且会与“场景根导入”直接打架。
+  - “更新当前场景 / 附加缺失对象 / 动画层导入”会把同名判断、命名空间映射、层级匹配复杂度显著抬高，必须先统一匹配规则。
+  - SMD 材质语义薄，当前只适合做最小绑定，不适合过早承诺完整材质网络恢复。
 
-- 明确不纳入第一阶段的内容：
-  - 完整材质网络、Hypershade 图恢复、Valve 专有 metadata。
-  - `DmeCombinationOperator`、blendShape/facial rig 语义对齐。
-  - QC 解析、QC authoring、SMD/VTA/QC 联动工作流。
-  - 通用 DMX/SMD 统一 DOM 或“一个 translator 同时吞多种 Valve 格式”的大一统架构。
-  - 把 SMD translator 直接编进现有 `maya_dmx.mll` 的混合方案。
+- 里程碑：
+  - 里程碑 M1：插件骨架与独立二进制
+    - 目标：建立 `maya_smd.mll`，与 DMX 二进制隔离，并复用现有 Maya 插件工程宿主基础设施。
+    - 出口条件：
+      - `maya_smd.mll` 可独立构建、独立加载、独立卸载
+      - 构建/部署脚本同时支持 DMX 和 SMD
+      - SMD 有独立 translator、独立 MEL 入口、独立 options 命名空间
+    - 状态：已基本完成
 
-- 主要技术风险：
-  - SMD 实际兼容面最终要以 `studiomdl` 的历史容忍度为准，而不是仅凭网络上常见民间 SMD 说明；后续实现时需要继续对照 `Grab_Nodes`、`Grab_Animation`、`Grab_Triangles`、`Grab_Vertexanimation` 的实际读取规则补齐细节。
-  - 坐标系风险高于 DMX。SMD 常见约定与 Maya `Y-up` 不同，而仓库现有注释已说明“兼容典型 SMD 的 Z-up”与“引擎空间”仍不是一回事，导入导出都必须显式定义轴修正策略。
-  - SMD 的材质语义很薄，通常只有 triangle material 名；如果导出端过早绑定 Maya 材质网络，将导致回归标准模糊并拖慢主线。
-  - `vertexanimation` 与 `VTA/flex` 边界容易混淆；首阶段必须先把两者拆开，否则测试样例和代码结构都会失焦。
-  - 如果继续共享单一 `.mll`，任何 SMD 回归失败、注册异常或 Maya 加载崩溃都会直接拖累已稳定的 DMX 插件，因此二进制隔离本身就是风险控制要求。
+  - 里程碑 M2：SMD 最小格式闭环
+    - 目标：打通 SMD 的最小导入导出主线。
+    - 出口条件：
+      - importer 支持 `nodes / skeleton / triangles / basic skin / basic animation`
+      - exporter 支持 `nodes / skeleton / triangles / basic skin / basic animation`
+      - SMD 在 Maya 内具备最小材质绑定与基本可视化
+      - `chr_mesh.smd`、`vcaanim_VertexAnim.smd`、`RAGDOLL.smd` 能进入批回归
+    - 状态：大部分完成，真实宿主 roundtrip 仍未收口
 
-- 分阶段计划：
-  - 第一阶段：完成 SMD 规格固化与脚手架接入。
-    - 在 `dcc_plugin` 内增加独立的 SMD importer/exporter translator、options script、默认参数和样例登记。
-    - 新增独立插件目标与产物命名，预期形态为 `maya_smd.mll`；不要把目标继续挂在 `maya_dmx` 下。
-    - 规划独立安装路径、独立 module 清单项或独立 plugin 注册入口，确保 SMD/DMX 可以并存加载。
-    - 整理最小样例矩阵：`chr_mesh.smd`、`vcaanim_VertexAnim.smd`、`RAGDOLL.smd`。
-    - 明确坐标系、骨骼索引、法线/UV、材质名的回归判据。
-  - 第二阶段：完成 mesh/skeleton 最小闭环。
-    - 跑通 `导入 -> Maya 导出 -> 再导入` 的 mesh topology、joint 层级、skin influence 数量三重回归。
-    - 让 SMD 回归成为独立门槛，避免后续改动退回“只能导 mesh，不能导骨架/权重”。
-  - 第三阶段：补动画闭环。
-    - 用 `vcaanim_VertexAnim.smd` 或等价纯骨骼动画样例建立独立 animation gate。
-    - 明确动画 SMD 与静态 mesh SMD 是否拆分导出入口，避免 UI 与回归路径混杂。
-  - 第四阶段：评估扩展项。
-    - 再决定是否引入 `vertexanimation`、`VTA`、更强的材质名约束、以及和 DMX workflow 的更深层共用抽象。
+  - 里程碑 M3：真实宿主回归收口
+    - 目标：把当前“能导入 / 能导出”推进到“能稳定 roundtrip”。
+    - 出口条件：
+      - `chr_mesh.smd` 的 `nodes / triangles / skin / materialName` roundtrip 稳定
+      - `vcaanim_VertexAnim.smd` 的最小动画 roundtrip 稳定
+      - SMD exporter 不再在真实宿主下出现导出期中止或 root/mesh 遍历歧义
+      - SMD 批回归有明确 pass/fail 门槛
+    - 当前阻塞：
+      - `chr_mesh.smd` 的 `nodes / triangles` 联合回归仍在排障
+      - exporter 的骨架节点收集与 mesh 搜索根仍需继续收口
 
-- 落地约束：
-  - 复用现有 [MayaDmxCommon.h](dcc_plugin/src/common/MayaDmxCommon.h) 一类宿主接入模式与 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 的回归框架，但必须为 SMD 建立独立的 plugin target、独立的 `initializePlugin/uninitializePlugin` 入口和独立的二进制命名。
-  - 若后续开始实现，优先拆出 `src/common` 下与格式无关的 Maya helper，再新增 `src/common_smd`、`src/plugin_smd`、`src/importer_smd`、`src/exporter_smd` 或等价清晰边界；不要把 SMD 逻辑继续堆进现有 DMX translator 文件，也不要让两者共享同一个 plugin main。
-  - 计划默认以 Maya 2022.5、Win32/Win64 宿主限制、当前 `dcc_plugin` 工程约束为准，不额外引入 Python-only 导出器作为主线方案。
-  - DMX 与 SMD 的安装脚本、module 部署、MEL 脚本命名、optionVar 前缀、workflow 命令名都要预留隔离命名空间，避免双插件并存时出现覆盖或串配置。
-  - 目录命名保持一致性：SMD 公共层目录统一使用 `common_smd`，不要再引入 `smd_common` 这类倒置命名。
-  - 任务同步（2026-04-11，SMD 骨架起步）：已在 `dcc_plugin` 内新增独立的 `maya_smd` 构建目标、[common_smd](dcc_plugin/src/common_smd)、[importer_smd](dcc_plugin/src/importer_smd)、[exporter_smd](dcc_plugin/src/exporter_smd)、[plugin_smd](dcc_plugin/src/plugin_smd) 四组骨架目录；当前 `cmake -S dcc_plugin -B build\maya_dmx -A x64` 与 `cmake --build build\maya_dmx --config Release --target maya_smd` 已通过，产物输出为 [maya_smd.mll](dcc_plugin/bin/Release/maya_smd.mll)。当前 importer/exporter session 仍只做扩展名校验与 stub 失败返回，下一步再补真实 SMD parser / writer。
-  - 任务同步（2026-04-11，SMD importer 最小落地）：已在 [common_smd](dcc_plugin/src/common_smd) 新增 [SimpleSmdDocument.h](dcc_plugin/src/common_smd/SimpleSmdDocument.h) / [SimpleSmdDocument.cpp](dcc_plugin/src/common_smd/SimpleSmdDocument.cpp)，支持 `version / nodes / skeleton / triangles / vertexanimation` 的文本解析与基础序列化；在 [importer_smd](dcc_plugin/src/importer_smd) 新增 [SmdSceneImporter.h](dcc_plugin/src/importer_smd/SmdSceneImporter.h) / [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp)，当前已能把 `nodes` 创建为 Maya joint 层级、应用 `skeleton` 首帧 pose，并为多帧 `skeleton` 写入最小平移/旋转动画曲线。`triangles` 与 `vertexanimation` 当前仅完成解析并在导入时给出显式 warning，mesh、skin、材质和 exporter 主流程仍待继续实现。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
-  - 任务同步（2026-04-11，SMD mesh importer 与最小 exporter 起步）：已在 [importer_smd](dcc_plugin/src/importer_smd) 新增 [SmdMeshImporter.h](dcc_plugin/src/importer_smd/SmdMeshImporter.h) / [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp)，当前可按材质名把 `triangles` 拆成基础 Maya mesh，并恢复点位、法线、UV；顶点权重当前仅检测并告警，skinCluster 尚未恢复。与此同时已在 [exporter_smd](dcc_plugin/src/exporter_smd) 新增 [SmdSceneExporter.h](dcc_plugin/src/exporter_smd/SmdSceneExporter.h) / [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)，当前已能从 Maya DAG 收集最小 joint/transform 层级并写出 `nodes + skeleton` 文本 SMD，也已能把 Maya mesh 按面三角化后导出为最小 `triangles` 段，恢复基础材质名、点位、法线与 UV。skin 权重导出和多帧动画导出仍待继续实现。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
-  - 任务同步（2026-04-11，SMD exporter 对象状态收口）：已将 [SmdSceneExporter](dcc_plugin/src/exporter_smd/SmdSceneExporter.h) 的 `simple_smd::Document` 从 `Build()` 的外部引用参数改为类成员 `document_`，并新增只读访问入口 `document()`；当前 exporter 已改为“内部构建状态 + 外部读取序列化结果”的对象模式，减少 `nodes / skeleton / triangles` 构建阶段的来回透传。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
-  - 任务同步（2026-04-11，SMD export session 成员化继续收口）：已将 [SmdExportSession](dcc_plugin/src/exporter_smd/SmdExportSession.h) 内部的导出流程对象化，新增成员 `sceneExporter_` 与 `serialized_`，并把 `Run()` 拆成 `buildDocument()`、`serialize()`、`writeOutput()` 三段；当前 session 不再依赖 `Run()` 内的局部 exporter/serialized 临时变量，后续继续补导出选项、动画导出或错误上下文时可以直接挂到 session 状态上。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
-  - 任务同步（2026-04-11，SMD 最小 skin importer 接通）：已继续扩展 [SmdMeshImporter](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp)，当前在按材质组建出基础 Maya mesh 后，会从 SMD vertex links 收集活跃骨骼、创建最小 `skinCluster`，并通过 `MFnSkinCluster::setWeights()` 恢复顶点权重。当前方案优先保证 `mesh + skeleton + weights` 最小链路可用，尚未扩展到更复杂的 bind pose extras、权重裁剪策略或 skin 导出。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
-  - 任务同步（2026-04-11，SMD 最小 skin exporter 接通）：已继续扩展 [SmdSceneExporter](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)，当前在导出 `triangles` 时会检测上游 `skinCluster`，通过 `MFnSkinCluster::getWeights()` 收集 mesh 顶点权重，并按当前 exporter 的 `nodeIndexByPath_` 映射写回 SMD vertex links。当前方案优先保证 `mesh + skeleton + weights` 最小闭环成立，尚未扩展到多帧骨骼动画导出、复杂 bind pose 元数据或更激进的权重裁剪策略。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
-  - 任务同步（2026-04-11，SMD 最小骨骼动画导出接通）：已继续扩展 [SmdSceneExporter](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)，当前会收集导出节点上 `translateX/Y/Z` 与 `rotateX/Y/Z` 的 animCurve 关键帧时间并集，并按帧采样写出多帧 `skeleton` time blocks；无动画时仍回退为单帧静态 skeleton。当前方案优先保证 `vcaanim_VertexAnim.smd` 这类纯骨骼动画样例进入导出闭环，尚未扩展到更高层 clip/sequence 语义或更复杂的动画压缩/去噪策略。`cmake --build build\maya_dmx --config Release --target maya_smd` 已复编通过。
-  - 任务同步（2026-04-11，SMD 样例接入 Maya 专项回归）：已更新 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py)，把回归入口从“仅 DMX”扩展为按格式驱动的 importer/exporter 选择：DMX 继续跑 text/binary 双变体，SMD 新增 text 变体，并支持 `--plugin-smd`。同时已更新 [RunMayaBatchRegression.bat](dcc_plugin/RunMayaBatchRegression.bat)，当前会同时要求 `maya_dmx.mll` 与 `maya_smd.mll`，并把 `MostComplexSampleSet/chr_mesh.smd`、`MostComplexSampleSet/vcaanim_VertexAnim.smd`、`Ellis/DMX/RAGDOLL.smd` 三个 SMD 样例加入 Maya 批回归 case 列表。当前已完成脚本语法校验（`python -m py_compile dcc_plugin\tools\MayaBatchRegression.py`）与插件复编；宿主 mayapy 实跑结果仍需在真实 Maya 环境下补验证。
-  - 任务同步（2026-04-11，SMD 真实宿主回归排障中）：已在真实 `mayapy` 宿主下复现并修正两类 importer/exporter 问题。其一，`chr_mesh.smd` 初次导入失败已定位并修复为法线 face-vertex 索引错误，以及 `skinCluster -tsb` 命令式创建不稳定；当前 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已改为更细粒度报错、修正法线索引，并切换为 API 方式创建 `skinCluster`。其二，SMD exporter 先前在 `cmds.file(... exportSelected ...)` 返回前出现宿主级中止，当前已在 [SmdImportTranslator.cpp](dcc_plugin/src/importer_smd/SmdImportTranslator.cpp) / [SmdExportTranslator.cpp](dcc_plugin/src/exporter_smd/SmdExportTranslator.cpp) 补上 C++ 异常边界后恢复为可回到 Python 调用侧。基于真实回归结果，当前又确认了两条 roundtrip 差异：一是 exporter 需要优先保留原始 SMD `materialName`，目前已通过 `mayaSmdMaterialName` 自定义属性在 importer/exporter 间回传；二是 exporter 的“骨架节点收集”与“mesh 搜索根”仍未完全收口，`chr_mesh.smd` 现阶段在 `nodes`/`triangles` 联合回归上仍处于排障中，后续优先继续稳定 `meshRoots_` 路径并消除导出期宿主中止。
-  - 任务同步（2026-04-11，SMD 导入自定义欧拉旋转评估）：已评估“用户在导入界面为 SMD 指定自定义 XYZ 欧拉旋转值”的可行性，结论是适合做，而且应作为 SMD importer 独立选项实现，而不是写死在坐标系修正里。当前 [SmdImportTranslator.cpp](dcc_plugin/src/importer_smd/SmdImportTranslator.cpp) -> [SmdImportSession.cpp](dcc_plugin/src/importer_smd/SmdImportSession.cpp) 的 `options` 通道已经存在，但 `maya_smd` 还没有像 DMX 那样的独立 MEL option box；后续应补 `mayaSmdTranslatorImport` 脚本、SMD 专用 `optionVar` 命名空间，以及 `rotateX/rotateY/rotateZ` 三个角度选项。实现边界建议为“把用户输入的 XYZ 欧拉角作为额外导入旋转偏移，统一作用在 import root 或显式导入偏移节点上”，优先不要直接逐 joint 改写 bind pose，以免破坏动画帧语义和 skin/bone 层级回归。该选项应默认 `0,0,0`，并进入 Maya batch regression 的 import option 变体，用于验证 `nodes / skeleton / triangles / skin` 在自定义旋转偏移下仍能稳定导入。
-  - 任务同步（2026-04-11，SMD 导入自定义欧拉旋转已接通）：已在 [plugin_smd/PluginMain.cpp](dcc_plugin/src/plugin_smd/PluginMain.cpp) 为 `Valve SMD Import` 注册独立 import options script，默认选项串为 `rotateX=0;rotateY=0;rotateZ=0`；已新增 [performSmdImport.mel](dcc_plugin/maya_module/scripts/performSmdImport.mel) 与 [mayaSmdTranslatorImport.mel](dcc_plugin/maya_module/scripts/mayaSmdTranslatorImport.mel)，当前 Maya 文件导入界面可填写自定义 `XYZ` 欧拉角。Importer 侧已在 [SmdImportSession.cpp](dcc_plugin/src/importer_smd/SmdImportSession.cpp) 解析 `rotateX/rotateY/rotateZ`，并在 [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 把该偏移作为额外旋转应用到 `smd_import_root#`，不直接改写 joint bind pose。当前已验证 `cmds.file(..., options='rotateX=10;rotateY=20;rotateZ=30')` 导入后，根节点旋转确实为 `(10, 20, 30)`；MEL option box 的交互路径尚待在完整 Maya UI 下做一次人工确认。
-  - 任务同步（2026-04-11，插件批处理脚本已扩展到编译与部署双插件）：已更新 [BuildPlugin.bat](dcc_plugin/BuildPlugin.bat) 使其显式构建 `maya_dmx` 与 `maya_smd` 两个 target，并在完成后同时汇报两个 `.mll` 产物；已更新 [CreatePluginSolution.bat](dcc_plugin/CreatePluginSolution.bat) 的文案，使其面向整套 Maya 插件工程而不再只指向 DMX；已更新 [InstallPluginModuleToMaya.bat](dcc_plugin/InstallPluginModuleToMaya.bat) 以同时检查、复制、汇报 `maya_dmx.mll` 与 `maya_smd.mll`，并同步部署对应 `.pdb`。同时修正了 `maya_module/scripts` 作为源码目录时不能先清空再复制的问题，避免安装脚本误删仓库内脚本。当前已实际跑通 `BuildPlugin.bat Release x64`，确认会同时产出两个插件；真正写入用户 `Documents\maya\modules` 的安装步骤仍需在当前环境外部执行。
-  - 任务同步（2026-04-11，MEL 源目录与部署目录重新厘清）：已按仓库约定把 SMD 相关 MEL 源脚本 [performSmdImport.mel](dcc_plugin/src/mel/performSmdImport.mel) 与 [mayaSmdTranslatorImport.mel](dcc_plugin/src/mel/mayaSmdTranslatorImport.mel) 从 `maya_module/scripts` 迁回统一源码目录 [src/mel](dcc_plugin/src/mel)，并删除误放到部署目录的副本。与此同时已修正 [InstallPluginModuleToMaya.bat](dcc_plugin/InstallPluginModuleToMaya.bat)，当前重新把 `src/mel` 作为唯一 MEL 源目录，并恢复“清空 `maya_module/scripts` 后统一复制源码 MEL”的部署模型，避免后续继续混淆“仓库内源码”和“module 部署产物”。
-  - 任务同步（2026-04-11，SMD 导入 UI MEL 兼容性修正）：已修正 [performSmdImport.mel](dcc_plugin/src/mel/performSmdImport.mel) 中 `floatFieldGrp` 的非法 `-label1/-label2/-label3` 参数，改为 Maya 兼容的基础三字段写法，并已重新执行 [InstallPluginModuleToMaya.bat](dcc_plugin/InstallPluginModuleToMaya.bat) 刷新部署目录。当前如果 Maya 之前已经打开，需要重启后再重新打开 SMD 导入界面，避免继续使用旧脚本缓存。
-  - 任务同步（2026-04-11，SMD importer 最小材质绑定接通）：已继续扩展 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp)，当前在按 `triangles.materialName` 拆分 mesh 后，会为每个材质组创建或复用最小 `lambert` shader 与对应 `shadingEngine`，并把导入 mesh 绑定到该 shading group。当前方案优先保证 Maya 内能看到基础材质绑定和按材质组的最小可视化，不涉及纹理文件解析、复杂材质网络恢复或更高层材质语义。已在真实 `mayapy` 宿主验证 `chr_mesh.smd` 导入后，mesh 分别连接到 `tex_d_bmp_SG` 与 `tex_i_bmp_SG`，并生成对应 `lambert` 材质节点。
+  - 里程碑 M4：统一导入模式升级
+    - 目标：把 DMX / SMD 的导入模型从“单次导入”升级到“可并入现有场景”。
+    - 出口条件：
+      - DMX / SMD 都支持“包装根导入”和“场景根导入”
+      - 允许读取 Maya 当前名称空间设置
+      - 支持“更新当前场景 / 仅附加缺失对象”的基础对象合并策略
+      - 对层级对象的同名父级附加行为可预测、可回归
+    - 优先级说明：
+      - 此里程碑优先级高于旋转/轴线兼容增强
+      - 若与自动旋转冲突，优先保留场景混合导入
+
+  - 里程碑 M5：动画合并与动画层
+    - 目标：让导入动画可以安全并入已有场景，而不是只覆盖。
+    - 出口条件：
+      - 支持“仅导入动画”
+      - 当前场景存在同名对象时，可将导入动画写入动画层
+      - 动画层至少提供一种明确模式，并预留扩展为多模式
+      - 动画层导入进入 DMX / SMD 统一回归
+
+  - 里程碑 M6：扩展项评估
+    - 目标：在主线稳定后，再评估高复杂度能力。
+    - 评估项：
+      - `vertexanimation`
+      - `VTA / flex`
+      - 更强材质约束
+      - 更接近 FBX 的 scene-merge 策略模板
+      - 与 DMX workflow 的更深层共用抽象
+
+- 当前完成面：
+  - `maya_smd.mll` 已独立落地，构建、部署、回归脚本已接通。
+  - SMD parser / writer 已支持 `version / nodes / skeleton / triangles / vertexanimation` 文本主段落。
+  - SMD importer 已支持：
+    - `nodes`
+    - `skeleton`
+    - `triangles`
+    - 最小 `skinCluster`
+    - 最小动画导入
+    - 最小材质绑定
+    - 自定义导入根欧拉旋转
+  - SMD exporter 已支持：
+    - `nodes`
+    - `skeleton`
+    - `triangles`
+    - 最小 skin
+    - 最小骨骼动画
+  - SMD 样例已接入 Maya batch regression。
+
+- 当前未收口项：
+  - `chr_mesh.smd` 的真实宿主 roundtrip 仍未完全通过。
+  - exporter 的 root/node/mesh 遍历边界仍需继续整理。
+  - DMX / SMD 统一的“场景根导入 / 名称空间 / 更新或附加策略 / 动画层导入”仍停留在计划层，尚未开始实现。
+
+- 最近任务同步：
+  - 2026-04-11：完成 `maya_smd.mll` 独立骨架、`common_smd` 重命名、最小 importer/exporter 主线、批处理构建/部署脚本扩展。
+  - 2026-04-11：完成 SMD 导入最小材质绑定、自定义导入根欧拉旋转、SMD MEL 导入界面与 module 部署修正。
+  - 2026-04-11：完成 SMD 样例接入 Maya 专项回归，并在真实 `mayapy` 宿主下开始收敛 `chr_mesh.smd` roundtrip。
+  - 2026-04-11：明确后续 DMX / SMD 共用导入路线，新增“场景根导入、名称空间兼容、更新/附加策略、动画层导入”统一规划。
 
 ## 环境与工具链说明
 
