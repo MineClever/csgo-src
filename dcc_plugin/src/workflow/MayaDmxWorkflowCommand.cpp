@@ -1,74 +1,8 @@
 #include "MayaDmxWorkflowCommand.h"
 
-#include "MayaDmxWorkflow.h"
 #include "../common/MayaDmxCommon.h"
 
 #include <maya/MArgList.h>
-#include <maya/MArgDatabase.h>
-#include <maya/MGlobal.h>
-
-namespace
-{
-constexpr const char *kCommandName = "mayaDmxWorkflow";
-constexpr const char *kSavePresetFlag = "-sp";
-constexpr const char *kSavePresetLongFlag = "-savePreset";
-constexpr const char *kLoadPresetFlag = "-lp";
-constexpr const char *kLoadPresetLongFlag = "-loadPreset";
-constexpr const char *kDeletePresetFlag = "-dp";
-constexpr const char *kDeletePresetLongFlag = "-deletePreset";
-constexpr const char *kListPresetsFlag = "-ls";
-constexpr const char *kListPresetsLongFlag = "-listPresets";
-constexpr const char *kOutputDirectoryFlag = "-od";
-constexpr const char *kOutputDirectoryLongFlag = "-outputDirectory";
-constexpr const char *kMaterialRootFlag = "-mr";
-constexpr const char *kMaterialRootLongFlag = "-materialRoot";
-constexpr const char *kEncodingFlag = "-enc";
-constexpr const char *kEncodingLongFlag = "-encoding";
-constexpr const char *kUpAxisFlag = "-ua";
-constexpr const char *kUpAxisLongFlag = "-upAxis";
-constexpr const char *kExportSkinFlag = "-es";
-constexpr const char *kExportSkinLongFlag = "-exportSkin";
-constexpr const char *kExportDeltaFlag = "-eds";
-constexpr const char *kExportDeltaLongFlag = "-exportDeltaStates";
-constexpr const char *kExportMetadataFlag = "-emd";
-constexpr const char *kExportMetadataLongFlag = "-exportMetadata";
-constexpr const char *kSaveBatchFlag = "-sb";
-constexpr const char *kSaveBatchLongFlag = "-saveBatch";
-constexpr const char *kLoadBatchFlag = "-lb";
-constexpr const char *kLoadBatchLongFlag = "-loadBatch";
-constexpr const char *kDeleteBatchFlag = "-db";
-constexpr const char *kDeleteBatchLongFlag = "-deleteBatch";
-constexpr const char *kListBatchesFlag = "-lbt";
-constexpr const char *kListBatchesLongFlag = "-listBatches";
-constexpr const char *kListLegacyBatchesFlag = "-llb";
-constexpr const char *kListLegacyBatchesLongFlag = "-listLegacyBatches";
-constexpr const char *kBatchEntryFlag = "-be";
-constexpr const char *kBatchEntryLongFlag = "-batchEntry";
-constexpr const char *kMigrateLegacyBatchesFlag = "-mlb";
-constexpr const char *kMigrateLegacyBatchesLongFlag = "-migrateLegacyBatches";
-constexpr const char *kCleanupBatchStorageFlag = "-cbt";
-constexpr const char *kCleanupBatchStorageLongFlag = "-cleanupBatchStorage";
-constexpr const char *kExportPresetFlag = "-ep";
-constexpr const char *kExportPresetLongFlag = "-exportPreset";
-constexpr const char *kExportPathFlag = "-fp";
-constexpr const char *kExportPathLongFlag = "-filePath";
-constexpr const char *kExportAllFlag = "-ea";
-constexpr const char *kExportAllLongFlag = "-exportAll";
-constexpr const char *kRunBatchFlag = "-rb";
-constexpr const char *kRunBatchLongFlag = "-runBatch";
-
-void AppendJoinedResult(const MStringArray &items, MString &result)
-{
-    for (unsigned int i = 0; i < items.length(); ++i)
-    {
-        if (i > 0)
-        {
-            result += "\n";
-        }
-        result += items[i];
-    }
-}
-}
 
 void *MayaDmxWorkflowCommand::Create()
 {
@@ -110,282 +44,315 @@ MSyntax MayaDmxWorkflowCommand::CreateSyntax()
 
 MStatus MayaDmxWorkflowCommand::doIt(const MArgList &args)
 {
-    MArgDatabase arguments(syntax(), args);
+    arguments_ = std::make_unique<MArgDatabase>(syntax(), args);
+    resetState();
 
-    if (arguments.isFlagSet(kListPresetsFlag))
+    if (isFlagSet(kListPresetsFlag))
     {
-        MStringArray names;
-        MStatus status = maya_dmx::ListPresetNames(names);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MString result;
-        AppendJoinedResult(names, result);
-        setResult(result);
-        return MS::kSuccess;
+        return executeListCommand(maya_dmx::ListPresetNames);
     }
 
-    if (arguments.isFlagSet(kListBatchesFlag))
+    if (isFlagSet(kListBatchesFlag))
     {
-        MStringArray names;
-        MStatus status = maya_dmx::ListBatchManifestNames(names);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MString result;
-        AppendJoinedResult(names, result);
-        setResult(result);
-        return MS::kSuccess;
+        return executeListCommand(maya_dmx::ListBatchManifestNames);
     }
 
-    if (arguments.isFlagSet(kListLegacyBatchesFlag))
+    if (isFlagSet(kListLegacyBatchesFlag))
     {
-        MStringArray names;
-        MStatus status = maya_dmx::ListLegacyBatchManifestNames(names);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MString result;
-        AppendJoinedResult(names, result);
-        setResult(result);
-        return MS::kSuccess;
+        return executeListCommand(maya_dmx::ListLegacyBatchManifestNames);
     }
 
-    if (arguments.isFlagSet(kMigrateLegacyBatchesFlag))
+    if (isFlagSet(kMigrateLegacyBatchesFlag))
     {
-        MStringArray names;
-        MStatus status = maya_dmx::MigrateLegacyBatchManifests(names);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MString result;
-        AppendJoinedResult(names, result);
-        setResult(result);
-        return MS::kSuccess;
+        return executeListCommand(maya_dmx::MigrateLegacyBatchManifests);
     }
 
-    if (arguments.isFlagSet(kCleanupBatchStorageFlag))
+    if (isFlagSet(kCleanupBatchStorageFlag))
     {
-        MStringArray removedItems;
-        MStatus status = maya_dmx::CleanupBatchManifestStorage(removedItems);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MString result;
-        AppendJoinedResult(removedItems, result);
-        setResult(result);
-        return MS::kSuccess;
+        return executeListCommand(maya_dmx::CleanupBatchManifestStorage);
     }
 
-    if (arguments.isFlagSet(kLoadPresetFlag))
+    if (isFlagSet(kLoadPresetFlag))
     {
-        MString name;
-        arguments.getFlagArgument(kLoadPresetFlag, 0, name);
-
-        maya_dmx::ExportPreset preset;
-        MStatus status = maya_dmx::LoadPreset(name, preset);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        setResult(maya_dmx::SerializePreset(preset));
-        return MS::kSuccess;
+        return handleLoadPreset();
     }
 
-    if (arguments.isFlagSet(kDeletePresetFlag))
+    if (isFlagSet(kDeletePresetFlag))
     {
-        MString name;
-        arguments.getFlagArgument(kDeletePresetFlag, 0, name);
-        return maya_dmx::DeletePreset(name);
+        arguments().getFlagArgument(kDeletePresetFlag, 0, workingName_);
+        return maya_dmx::DeletePreset(workingName_);
     }
 
-    if (arguments.isFlagSet(kSavePresetFlag))
+    if (isFlagSet(kSavePresetFlag))
     {
-        maya_dmx::ExportPreset preset;
-        arguments.getFlagArgument(kSavePresetFlag, 0, preset.name);
-
-        if (arguments.isFlagSet(kOutputDirectoryFlag))
-        {
-            arguments.getFlagArgument(kOutputDirectoryFlag, 0, preset.outputDirectory);
-        }
-        if (arguments.isFlagSet(kMaterialRootFlag))
-        {
-            arguments.getFlagArgument(kMaterialRootFlag, 0, preset.materialRoot);
-        }
-        if (arguments.isFlagSet(kEncodingFlag))
-        {
-            arguments.getFlagArgument(kEncodingFlag, 0, preset.dmxEncoding);
-        }
-        if (arguments.isFlagSet(kUpAxisFlag))
-        {
-            arguments.getFlagArgument(kUpAxisFlag, 0, preset.upAxis);
-        }
-        if (arguments.isFlagSet(kExportSkinFlag))
-        {
-            arguments.getFlagArgument(kExportSkinFlag, 0, preset.exportSkin);
-        }
-        if (arguments.isFlagSet(kExportDeltaFlag))
-        {
-            arguments.getFlagArgument(kExportDeltaFlag, 0, preset.exportDeltaStates);
-        }
-        if (arguments.isFlagSet(kExportMetadataFlag))
-        {
-            arguments.getFlagArgument(kExportMetadataFlag, 0, preset.exportMetadata);
-        }
-
-        MStatus status = maya_dmx::SavePreset(preset);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        setResult(maya_dmx::SerializePreset(preset));
-        return MS::kSuccess;
+        return handleSavePreset();
     }
 
-    if (arguments.isFlagSet(kLoadBatchFlag))
+    if (isFlagSet(kLoadBatchFlag))
     {
-        MString name;
-        arguments.getFlagArgument(kLoadBatchFlag, 0, name);
-
-        MStringArray entries;
-        MStatus status = maya_dmx::LoadBatchManifest(name, entries);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MString result;
-        AppendJoinedResult(entries, result);
-        setResult(result);
-        return MS::kSuccess;
+        return handleLoadBatch();
     }
 
-    if (arguments.isFlagSet(kDeleteBatchFlag))
+    if (isFlagSet(kDeleteBatchFlag))
     {
-        MString name;
-        arguments.getFlagArgument(kDeleteBatchFlag, 0, name);
-        return maya_dmx::DeleteBatchManifest(name);
+        arguments().getFlagArgument(kDeleteBatchFlag, 0, workingName_);
+        return maya_dmx::DeleteBatchManifest(workingName_);
     }
 
-    if (arguments.isFlagSet(kSaveBatchFlag))
+    if (isFlagSet(kSaveBatchFlag))
     {
-        MString name;
-        arguments.getFlagArgument(kSaveBatchFlag, 0, name);
-
-        MStringArray entries;
-        const unsigned int useCount = arguments.numberOfFlagUses(kBatchEntryFlag);
-        for (unsigned int i = 0; i < useCount; ++i)
-        {
-            MArgList entryArgs;
-            arguments.getFlagArgumentList(kBatchEntryFlag, i, entryArgs);
-            if (entryArgs.length() > 0)
-            {
-                entries.append(entryArgs.asString(0));
-            }
-        }
-
-        MStatus status = maya_dmx::SaveBatchManifest(name, entries);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MString result;
-        AppendJoinedResult(entries, result);
-        setResult(result);
-        return MS::kSuccess;
+        return handleSaveBatch();
     }
 
-    if (arguments.isFlagSet(kRunBatchFlag))
+    if (isFlagSet(kRunBatchFlag))
     {
-        MString batchName;
-        arguments.getFlagArgument(kRunBatchFlag, 0, batchName);
-        if (!arguments.isFlagSet(kExportPresetFlag))
-        {
-            return maya_dmx::ReportError("maya_dmx: -exportPreset is required with -runBatch.");
-        }
-
-        MString presetName;
-        arguments.getFlagArgument(kExportPresetFlag, 0, presetName);
-
-        maya_dmx::ExportPreset preset;
-        MStatus status = maya_dmx::LoadPreset(presetName, preset);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MStringArray entries;
-        status = maya_dmx::LoadBatchManifest(batchName, entries);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        status = maya_dmx::ExecuteBatchExport(preset, entries);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MString result;
-        AppendJoinedResult(entries, result);
-        setResult(result);
-        return MS::kSuccess;
+        return handleRunBatch();
     }
 
-    if (arguments.isFlagSet(kExportPresetFlag))
+    if (isFlagSet(kExportPresetFlag))
     {
-        MString presetName;
-        arguments.getFlagArgument(kExportPresetFlag, 0, presetName);
-
-        MString outputPath;
-        if (!arguments.isFlagSet(kExportPathFlag))
-        {
-            return maya_dmx::ReportError("maya_dmx: -filePath is required with -exportPreset.");
-        }
-        arguments.getFlagArgument(kExportPathFlag, 0, outputPath);
-
-        bool exportAll = false;
-        if (arguments.isFlagSet(kExportAllFlag))
-        {
-            arguments.getFlagArgument(kExportAllFlag, 0, exportAll);
-        }
-
-        maya_dmx::ExportPreset preset;
-        MStatus status = maya_dmx::LoadPreset(presetName, preset);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        status = maya_dmx::ExecuteExport(preset, outputPath, !exportAll);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        setResult(outputPath);
-        return MS::kSuccess;
+        return handleExportPreset();
     }
 
     return maya_dmx::ReportError(
-        MString("maya_dmx: no workflow action specified. Use ") + kCommandName + " with -savePreset, -exportPreset, -runBatch, -saveBatch, -migrateLegacyBatches, -cleanupBatchStorage, or related flags.");
+        MString("maya_dmx: no workflow action specified. Use ") + kCommandName +
+        " with -savePreset, -exportPreset, -runBatch, -saveBatch, -migrateLegacyBatches, -cleanupBatchStorage, or related flags.");
 }
 
 bool MayaDmxWorkflowCommand::isUndoable() const
 {
     return false;
+}
+
+void MayaDmxWorkflowCommand::resetState()
+{
+    workingPreset_ = maya_dmx::ExportPreset{};
+    workingEntries_.clear();
+    workingName_.clear();
+    workingOutputPath_.clear();
+    workingExportAll_ = false;
+}
+
+MArgDatabase &MayaDmxWorkflowCommand::arguments()
+{
+    return *arguments_;
+}
+
+const MArgDatabase &MayaDmxWorkflowCommand::arguments() const
+{
+    return *arguments_;
+}
+
+bool MayaDmxWorkflowCommand::isFlagSet(const char *flagName) const
+{
+    return arguments().isFlagSet(flagName);
+}
+
+void MayaDmxWorkflowCommand::appendJoinedResult(const MStringArray &items, MString &result) const
+{
+    for (unsigned int i = 0; i < items.length(); ++i)
+    {
+        if (i > 0)
+        {
+            result += "\n";
+        }
+        result += items[i];
+    }
+}
+
+MStatus MayaDmxWorkflowCommand::setJoinedResult(const MStringArray &items)
+{
+    MString result;
+    appendJoinedResult(items, result);
+    setResult(result);
+    return MS::kSuccess;
+}
+
+MStatus MayaDmxWorkflowCommand::executeListCommand(MStatus (*operation)(MStringArray &))
+{
+    workingEntries_.clear();
+    MStatus status = operation(workingEntries_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    return setJoinedResult(workingEntries_);
+}
+
+void MayaDmxWorkflowCommand::populatePresetFromArgs(const char *nameFlag)
+{
+    arguments().getFlagArgument(nameFlag, 0, workingPreset_.name);
+
+    if (isFlagSet(kOutputDirectoryFlag))
+    {
+        arguments().getFlagArgument(kOutputDirectoryFlag, 0, workingPreset_.outputDirectory);
+    }
+    if (isFlagSet(kMaterialRootFlag))
+    {
+        arguments().getFlagArgument(kMaterialRootFlag, 0, workingPreset_.materialRoot);
+    }
+    if (isFlagSet(kEncodingFlag))
+    {
+        arguments().getFlagArgument(kEncodingFlag, 0, workingPreset_.dmxEncoding);
+    }
+    if (isFlagSet(kUpAxisFlag))
+    {
+        arguments().getFlagArgument(kUpAxisFlag, 0, workingPreset_.upAxis);
+    }
+    if (isFlagSet(kExportSkinFlag))
+    {
+        arguments().getFlagArgument(kExportSkinFlag, 0, workingPreset_.exportSkin);
+    }
+    if (isFlagSet(kExportDeltaFlag))
+    {
+        arguments().getFlagArgument(kExportDeltaFlag, 0, workingPreset_.exportDeltaStates);
+    }
+    if (isFlagSet(kExportMetadataFlag))
+    {
+        arguments().getFlagArgument(kExportMetadataFlag, 0, workingPreset_.exportMetadata);
+    }
+}
+
+void MayaDmxWorkflowCommand::collectBatchEntries()
+{
+    workingEntries_.clear();
+    const unsigned int useCount = arguments().numberOfFlagUses(kBatchEntryFlag);
+    for (unsigned int i = 0; i < useCount; ++i)
+    {
+        MArgList entryArgs;
+        arguments().getFlagArgumentList(kBatchEntryFlag, i, entryArgs);
+        if (entryArgs.length() > 0)
+        {
+            workingEntries_.append(entryArgs.asString(0));
+        }
+    }
+}
+
+MStatus MayaDmxWorkflowCommand::loadPresetArgument(const char *flagName)
+{
+    arguments().getFlagArgument(flagName, 0, workingName_);
+    workingPreset_ = maya_dmx::ExportPreset{};
+    MStatus status = maya_dmx::LoadPreset(workingName_, workingPreset_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    return MStatus::kSuccess;
+}
+
+MStatus MayaDmxWorkflowCommand::handleLoadPreset()
+{
+    MStatus status = loadPresetArgument(kLoadPresetFlag);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    setResult(maya_dmx::SerializePreset(workingPreset_));
+    return MS::kSuccess;
+}
+
+MStatus MayaDmxWorkflowCommand::handleSavePreset()
+{
+    workingPreset_ = maya_dmx::ExportPreset{};
+    populatePresetFromArgs(kSavePresetFlag);
+
+    MStatus status = maya_dmx::SavePreset(workingPreset_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    setResult(maya_dmx::SerializePreset(workingPreset_));
+    return MS::kSuccess;
+}
+
+MStatus MayaDmxWorkflowCommand::handleLoadBatch()
+{
+    arguments().getFlagArgument(kLoadBatchFlag, 0, workingName_);
+    workingEntries_.clear();
+
+    MStatus status = maya_dmx::LoadBatchManifest(workingName_, workingEntries_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    return setJoinedResult(workingEntries_);
+}
+
+MStatus MayaDmxWorkflowCommand::handleSaveBatch()
+{
+    arguments().getFlagArgument(kSaveBatchFlag, 0, workingName_);
+    collectBatchEntries();
+
+    MStatus status = maya_dmx::SaveBatchManifest(workingName_, workingEntries_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    return setJoinedResult(workingEntries_);
+}
+
+MStatus MayaDmxWorkflowCommand::handleRunBatch()
+{
+    arguments().getFlagArgument(kRunBatchFlag, 0, workingName_);
+    if (!isFlagSet(kExportPresetFlag))
+    {
+        return maya_dmx::ReportError("maya_dmx: -exportPreset is required with -runBatch.");
+    }
+
+    MStatus status = loadPresetArgument(kExportPresetFlag);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    workingEntries_.clear();
+    status = maya_dmx::LoadBatchManifest(workingName_, workingEntries_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    status = maya_dmx::ExecuteBatchExport(workingPreset_, workingEntries_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    return setJoinedResult(workingEntries_);
+}
+
+MStatus MayaDmxWorkflowCommand::handleExportPreset()
+{
+    if (!isFlagSet(kExportPathFlag))
+    {
+        return maya_dmx::ReportError("maya_dmx: -filePath is required with -exportPreset.");
+    }
+
+    arguments().getFlagArgument(kExportPathFlag, 0, workingOutputPath_);
+    workingExportAll_ = false;
+    if (isFlagSet(kExportAllFlag))
+    {
+        arguments().getFlagArgument(kExportAllFlag, 0, workingExportAll_);
+    }
+
+    MStatus status = loadPresetArgument(kExportPresetFlag);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    status = maya_dmx::ExecuteExport(workingPreset_, workingOutputPath_, !workingExportAll_);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    setResult(workingOutputPath_);
+    return MS::kSuccess;
 }

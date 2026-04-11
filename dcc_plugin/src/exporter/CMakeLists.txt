@@ -11,6 +11,8 @@ add_library(maya_dmx_export STATIC
     DmxExportMesh.h
     DmxExportMeshMaterial.cpp
     DmxExportMeshMaterial.h
+    ExportSession.cpp
+    ExportSession.h
     DmxExportTranslator.cpp
     DmxExportTranslator.h
 )

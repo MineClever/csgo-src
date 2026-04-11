@@ -13,6 +13,8 @@ add_library(maya_dmx_import STATIC
     DmxImportMeshMaterial.h
     DmxImportUtils.cpp
     DmxImportUtils.h
+    ImportSession.cpp
+    ImportSession.h
     DmxImportTranslator.cpp
     DmxImportTranslator.h
 )
