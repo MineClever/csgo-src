@@ -223,7 +223,7 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
     MObject sceneRoot = rootTransformFn.create(MObject::kNullObj, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     rootTransformFn.setName(importRoot->name.empty() ? "dmx_import" : importRoot->name.c_str());
@@ -238,7 +238,7 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
     status = ApplyTransform(document, importRoot, sceneRoot);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     if (needsAxisCorrection)
@@ -246,7 +246,7 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
         status = rootTransformFn.setRotation(rootAxisCorrection.asQuaternion());
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
         maya_dmx::ReportWarning(rootAxisWarning);
     }
@@ -256,7 +256,7 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
         status = ImportDagHierarchyRecursive(context, child, sceneRoot);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -265,7 +265,7 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
         status = ImportDagShapesRecursive(context, child);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -273,7 +273,7 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
     status = CreateCombinationControls(context, combinationOperator, sceneRoot);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     const simple_dmx::Element *animationList = FindAnimationList(document, document.GetRoot(), importRoot, context.modelRoot);
@@ -285,10 +285,11 @@ MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString
             status = ApplyChannelsClipAnimation(context, animation);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
         }
     }
 
     return maya_dmx::ReportInfo(MString("maya_dmx: imported hierarchy from ") + fileObject.rawFullName());
 }
+

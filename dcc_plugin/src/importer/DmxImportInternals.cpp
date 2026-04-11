@@ -52,7 +52,7 @@ static MStatus DisconnectDestinationPlug(MDGModifier &modifier, const MPlug &des
     MStatus status = MS::kSuccess;
     if (destinationPlug.isNull())
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (unsigned int sourceIndex = 0; sourceIndex < sourcePlugs.length(); ++sourceIndex)
@@ -60,7 +60,7 @@ static MStatus DisconnectDestinationPlug(MDGModifier &modifier, const MPlug &des
         status = modifier.disconnect(sourcePlugs[sourceIndex], destinationPlug);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -155,12 +155,12 @@ MStatus SetVector3Plug(const MPlug &plug, const std::string &value)
     MStatus status = plug.child(0).setFloat(components[0]);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     status = plug.child(1).setFloat(components[1]);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     return plug.child(2).setFloat(components[2]);
 }
@@ -171,13 +171,13 @@ MStatus ConnectPlugs(MPlug sourcePlug, MPlug destinationPlug)
     MStatus status = DisconnectDestinationPlug(modifier, destinationPlug);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     status = modifier.connect(sourcePlug, destinationPlug);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     return modifier.doIt();
@@ -303,3 +303,4 @@ MStatus AssignTextureToShader(
 }
 
 } // namespace dmx_import_impl
+

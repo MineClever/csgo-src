@@ -26,7 +26,7 @@ static MStatus SetOrCreateStringAttribute(const MObject &nodeObject, const char 
     MFnDependencyNode nodeFn(nodeObject, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MObject attributeObject = nodeFn.attribute(attributeName, &status);
@@ -36,7 +36,7 @@ static MStatus SetOrCreateStringAttribute(const MObject &nodeObject, const char 
         attributeObject = typedAttributeFn.create(attributeName, attributeName, MFnData::kString, MObject::kNullObj, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
         typedAttributeFn.setHidden(true);
         typedAttributeFn.setStorable(true);
@@ -45,14 +45,14 @@ static MStatus SetOrCreateStringAttribute(const MObject &nodeObject, const char 
         status = nodeFn.addAttribute(attributeObject);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
     MPlug attributePlug = nodeFn.findPlug(attributeName, true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     return attributePlug.setString(value.c_str());
@@ -367,7 +367,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         }
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -376,7 +376,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = meshFn.setFaceVertexNormals(faceVertexNormals, faceIds, normalVertexIds, MSpace::kObject);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -385,7 +385,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = AssignFaceSetMaterials(meshFn, faceSetAssignments);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -394,13 +394,13 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = SetOrCreateStringAttribute(meshObject, "mayaDmxTangents", JoinLines(tangentStrings));
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         status = SetOrCreateStringAttribute(meshObject, "mayaDmxTangentsIndices", JoinLines(tangentIndexStrings));
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         const std::string tangentUvSetName = FindAttributeString(vertexData, "mayaTangentUvSetName");
@@ -409,7 +409,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
             status = SetOrCreateStringAttribute(meshObject, "mayaDmxTangentUvSetName", tangentUvSetName);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
         }
     }
@@ -419,7 +419,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = ApplySkinning(context, vertexData, meshObject, parent);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -428,7 +428,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = ApplyDeltaStates(context, document, meshElement, meshObject, parent, points);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -436,3 +436,4 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
 }
 
 } // namespace dmx_import_impl
+

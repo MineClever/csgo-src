@@ -46,7 +46,7 @@ static MStatus SetCurveKeys(const MPlug &plug, const std::vector<double> &times,
     MObject curveObject = curveFn.create(plug, curveType, nullptr, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (size_t keyIndex = 0; keyIndex < times.size(); ++keyIndex)
@@ -60,7 +60,7 @@ static MStatus SetCurveKeys(const MPlug &plug, const std::vector<double> &times,
             &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -79,7 +79,7 @@ static MStatus SetCurveKeysAuto(const MPlug &plug, const std::vector<double> &ti
     MObject curveObject = curveFn.create(plug, nullptr, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (size_t keyIndex = 0; keyIndex < times.size(); ++keyIndex)
@@ -93,7 +93,7 @@ static MStatus SetCurveKeysAuto(const MPlug &plug, const std::vector<double> &ti
             &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -147,34 +147,34 @@ static MStatus ApplyVector3Animation(const MDagPath &targetPath, const simple_dm
     MFnDependencyNode targetNodeFn(targetPath.node(), &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MPlug translateXPlug = targetNodeFn.findPlug("translateX", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     MPlug translateYPlug = targetNodeFn.findPlug("translateY", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     MPlug translateZPlug = targetNodeFn.findPlug("translateZ", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     status = SetCurveKeys(translateXPlug, times, xValues, MFnAnimCurve::kAnimCurveTL);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     status = SetCurveKeys(translateYPlug, times, yValues, MFnAnimCurve::kAnimCurveTL);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     return SetCurveKeys(translateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTL);
 }
@@ -232,34 +232,34 @@ static MStatus ApplyQuaternionAnimation(const MDagPath &targetPath, const simple
     MFnDependencyNode targetNodeFn(targetPath.node(), &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MPlug rotateXPlug = targetNodeFn.findPlug("rotateX", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     MPlug rotateYPlug = targetNodeFn.findPlug("rotateY", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     MPlug rotateZPlug = targetNodeFn.findPlug("rotateZ", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     status = SetCurveKeys(rotateXPlug, times, xValues, MFnAnimCurve::kAnimCurveTA);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     status = SetCurveKeys(rotateYPlug, times, yValues, MFnAnimCurve::kAnimCurveTA);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     return SetCurveKeys(rotateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTA);
 }
@@ -275,7 +275,7 @@ static MStatus AddScalarAnimationTarget(std::vector<MPlug> &targets, const MObje
     MFnDependencyNode nodeFn(nodeObject, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MPlug targetPlug = nodeFn.findPlug(attributeName.c_str(), true, &status);
@@ -318,7 +318,7 @@ static MStatus EnsureControlAttributeTargets(
         MFnDependencyNode nodeFn(controlPath.node(), &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MObject attributeObject = nodeFn.attribute(targetName.c_str(), &status);
@@ -334,7 +334,7 @@ static MStatus EnsureControlAttributeTargets(
                 &status);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
             numericAttributeFn.setKeyable(true);
             numericAttributeFn.setStorable(true);
@@ -343,7 +343,7 @@ static MStatus EnsureControlAttributeTargets(
             status = nodeFn.addAttribute(attributeObject);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
         }
 
@@ -371,7 +371,7 @@ static MStatus CollectFloatAnimationTargets(
         MStatus status = AddScalarAnimationTarget(targets, transformIt->second.node(), attributeName);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -386,7 +386,7 @@ static MStatus CollectFloatAnimationTargets(
                 MFnDependencyNode blendShapeNodeFn(binding.node, &status);
                 if (!status)
                 {
-                    return status;
+                    return MStatus::kFailure;
                 }
 
                 MPlug weightArrayPlug = blendShapeNodeFn.findPlug("weight", true, &status);
@@ -421,7 +421,7 @@ static MStatus CollectFloatAnimationTargets(
         MStatus status = EnsureControlAttributeTargets(context, targetElement->name);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         auto scalarIt = context.importedScalarTargets.find(targetElement->name);
@@ -432,7 +432,7 @@ static MStatus CollectFloatAnimationTargets(
                 status = AddScalarAnimationTarget(targets, binding.node, binding.attributeName);
                 if (!status)
                 {
-                    return status;
+                    return MStatus::kFailure;
                 }
             }
         }
@@ -487,7 +487,7 @@ static MStatus ApplyFloatAnimation(const std::vector<MPlug> &targetPlugs, const 
         MStatus status = ApplyFloatAnimation(targetPlug, logLayer);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -582,7 +582,7 @@ MStatus ApplyChannelsClipAnimation(ImportContext &context, const simple_dmx::Ele
             status = CollectFloatAnimationTargets(context, toElement, toAttribute, targetPlugs);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
             if (!targetPlugs.empty())
             {
@@ -592,7 +592,7 @@ MStatus ApplyChannelsClipAnimation(ImportContext &context, const simple_dmx::Ele
 
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -634,7 +634,7 @@ MStatus CreateCombinationControls(
     MObject controlNodeObject = controlNodeFn.create(sceneRoot, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     std::string controlNodeName = combinationOperator->name.empty()
@@ -645,7 +645,7 @@ MStatus CreateCombinationControls(
     MFnDependencyNode controlDependencyNode(controlNodeObject, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (size_t controlIndex = 0; controlIndex < controls.size(); ++controlIndex)
@@ -669,7 +669,7 @@ MStatus CreateCombinationControls(
             &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         numericAttributeFn.setKeyable(true);
@@ -692,13 +692,13 @@ MStatus CreateCombinationControls(
         status = controlDependencyNode.addAttribute(attributeObject);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MPlug controlPlug = controlDependencyNode.findPlug(controlName.c_str(), true, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         float defaultValue = 0.0f;
@@ -713,7 +713,7 @@ MStatus CreateCombinationControls(
         status = controlPlug.setFloat(defaultValue);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         ScalarAttributeBinding binding{controlNodeObject, controlName};
@@ -728,3 +728,4 @@ MStatus CreateCombinationControls(
 }
 
 } // namespace dmx_import_impl
+

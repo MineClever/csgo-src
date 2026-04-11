@@ -76,20 +76,20 @@ static MStatus CreateSkinClusterWithApi(
     MFnMesh meshFn(meshDagPath, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     const MString originalShapeName = meshFn.name() + "Orig";
     MObject originalMeshObject = meshFn.copy(meshDagPath.node(), meshParentPath.node(), &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MFnDependencyNode originalMeshNode(originalMeshObject, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     originalMeshNode.setName(originalShapeName);
 
@@ -103,7 +103,7 @@ static MStatus CreateSkinClusterWithApi(
     skinClusterObject = skinClusterNodeFn.create("skinCluster", "mayaDmxSkinCluster#", &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     const std::string requestedSkinClusterName = FindAttributeString(vertexData, "mayaSkinClusterName");
@@ -122,19 +122,19 @@ static MStatus CreateSkinClusterWithApi(
         MPlug srcPlug = srcFn.findPlug(srcAttr, true, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
         MPlug dstPlug = dstFn.findPlug(dstAttr, true, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
         if (srcPlug.isArray())
         {
             srcPlug = srcPlug.elementByLogicalIndex(srcIndex, &status);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
         }
         if (dstPlug.isArray())
@@ -142,7 +142,7 @@ static MStatus CreateSkinClusterWithApi(
             dstPlug = dstPlug.elementByLogicalIndex(dstIndex, &status);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
         }
         return dgModifier.connect(srcPlug, dstPlug);
@@ -151,49 +151,49 @@ static MStatus CreateSkinClusterWithApi(
     MFnDependencyNode skinClusterNode(skinClusterObject, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     MPlug inputPlug = skinClusterNode.findPlug("input", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     inputPlug = inputPlug.elementByLogicalIndex(0, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     MPlug inputGeometryPlug = inputPlug.child(0, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MPlug sourceWorldMeshPlug = originalMeshNode.findPlug("worldMesh", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     sourceWorldMeshPlug = sourceWorldMeshPlug.elementByLogicalIndex(0, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     status = dgModifier.connect(sourceWorldMeshPlug, inputGeometryPlug);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     status = connectArrayPlug(originalMeshObject, "outMesh", 0, skinClusterObject, "originalGeometry", 0);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     status = connectArrayPlug(skinClusterObject, "outputGeometry", 0, meshDagPath.node(), "inMesh", 0);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     const std::vector<std::string> bindPreMatrixStrings = FindAttributeStringArray(vertexData, "mayaBindPreMatrix");
@@ -219,18 +219,18 @@ static MStatus CreateSkinClusterWithApi(
         status = connectArrayPlug(influencePaths[influenceIndex].node(), "worldMatrix", 0, skinClusterObject, "matrix", influenceIndex);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MPlug bindPreMatrixPlug = skinClusterNode.findPlug("bindPreMatrix", true, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
         bindPreMatrixPlug = bindPreMatrixPlug.elementByLogicalIndex(influenceIndex, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MFnMatrixData matrixDataFn;
@@ -254,19 +254,19 @@ static MStatus CreateSkinClusterWithApi(
         MObject bindPreMatrixObject = matrixDataFn.create(bindPreMatrix, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
         status = bindPreMatrixPlug.setMObject(bindPreMatrixObject);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
     MPlug geomMatrixPlug = skinClusterNode.findPlug("geomMatrix", true, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     MFnMatrixData geomMatrixDataFn;
     MMatrix geomMatrix = meshParentPath.inclusiveMatrix();
@@ -278,12 +278,12 @@ static MStatus CreateSkinClusterWithApi(
     MObject geomMatrixObject = geomMatrixDataFn.create(geomMatrix, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     status = geomMatrixPlug.setMObject(geomMatrixObject);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     return dgModifier.doIt();
@@ -295,7 +295,7 @@ static MStatus RestoreSkinClusterSettings(const simple_dmx::Element *vertexData,
     MFnDependencyNode skinClusterNode(skinClusterObject, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MPlug skinningMethodPlug = skinClusterNode.findPlug("skinningMethod", true, &status);
@@ -467,14 +467,14 @@ MStatus ApplySkinning(
     status = MDagPath::getAPathTo(meshParentObject, meshParentPath);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MDagPath meshDagPath;
     status = MDagPath::getAPathTo(meshObject, meshDagPath);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MObject skinClusterObject;
@@ -488,14 +488,14 @@ MStatus ApplySkinning(
     MFnSkinCluster skinClusterFn(skinClusterObject, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MFnSingleIndexedComponent componentFn;
     MObject vertexComponent = componentFn.create(MFn::kMeshVertComponent, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MIntArray vertexIds;
@@ -506,7 +506,7 @@ MStatus ApplySkinning(
     status = componentFn.addElements(vertexIds);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MIntArray influenceIndices;
@@ -516,7 +516,7 @@ MStatus ApplySkinning(
         const unsigned int influenceIndex = skinClusterFn.indexForInfluenceObject(activeInfluencePaths[influencePathIndex], &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
         dmxJointToInfluenceSlot[activeDmxJointIndices[influencePathIndex]] = influenceIndices.length();
         influenceIndices.append(static_cast<int>(influenceIndex));
@@ -530,7 +530,7 @@ MStatus ApplySkinning(
     MFnDependencyNode skinClusterNode(skinClusterObject, &status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MPlug maintainMaxInfluencesPlug = skinClusterNode.findPlug("maintainMaxInfluences", true, &status);
@@ -613,7 +613,7 @@ MStatus ApplySkinning(
     }
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     return RestoreSkinClusterSettings(vertexData, skinClusterObject);
@@ -663,7 +663,7 @@ MStatus ApplyDeltaStates(
     MStatus status = MDagPath::getAPathTo(meshParentObject, baseParentPath);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (const DeltaStateGroup &group : deltaStateGroups)
@@ -702,7 +702,7 @@ MStatus ApplyDeltaStates(
             status = selectionList.getDependNode(0, duplicateTransformObject);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
 
             const MObject duplicateMeshObject = FindPrimaryMeshChildForDeformers(duplicateTransformObject);
@@ -714,7 +714,7 @@ MStatus ApplyDeltaStates(
             MFnMesh targetMeshFn(duplicateMeshObject, &status);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
 
             MPointArray deltaPoints = basePoints;
@@ -742,7 +742,7 @@ MStatus ApplyDeltaStates(
             status = targetMeshFn.setPoints(deltaPoints, MSpace::kObject);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
 
             targetTransforms.append(duplicateResult[0]);
@@ -765,7 +765,7 @@ MStatus ApplyDeltaStates(
         MFnDependencyNode blendShapeDependency(blendShapeObject, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
         blendShapeDependency.setName(blendShapeName.c_str());
         const MString blendShapeNodeName = blendShapeDependency.name();
@@ -845,3 +845,4 @@ MStatus ApplyDeltaStates(
 }
 
 } // namespace dmx_import_impl
+

@@ -110,14 +110,14 @@ MStatus ImportDagHierarchyRecursive(
     const MObject nodeObject = CreateDagNode(nodeName, isJoint, parent, status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     MDagPath nodePath;
     status = MDagPath::getAPathTo(nodeObject, nodePath);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
     context.importedDagPaths[ElementKey(dagElement)] = nodePath;
     if (const simple_dmx::Element *transformElement = FindAttributeElement(context.document, dagElement, "transform"))
@@ -133,7 +133,7 @@ MStatus ImportDagHierarchyRecursive(
     status = ApplyTransform(context.document, dagElement, nodeObject);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (const simple_dmx::Element *child : FindAttributeElementArray(context.document, dagElement, "children"))
@@ -141,7 +141,7 @@ MStatus ImportDagHierarchyRecursive(
         status = ImportDagHierarchyRecursive(context, child, nodeObject);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -168,13 +168,13 @@ MStatus ImportDagShapesRecursive(
     MObject nodeObject = it->second.node(&status);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     status = CreateMeshShape(context, dagElement, nodeObject);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (const simple_dmx::Element *child : FindAttributeElementArray(context.document, dagElement, "children"))
@@ -182,7 +182,7 @@ MStatus ImportDagShapesRecursive(
         status = ImportDagShapesRecursive(context, child);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -216,3 +216,4 @@ const simple_dmx::Element *FindImportRoot(const simple_dmx::Document &document)
 }
 
 } // namespace dmx_import_impl
+

@@ -130,7 +130,7 @@ MStatus AssignFaceSetMaterials(
     status = meshFn.getPath(meshPath);
     if (!status)
     {
-        return status;
+        return MStatus::kFailure;
     }
 
     for (const FaceSetAssignment &assignment : faceSetAssignments)
@@ -158,43 +158,43 @@ MStatus AssignFaceSetMaterials(
         MObject shadingGroupObject = EnsureShadingGroup(shadingGroupName, status);
         if (!status || shadingGroupObject.isNull())
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MObject shaderObject = EnsureDependencyNode(shaderType, shaderName, status);
         if (!status || shaderObject.isNull())
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MFnDependencyNode shaderNodeFn(shaderObject, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MFnDependencyNode shadingGroupNodeFn(shadingGroupObject, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MPlug surfaceShaderPlug = shadingGroupNodeFn.findPlug("surfaceShader", true, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MPlug outColorPlug = shaderNodeFn.findPlug("outColor", true, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         status = ConnectPlugs(outColorPlug, surfaceShaderPlug);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MPlug colorPlug = shaderNodeFn.findPlug("color", true, &status);
@@ -214,7 +214,7 @@ MStatus AssignFaceSetMaterials(
             status = AssignTextureToShader(shaderName + "_diffuseFile", assignment.diffuseTexture, colorPlug, false);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
         }
 
@@ -225,13 +225,13 @@ MStatus AssignFaceSetMaterials(
             MObject bumpNodeObject = EnsureDependencyNode("bump2d", shaderName + "_normalBump", status);
             if (!status || bumpNodeObject.isNull())
             {
-                return status;
+                return MStatus::kFailure;
             }
 
             MFnDependencyNode bumpNodeFn(bumpNodeObject, &status);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
 
             MPlug bumpInterpPlug = bumpNodeFn.findPlug("bumpInterp", true, &status);
@@ -243,25 +243,25 @@ MStatus AssignFaceSetMaterials(
             MPlug bumpValuePlug = bumpNodeFn.findPlug("bumpValue", true, &status);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
 
             status = AssignTextureToShader(shaderName + "_normalFile", normalOrBumpTexture, bumpValuePlug, true);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
 
             MPlug outNormalPlug = bumpNodeFn.findPlug("outNormal", true, &status);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
 
             status = ConnectPlugs(outNormalPlug, normalCameraPlug);
             if (!status)
             {
-                return status;
+                return MStatus::kFailure;
             }
         }
 
@@ -269,7 +269,7 @@ MStatus AssignFaceSetMaterials(
         MObject faceComponent = componentFn.create(MFn::kMeshPolygonComponent, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MIntArray faceIds;
@@ -281,19 +281,19 @@ MStatus AssignFaceSetMaterials(
         status = componentFn.addElements(faceIds);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         MFnSet shadingGroupSetFn(shadingGroupObject, &status);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
 
         status = shadingGroupSetFn.addMember(meshPath, faceComponent);
         if (!status)
         {
-            return status;
+            return MStatus::kFailure;
         }
     }
 
@@ -301,3 +301,4 @@ MStatus AssignFaceSetMaterials(
 }
 
 } // namespace dmx_import_impl
+
