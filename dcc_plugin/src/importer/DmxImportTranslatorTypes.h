@@ -1,7 +1,7 @@
 #pragma once
 
 #include <common/ImportPolicy.h>
-#include "../common/SimpleDmxDocument.h"
+#include <common/SimpleDmxDocument.h>
 
 #include <maya/MDagPath.h>
 #include <maya/MObject.h>

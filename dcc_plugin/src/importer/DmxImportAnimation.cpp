@@ -7,10 +7,12 @@
 
 #include <maya/MAnimControl.h>
 #include <maya/MEulerRotation.h>
+#include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnNumericAttribute.h>
 #include <maya/MFnTransform.h>
 #include <maya/MGlobal.h>
+#include <maya/MItDag.h>
 #include <maya/MObject.h>
 #include <maya/MQuaternion.h>
 #include <maya/MTime.h>
@@ -510,6 +512,136 @@ bool AnimationImporter::shouldSkipAppendTransformAnimation(const simple_dmx::Ele
     return context_->reusedTransformElementKeys.find(ElementKey(targetElement)) != context_->reusedTransformElementKeys.end();
 }
 
+MObject AnimationImporter::findExistingControlNode(const std::string &controlNodeName, const MObject &sceneRoot) const
+{
+    if (!dcc_import_policy::UsesAppendMissingObjects(context_->scenePolicy) || controlNodeName.empty())
+    {
+        return MObject::kNullObj;
+    }
+
+    MStatus status;
+    if (sceneRoot.isNull())
+    {
+        MItDag dagIterator(MItDag::kDepthFirst);
+        for (; !dagIterator.isDone(); dagIterator.next())
+        {
+            if (dagIterator.depth() != 1)
+            {
+                continue;
+            }
+
+            MDagPath dagPath;
+            if (dagIterator.getPath(dagPath) != MS::kSuccess)
+            {
+                continue;
+            }
+
+            if (!(dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint)))
+            {
+                continue;
+            }
+
+            MFnDagNode dagNode(dagPath, &status);
+            if (!status)
+            {
+                status = MS::kSuccess;
+                continue;
+            }
+
+            if (dcc_import_policy::MatchesNodeNameForAppend(context_->scenePolicy, dagNode.name().asChar(), controlNodeName))
+            {
+                return dagPath.node();
+            }
+        }
+
+        return MObject::kNullObj;
+    }
+
+    MFnDagNode sceneRootFn(sceneRoot, &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (unsigned int childIndex = 0; childIndex < sceneRootFn.childCount(); ++childIndex)
+    {
+        const MObject childObject = sceneRootFn.child(childIndex, &status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        if (!(childObject.hasFn(MFn::kTransform) || childObject.hasFn(MFn::kJoint)))
+        {
+            continue;
+        }
+
+        MFnDagNode childFn(childObject, &status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        if (dcc_import_policy::MatchesNodeNameForAppend(context_->scenePolicy, childFn.name().asChar(), controlNodeName))
+        {
+            return childObject;
+        }
+    }
+
+    return MObject::kNullObj;
+}
+
+MStatus AnimationImporter::registerImportedControlPath(const MObject &controlNodeObject)
+{
+    if (controlNodeObject.isNull())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MDagPath controlPath;
+    status = MDagPath::getAPathTo(controlNodeObject, controlPath);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    const std::string fullPathName = controlPath.fullPathName().asChar();
+    for (const MDagPath &existingPath : context_->importedControlPaths)
+    {
+        if (fullPathName == existingPath.fullPathName().asChar())
+        {
+            return MS::kSuccess;
+        }
+    }
+
+    context_->importedControlPaths.push_back(controlPath);
+    return MS::kSuccess;
+}
+
+void AnimationImporter::registerScalarTargetBinding(
+    const std::string &targetName,
+    const dmx_import_translator::ScalarAttributeBinding &binding)
+{
+    if (targetName.empty() || binding.node.isNull() || binding.attributeName.empty())
+    {
+        return;
+    }
+
+    std::vector<ScalarAttributeBinding> &bindings = context_->importedScalarTargets[targetName];
+    for (const ScalarAttributeBinding &existingBinding : bindings)
+    {
+        if (existingBinding.node == binding.node && existingBinding.attributeName == binding.attributeName)
+        {
+            return;
+        }
+    }
+
+    bindings.push_back(binding);
+}
+
 const simple_dmx::Element *AnimationImporter::FindAnimationList() const
 {
     if (const simple_dmx::Element *animationList = FindAttributeElement(context_->document, documentRoot_, "animationList"))
@@ -661,18 +793,30 @@ MStatus AnimationImporter::CreateCombinationControls(
 
     const std::vector<std::string> controlValueStrings = FindAttributeStringArray(combinationOperator, "controlValues");
 
+    std::string controlNodeName = combinationOperator->name.empty()
+        ? "combinationControls"
+        : SanitizeNodeName(combinationOperator->name + std::string("_controls"));
+
     MStatus status;
-    MFnTransform controlNodeFn;
-    MObject controlNodeObject = controlNodeFn.create(sceneRoot, &status);
+    MObject controlNodeObject = findExistingControlNode(controlNodeName, sceneRoot);
+    const bool reusedExistingNode = !controlNodeObject.isNull();
+    if (!reusedExistingNode)
+    {
+        MFnTransform controlNodeFn;
+        controlNodeObject = controlNodeFn.create(sceneRoot, &status);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+
+        controlNodeFn.setName(controlNodeName.c_str());
+    }
+
+    status = registerImportedControlPath(controlNodeObject);
     if (!status)
     {
         return MStatus::kFailure;
     }
-
-    std::string controlNodeName = combinationOperator->name.empty()
-        ? "combinationControls"
-        : SanitizeNodeName(combinationOperator->name + std::string("_controls"));
-    controlNodeFn.setName(controlNodeName.c_str());
 
     MFnDependencyNode controlDependencyNode(controlNodeObject, &status);
     if (!status)
@@ -692,39 +836,45 @@ MStatus AnimationImporter::CreateCombinationControls(
             ? std::string("control") + std::to_string(controlIndex)
             : SanitizeNodeName(control->name);
 
-        MFnNumericAttribute numericAttributeFn;
-        MObject attributeObject = numericAttributeFn.create(
-            controlName.c_str(),
-            controlName.c_str(),
-            MFnNumericData::kFloat,
-            0.0f,
-            &status);
-        if (!status)
+        MObject attributeObject = controlDependencyNode.attribute(controlName.c_str(), &status);
+        const bool reusedExistingAttribute = status && !attributeObject.isNull();
+        if (!reusedExistingAttribute)
         {
-            return MStatus::kFailure;
-        }
+            status = MS::kSuccess;
+            MFnNumericAttribute numericAttributeFn;
+            attributeObject = numericAttributeFn.create(
+                controlName.c_str(),
+                controlName.c_str(),
+                MFnNumericData::kFloat,
+                0.0f,
+                &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
 
-        numericAttributeFn.setKeyable(true);
-        numericAttributeFn.setStorable(true);
-        numericAttributeFn.setReadable(true);
-        numericAttributeFn.setWritable(true);
+            numericAttributeFn.setKeyable(true);
+            numericAttributeFn.setStorable(true);
+            numericAttributeFn.setReadable(true);
+            numericAttributeFn.setWritable(true);
 
-        const std::vector<double> minValues = ParseNumberList(FindAttributeString(control, "flexMin"));
-        if (!minValues.empty())
-        {
-            numericAttributeFn.setMin(static_cast<float>(minValues[0]));
-        }
+            const std::vector<double> minValues = ParseNumberList(FindAttributeString(control, "flexMin"));
+            if (!minValues.empty())
+            {
+                numericAttributeFn.setMin(static_cast<float>(minValues[0]));
+            }
 
-        const std::vector<double> maxValues = ParseNumberList(FindAttributeString(control, "flexMax"));
-        if (!maxValues.empty())
-        {
-            numericAttributeFn.setMax(static_cast<float>(maxValues[0]));
-        }
+            const std::vector<double> maxValues = ParseNumberList(FindAttributeString(control, "flexMax"));
+            if (!maxValues.empty())
+            {
+                numericAttributeFn.setMax(static_cast<float>(maxValues[0]));
+            }
 
-        status = controlDependencyNode.addAttribute(attributeObject);
-        if (!status)
-        {
-            return MStatus::kFailure;
+            status = controlDependencyNode.addAttribute(attributeObject);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
         }
 
         MPlug controlPlug = controlDependencyNode.findPlug(controlName.c_str(), true, &status);
@@ -742,17 +892,20 @@ MStatus AnimationImporter::CreateCombinationControls(
                 defaultValue = static_cast<float>(controlValues.back());
             }
         }
-        status = controlPlug.setFloat(defaultValue);
-        if (!status)
+        if (!(reusedExistingNode && reusedExistingAttribute))
         {
-            return MStatus::kFailure;
+            status = controlPlug.setFloat(defaultValue);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
         }
 
         ScalarAttributeBinding binding{controlNodeObject, controlName};
-        context_->importedScalarTargets[control->name].push_back(binding);
+        registerScalarTargetBinding(control->name, binding);
         for (const std::string &rawControlName : FindAttributeStringArray(control, "rawControlNames"))
         {
-            context_->importedScalarTargets[rawControlName].push_back(binding);
+            registerScalarTargetBinding(rawControlName, binding);
         }
     }
 

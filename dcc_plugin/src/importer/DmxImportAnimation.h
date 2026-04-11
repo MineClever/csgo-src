@@ -2,7 +2,7 @@
 
 #include "DmxImportTranslatorTypes.h"
 
-#include "../common/SimpleDmxDocument.h"
+#include <common/SimpleDmxDocument.h>
 
 #include <memory>
 #include <string>
@@ -58,6 +58,11 @@ private:
     MStatus applyFloatAnimation(const MPlug &targetPlug, const simple_dmx::Element *logLayer) const;
     MStatus applyFloatAnimation(const std::vector<MPlug> &targetPlugs, const simple_dmx::Element *logLayer) const;
     bool shouldSkipAppendTransformAnimation(const simple_dmx::Element *targetElement) const;
+    MObject findExistingControlNode(const std::string &controlNodeName, const MObject &sceneRoot) const;
+    MStatus registerImportedControlPath(const MObject &controlNodeObject);
+    void registerScalarTargetBinding(
+        const std::string &targetName,
+        const dmx_import_translator::ScalarAttributeBinding &binding);
     void bindCurrentChannel(const simple_dmx::Element *channel);
 
     std::shared_ptr<ImportContext> context_;
