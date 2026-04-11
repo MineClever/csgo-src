@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 SmdImportSession::SmdImportSession(const MFileObject &fileObject, const MString &options)
     : fileObject_(fileObject), options_(options)
@@ -33,6 +34,24 @@ MStatus SmdImportSession::Run()
     }
 
     const SmdImportOptions importOptions = parseOptions();
+    if (dcc_import_policy::UsesUpdateCurrentScene(importOptions.scenePolicy))
+    {
+        maya_smd::ReportWarning("maya_smd: importMode=update is parsed but not implemented yet; falling back to create-new import behavior.");
+    }
+    else if (dcc_import_policy::UsesAppendMissingObjects(importOptions.scenePolicy))
+    {
+        maya_smd::ReportWarning("maya_smd: importMode=append is parsed but not implemented yet; falling back to create-new import behavior.");
+    }
+    else if (dcc_import_policy::UsesAnimationOnlyImport(importOptions.scenePolicy))
+    {
+        maya_smd::ReportWarning("maya_smd: importMode=animationOnly is parsed but not implemented yet; falling back to create-new import behavior.");
+    }
+
+    if (importOptions.scenePolicy.importAnimationToLayer)
+    {
+        maya_smd::ReportWarning("maya_smd: animation layer import options are parsed but not implemented yet; imported animation will still target the base scene.");
+    }
+
     SmdSceneImporter importer(document, importOptions);
     return importer.Import();
 }
@@ -55,46 +74,30 @@ SmdImportOptions SmdImportSession::parseOptions() const
         return parsedOptions;
     }
 
-    const std::string optionString = options_.asChar();
-    size_t optionStart = 0;
-    while (optionStart < optionString.size())
+    const std::unordered_map<std::string, std::string> optionMap = dcc_import_policy::ParseOptionMap(options_);
+    parsedOptions.scenePolicy = dcc_import_policy::ParseSceneImportPolicy(optionMap);
+    dcc_import_policy::CaptureCurrentNamespace(parsedOptions.scenePolicy);
+    for (const auto &entry : optionMap)
     {
-        const size_t optionEnd = optionString.find(';', optionStart);
-        const std::string option = optionString.substr(
-            optionStart,
-            optionEnd == std::string::npos ? std::string::npos : optionEnd - optionStart);
-        const size_t separator = option.find('=');
-        if (separator != std::string::npos && separator + 1 < option.size())
+        try
         {
-            const std::string key = option.substr(0, separator);
-            const std::string value = option.substr(separator + 1);
-
-            try
+            const double numericValue = std::stod(entry.second);
+            if (entry.first == "rotatex")
             {
-                const double numericValue = std::stod(value);
-                if (key == "rotateX")
-                {
-                    parsedOptions.rotateXDegrees = numericValue;
-                }
-                else if (key == "rotateY")
-                {
-                    parsedOptions.rotateYDegrees = numericValue;
-                }
-                else if (key == "rotateZ")
-                {
-                    parsedOptions.rotateZDegrees = numericValue;
-                }
+                parsedOptions.rotateXDegrees = numericValue;
             }
-            catch (...)
+            else if (entry.first == "rotatey")
             {
+                parsedOptions.rotateYDegrees = numericValue;
+            }
+            else if (entry.first == "rotatez")
+            {
+                parsedOptions.rotateZDegrees = numericValue;
             }
         }
-
-        if (optionEnd == std::string::npos)
+        catch (...)
         {
-            break;
         }
-        optionStart = optionEnd + 1;
     }
 
     return parsedOptions;

@@ -481,6 +481,10 @@
   - 2026-04-11：完成 SMD 样例接入 Maya 专项回归，并在真实 `mayapy` 宿主下开始收敛 `chr_mesh.smd` roundtrip。
   - 2026-04-11：明确后续 DMX / SMD 共用导入路线，新增“场景根导入、名称空间兼容、更新/附加策略、动画层导入”统一规划。
   - 2026-04-11：完成 `dcc_plugin` 内部一轮面向对象收口，已将 DMX/SMD importer/exporter 中仍使用类成员引用保存 `ImportContext / ExportContext / DocumentBuilder / Document` 的 helper 统一改为智能指针句柄，避免在类内部继续保留引用成员。
+  - 2026-04-11：完成 SMD 三个专项样例在真实 `mayapy` 宿主下的最小回归验证，`MostComplexSampleSet/chr_mesh.smd`、`MostComplexSampleSet/vcaanim_VertexAnim.smd`、`Ellis/DMX/RAGDOLL.smd` 当前均可完成导入、导出、再导入闭环。
+  - 2026-04-11：开始落地 DMX / SMD 共用 importer 策略层，已抽出统一 `SceneImportPolicy` 解析，并接通 `useSceneRoot=1`。当前 DMX 与 SMD 都支持跳过包装根直接导入到 Maya 场景根；当该模式与根旋转/轴向修正冲突时，当前实现优先保留 scene-root 导入并跳过相关修正。
+  - 2026-04-11：统一新引入公共头的 include 约束，`ImportPolicy.h` 已改为 `<common/ImportPolicy.h>` 非相对引用形式；后续新增公共头引用时，避免继续使用 `../` 相对路径 include。
+  - 2026-04-11：继续扩展 DMX / SMD 共用 importer 策略模型，已统一加入 `importMode(update/append/animationOnly)`、`importAnimationToLayer`、`animationLayerMode`、当前 Maya 名称空间捕获等解析入口；现阶段这些高阶模式已可被宿主识别并给出明确 warning，但对象合并与动画层实际行为仍待后续实现。
 
 ## 环境与工具链说明
 

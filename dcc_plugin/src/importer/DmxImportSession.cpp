@@ -85,11 +85,41 @@ MStatus DmxImportSession::LoadDocument()
     }
 
     importOptions_ = ParseImportOptions(optionsText_);
+    dcc_import_policy::CaptureCurrentNamespace(importOptions_.scenePolicy);
+
+    if (dcc_import_policy::UsesUpdateCurrentScene(importOptions_.scenePolicy))
+    {
+        maya_dmx::ReportWarning("maya_dmx: importMode=update is parsed but not implemented yet; falling back to create-new import behavior.");
+    }
+    else if (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy))
+    {
+        maya_dmx::ReportWarning("maya_dmx: importMode=append is parsed but not implemented yet; falling back to create-new import behavior.");
+    }
+    else if (dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy))
+    {
+        maya_dmx::ReportWarning("maya_dmx: importMode=animationOnly is parsed but not implemented yet; falling back to create-new import behavior.");
+    }
+
+    if (importOptions_.scenePolicy.importAnimationToLayer)
+    {
+        maya_dmx::ReportWarning("maya_dmx: animation layer import options are parsed but not implemented yet; imported animation will still target the base scene.");
+    }
+
     return MStatus::kSuccess;
 }
 
 MStatus DmxImportSession::CreateSceneRoot(ImportContext &context, MObject &sceneRoot) const
 {
+    if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy))
+    {
+        sceneRoot = MObject::kNullObj;
+        if (context.applyAxisCorrection)
+        {
+            maya_dmx::ReportWarning("maya_dmx: skipped root axis correction because useSceneRoot=1 imports directly into the Maya scene.");
+        }
+        return MS::kSuccess;
+    }
+
     MStatus status;
     MFnTransform rootTransformFn;
     sceneRoot = rootTransformFn.create(MObject::kNullObj, &status);

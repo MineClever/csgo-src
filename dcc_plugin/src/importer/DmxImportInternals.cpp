@@ -1,5 +1,7 @@
 #include "DmxImportInternals.h"
 
+#include <common/ImportPolicy.h>
+
 #include <cstdint>
 #include <algorithm>
 #include <cctype>
@@ -129,59 +131,15 @@ std::string SanitizeNodeName(const std::string &name)
     return sanitized;
 }
 
-std::unordered_map<std::string, std::string> ParseOptionMap(const MString &options)
-{
-    std::unordered_map<std::string, std::string> optionMap;
-    std::string text = options.asChar();
-    size_t start = 0;
-    while (start < text.size())
-    {
-        size_t end = text.find(';', start);
-        if (end == std::string::npos)
-        {
-            end = text.size();
-        }
-
-        const std::string pair = text.substr(start, end - start);
-        const size_t separator = pair.find('=');
-        if (separator != std::string::npos)
-        {
-            std::string key = pair.substr(0, separator);
-            std::string value = pair.substr(separator + 1);
-            std::transform(key.begin(), key.end(), key.begin(), [](unsigned char ch) {
-                return static_cast<char>(std::tolower(ch));
-            });
-            optionMap[key] = value;
-        }
-
-        start = end + 1;
-    }
-    return optionMap;
-}
-
-bool ParseBoolOption(const std::unordered_map<std::string, std::string> &optionMap, const char *key, bool defaultValue)
-{
-    auto it = optionMap.find(key);
-    if (it == optionMap.end())
-    {
-        return defaultValue;
-    }
-
-    std::string value = it->second;
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
-    return value == "1" || value == "true" || value == "yes";
-}
-
 ImportOptions ParseImportOptions(const MString &options)
 {
     ImportOptions importOptions;
-    const std::unordered_map<std::string, std::string> optionMap = ParseOptionMap(options);
-    importOptions.importSkin = ParseBoolOption(optionMap, "importskin", true);
-    importOptions.importMaterials = ParseBoolOption(optionMap, "importmaterials", true);
-    importOptions.importDeltaStates = ParseBoolOption(optionMap, "importdeltastates", true);
-    importOptions.applyAxisCorrection = ParseBoolOption(optionMap, "applyaxiscorrection", true);
+    const std::unordered_map<std::string, std::string> optionMap = dcc_import_policy::ParseOptionMap(options);
+    importOptions.importSkin = dcc_import_policy::ParseBoolOption(optionMap, "importskin", true);
+    importOptions.importMaterials = dcc_import_policy::ParseBoolOption(optionMap, "importmaterials", true);
+    importOptions.importDeltaStates = dcc_import_policy::ParseBoolOption(optionMap, "importdeltastates", true);
+    importOptions.applyAxisCorrection = dcc_import_policy::ParseBoolOption(optionMap, "applyaxiscorrection", true);
+    importOptions.scenePolicy = dcc_import_policy::ParseSceneImportPolicy(optionMap);
     return importOptions;
 }
 

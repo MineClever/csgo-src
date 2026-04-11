@@ -1,5 +1,6 @@
 #pragma once
 
+#include <common/ImportPolicy.h>
 #include "../common/SimpleDmxDocument.h"
 
 #include <maya/MDagPath.h>
@@ -49,5 +50,6 @@ struct ImportOptions
     bool importMaterials = true;
     bool importDeltaStates = true;
     bool applyAxisCorrection = true;
+    dcc_import_policy::SceneImportPolicy scenePolicy;
 };
 }

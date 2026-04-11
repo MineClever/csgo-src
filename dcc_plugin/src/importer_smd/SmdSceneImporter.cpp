@@ -152,6 +152,12 @@ MStatus SmdSceneImporter::Import()
 
 MStatus SmdSceneImporter::createImportRoot()
 {
+    if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy))
+    {
+        importRoot_ = MObject::kNullObj;
+        return MS::kSuccess;
+    }
+
     MStatus status;
     MFnTransform rootTransformFn;
     importRoot_ = rootTransformFn.create(MObject::kNullObj, &status);
@@ -172,6 +178,11 @@ MStatus SmdSceneImporter::applyImportRotation()
         && importOptions_.rotateZDegrees == 0.0)
     {
         return MS::kSuccess;
+    }
+
+    if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy))
+    {
+        return maya_smd::ReportWarning("maya_smd: skipped custom import rotation because useSceneRoot=1 imports directly into the Maya scene.");
     }
 
     MStatus status;
