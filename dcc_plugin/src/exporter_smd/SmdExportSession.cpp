@@ -1,6 +1,6 @@
 #include "SmdExportSession.h"
 
-#include "../common_smd/MayaSmdCommon.h"
+#include <common_smd/MayaSmdCommon.h>
 
 #include <fstream>
 

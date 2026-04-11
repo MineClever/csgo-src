@@ -1,6 +1,6 @@
 #include "SmdMeshImporter.h"
 
-#include "../common_smd/MayaSmdCommon.h"
+#include <common_smd/MayaSmdCommon.h>
 
 #include <cctype>
 #include <algorithm>

@@ -1,7 +1,7 @@
 #include "SmdImportTranslator.h"
 #include "SmdImportSession.h"
 
-#include "../common_smd/MayaSmdCommon.h"
+#include <common_smd/MayaSmdCommon.h>
 
 #include <exception>
 

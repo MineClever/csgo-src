@@ -1,6 +1,6 @@
 #include "SmdSceneExporter.h"
 
-#include "../common_smd/MayaSmdCommon.h"
+#include <common_smd/MayaSmdCommon.h>
 
 #include <algorithm>
 #include <cmath>
@@ -578,7 +578,7 @@ int SmdSceneExporter::findOwningNodeIndex(const MDagPath &dagPath) const
         }
         currentPath.pop();
     }
-
+    
     return exportNodes_.empty() ? 0 : 0;
 }
 

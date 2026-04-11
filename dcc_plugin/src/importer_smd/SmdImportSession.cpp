@@ -1,8 +1,8 @@
 #include "SmdImportSession.h"
 #include "SmdSceneImporter.h"
 
-#include "../common_smd/MayaSmdCommon.h"
-#include "../common_smd/SimpleSmdDocument.h"
+#include <common_smd/MayaSmdCommon.h>
+#include <common_smd/SimpleSmdDocument.h>
 
 #include <memory>
 #include <string>

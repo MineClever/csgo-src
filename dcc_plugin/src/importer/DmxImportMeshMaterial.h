@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../common/SimpleDmxDocument.h"
+#include <common/SimpleDmxDocument.h>
 
 #include <string>
 #include <vector>

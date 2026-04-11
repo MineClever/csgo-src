@@ -2,7 +2,7 @@
 
 #include "SmdImportSession.h"
 
-#include "../common_smd/SimpleSmdDocument.h"
+#include <common_smd/SimpleSmdDocument.h>
 
 #include <memory>
 

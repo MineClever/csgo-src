@@ -1,6 +1,6 @@
 #include "MayaDmxWorkflowCommand.h"
 
-#include "../common/MayaDmxCommon.h"
+#include <common/MayaDmxCommon.h>
 
 #include <maya/MArgList.h>
 

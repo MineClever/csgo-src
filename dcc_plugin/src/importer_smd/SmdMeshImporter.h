@@ -1,7 +1,6 @@
 #pragma once
 
-#include "../common_smd/SimpleSmdDocument.h"
-
+#include <common_smd/SimpleSmdDocument.h>
 #include <common/ImportPolicy.h>
 
 #include <memory>

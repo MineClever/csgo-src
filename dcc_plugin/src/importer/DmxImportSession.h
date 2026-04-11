@@ -2,7 +2,7 @@
 
 #include "DmxImportTranslatorTypes.h"
 
-#include "../common/SimpleDmxDocument.h"
+#include <common/SimpleDmxDocument.h>
 
 #include <maya/MFileObject.h>
 #include <maya/MObject.h>

@@ -5,8 +5,8 @@
 
 #include "DmxImportTranslatorTypes.h"
 
-#include "../common/MayaDmxCommon.h"
-#include "../common/SimpleDmxDocument.h"
+#include <common/MayaDmxCommon.h>
+#include <common/SimpleDmxDocument.h>
 
 #include <string>
 #include <unordered_map>

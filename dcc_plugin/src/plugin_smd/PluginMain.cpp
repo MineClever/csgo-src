@@ -1,6 +1,6 @@
-#include "../exporter_smd/SmdExportTranslator.h"
-#include "../importer_smd/SmdImportTranslator.h"
-#include "../common_smd/MayaSmdCommon.h"
+#include <exporter_smd/SmdExportTranslator.h>
+#include <importer_smd/SmdImportTranslator.h>
+#include <common_smd/MayaSmdCommon.h>
 
 #include <maya/MFnPlugin.h>
 

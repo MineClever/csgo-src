@@ -1,6 +1,6 @@
 #include "WorkflowPresetStore.h"
 
-#include "../common/MayaDmxCommon.h"
+#include <common/MayaDmxCommon.h>
 #include "WorkflowSupport.h"
 
 namespace maya_dmx

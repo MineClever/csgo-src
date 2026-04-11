@@ -1,7 +1,7 @@
 #include "DmxImportTranslator.h"
 #include "DmxImportSession.h"
 
-#include "../common/MayaDmxCommon.h"
+#include <common/MayaDmxCommon.h>
 
 void *DmxImportTranslator::Create()
 {

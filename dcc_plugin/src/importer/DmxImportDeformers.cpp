@@ -1,7 +1,7 @@
 #include "DmxImportDeformers.h"
 #include "DmxImportInternals.h"
 
-#include "../common/MayaDmxCommon.h"
+#include <common/MayaDmxCommon.h>
 
 #include <algorithm>
 #include <cstdlib>

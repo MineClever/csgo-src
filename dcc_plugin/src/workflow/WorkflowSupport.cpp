@@ -1,6 +1,6 @@
 #include "WorkflowSupport.h"
 
-#include "../common/MayaDmxCommon.h"
+#include <common/MayaDmxCommon.h>
 
 #include <maya/MGlobal.h>
 

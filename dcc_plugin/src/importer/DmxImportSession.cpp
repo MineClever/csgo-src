@@ -4,8 +4,8 @@
 #include "DmxImportDag.h"
 #include "DmxImportInternals.h"
 
-#include "../common/MayaDmxCommon.h"
-#include "../common/SimpleDmxText.h"
+#include <common/MayaDmxCommon.h>
+#include <common/SimpleDmxText.h>
 
 #include <string>
 #include <vector>

@@ -1,7 +1,7 @@
-#include "../common/MayaDmxCommon.h"
-#include "../exporter/DmxExportTranslator.h"
-#include "../importer/DmxImportTranslator.h"
-#include "../workflow/MayaDmxWorkflowCommand.h"
+#include <common/MayaDmxCommon.h>
+#include <exporter/DmxExportTranslator.h>
+#include <importer/DmxImportTranslator.h>
+#include <workflow/MayaDmxWorkflowCommand.h>
 
 #include <maya/MFnPlugin.h>
 
