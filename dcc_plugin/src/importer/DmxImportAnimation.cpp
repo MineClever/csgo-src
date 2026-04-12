@@ -532,7 +532,7 @@ bool AnimationImporter::shouldSkipAppendScalarAnimation(const MPlug &targetPlug)
 
 MObject AnimationImporter::findExistingControlNode(const std::string &controlNodeName, const MObject &sceneRoot) const
 {
-    if (!dcc_import_policy::UsesAppendMissingObjects(context_->scenePolicy) || controlNodeName.empty())
+    if (!dcc_import_policy::UsesExistingObjectMerge(context_->scenePolicy) || controlNodeName.empty())
     {
         return MObject::kNullObj;
     }

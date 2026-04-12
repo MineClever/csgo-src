@@ -36,7 +36,7 @@ MStatus SmdImportSession::Run()
     const SmdImportOptions importOptions = parseOptions();
     if (dcc_import_policy::UsesUpdateCurrentScene(importOptions.scenePolicy))
     {
-        maya_smd::ReportWarning("maya_smd: importMode=update is parsed but not implemented yet; falling back to create-new import behavior.");
+        maya_smd::ReportWarning("maya_smd: importMode=update now reuses matching hierarchy and can overwrite reused bind pose/base animation, but mesh overwrite is still not implemented yet.");
     }
     else if (dcc_import_policy::UsesAppendMissingObjects(importOptions.scenePolicy))
     {

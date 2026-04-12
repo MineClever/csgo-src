@@ -90,7 +90,7 @@ MStatus DmxImportSession::LoadDocument()
 
     if (dcc_import_policy::UsesUpdateCurrentScene(importOptions_.scenePolicy))
     {
-        maya_dmx::ReportWarning("maya_dmx: importMode=update is parsed but not implemented yet; falling back to create-new import behavior.");
+        maya_dmx::ReportWarning("maya_dmx: importMode=update now reuses matching hierarchy and can overwrite reused transforms/base animation, but mesh/deformer overwrite is still not implemented yet.");
     }
     else if (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy))
     {

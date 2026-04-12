@@ -228,8 +228,8 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
     MStatus status;
     const MObject parentObject = findParentObject(node);
     MObject jointObject = MObject::kNullObj;
-    const bool appendMissingMode = dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy);
-    if (appendMissingMode)
+    const bool reuseExistingMode = dcc_import_policy::UsesExistingObjectMerge(importOptions_.scenePolicy);
+    if (reuseExistingMode)
     {
         jointObject = findExistingJoint(node);
     }

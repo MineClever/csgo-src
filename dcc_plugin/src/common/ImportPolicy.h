@@ -243,6 +243,12 @@ inline bool UsesAppendMissingObjects(const SceneImportPolicy &policy)
     return policy.objectMergeMode == ObjectMergeMode::AppendMissing;
 }
 
+inline bool UsesExistingObjectMerge(const SceneImportPolicy &policy)
+{
+    return policy.objectMergeMode == ObjectMergeMode::AppendMissing ||
+        policy.objectMergeMode == ObjectMergeMode::UpdateScene;
+}
+
 inline bool UsesAnimationOnlyImport(const SceneImportPolicy &policy)
 {
     return policy.objectMergeMode == ObjectMergeMode::AnimationOnly;

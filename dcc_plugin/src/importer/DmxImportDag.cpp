@@ -203,8 +203,9 @@ MStatus ImportDagHierarchyRecursive(
 
     MStatus status;
     MObject nodeObject = MObject::kNullObj;
+    const bool reuseExistingMode = dcc_import_policy::UsesExistingObjectMerge(context.scenePolicy);
     const bool appendMissingMode = dcc_import_policy::UsesAppendMissingObjects(context.scenePolicy);
-    if (appendMissingMode)
+    if (reuseExistingMode)
     {
         nodeObject = FindAppendTargetChild(context, parent, nodeName, isJoint);
     }

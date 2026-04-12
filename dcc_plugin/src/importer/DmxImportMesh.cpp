@@ -8,13 +8,16 @@
 #include <vector>
 
 #include <maya/MFloatArray.h>
+#include <maya/MGlobal.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnMesh.h>
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MIntArray.h>
+#include <maya/MDagPath.h>
 #include <maya/MPointArray.h>
 #include <maya/MStatus.h>
+#include <maya/MString.h>
 #include <maya/MStringArray.h>
 #include <maya/MVectorArray.h>
 
@@ -73,6 +76,73 @@ static std::string JoinLines(const std::vector<std::string> &values)
     return stream.str();
 }
 
+static MStatus DeleteExistingMeshForUpdate(const dcc_import_policy::SceneImportPolicy &scenePolicy, MObject parent)
+{
+    if (!dcc_import_policy::UsesUpdateCurrentScene(scenePolicy))
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MFnDagNode parentDagNode(parent, &status);
+    if (!status)
+    {
+        return MS::kSuccess;
+    }
+
+    MDagPath parentPath;
+    status = MDagPath::getAPathTo(parent, parentPath);
+    if (!status)
+    {
+        return MS::kSuccess;
+    }
+
+    bool hasMeshChild = false;
+    MStringArray meshPaths;
+    for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
+    {
+        const MObject childObject = parentDagNode.child(childIndex, &status);
+        if (!status || !childObject.hasFn(MFn::kMesh))
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        MDagPath childPath;
+        status = MDagPath::getAPathTo(childObject, childPath);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        meshPaths.append(childPath.fullPathName());
+        hasMeshChild = true;
+    }
+
+    if (!hasMeshChild)
+    {
+        return MS::kSuccess;
+    }
+
+    status = MGlobal::executeCommand(MString("delete -ch \"") + parentPath.fullPathName() + "\"", false, false);
+    if (!status)
+    {
+        return status;
+    }
+
+    for (unsigned int meshIndex = 0; meshIndex < meshPaths.length(); ++meshIndex)
+    {
+        status = MGlobal::executeCommand(MString("delete \"") + meshPaths[meshIndex] + "\"", false, false);
+        if (!status)
+        {
+            return status;
+        }
+    }
+
+    return MS::kSuccess;
+}
+
 MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagElement, MObject parent)
 {
     const simple_dmx::Document &document = context.document;
@@ -88,7 +158,8 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         return maya_dmx::ReportWarning(MString("maya_dmx: mesh has no bind/base state: ") + dagElement->name.c_str());
     }
 
-    if (dcc_import_policy::UsesAppendMissingObjects(context.scenePolicy))
+    bool reusedExistingMesh = false;
+    if (dcc_import_policy::UsesExistingObjectMerge(context.scenePolicy))
     {
         MStatus status;
         MFnDagNode parentDagNode(parent, &status);
@@ -106,11 +177,17 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
                 MFnDagNode meshDagNode(childObject, &status);
                 if (status && !meshDagNode.isIntermediateObject())
                 {
-                    return MS::kSuccess;
+                    reusedExistingMesh = true;
+                    break;
                 }
                 status = MS::kSuccess;
             }
         }
+    }
+
+    if (reusedExistingMesh && !dcc_import_policy::UsesUpdateCurrentScene(context.scenePolicy))
+    {
+        return MS::kSuccess;
     }
 
     const std::vector<std::string> positionStrings = FindAttributeStringArray(vertexData, "positions");
@@ -315,7 +392,12 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         return maya_dmx::ReportWarning(MString("maya_dmx: mesh geometry was empty after parsing: ") + dagElement->name.c_str());
     }
 
-    MStatus status;
+    MStatus status = DeleteExistingMeshForUpdate(context.scenePolicy, parent);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     MFnMesh meshFn;
     const MObject meshObject = meshFn.create(points.length(), polygonCounts.length(), points, polygonCounts, polygonConnects, parent, &status);
     if (!status)

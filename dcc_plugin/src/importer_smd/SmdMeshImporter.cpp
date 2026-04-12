@@ -95,6 +95,71 @@ MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const 
     return attributePlug.setString(value.c_str());
 }
 
+MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPolicy &scenePolicy, const MObject &transformObject)
+{
+    if (!dcc_import_policy::UsesUpdateCurrentScene(scenePolicy))
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MDagPath transformPath;
+    status = MDagPath::getAPathTo(transformObject, transformPath);
+    if (!status)
+    {
+        return MS::kSuccess;
+    }
+
+    MFnDagNode transformDagNode(transformObject, &status);
+    if (!status)
+    {
+        return MS::kSuccess;
+    }
+
+    MStringArray meshPaths;
+    for (unsigned int childIndex = 0; childIndex < transformDagNode.childCount(); ++childIndex)
+    {
+        const MObject childObject = transformDagNode.child(childIndex, &status);
+        if (!status || !childObject.hasFn(MFn::kMesh))
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        MDagPath childPath;
+        status = MDagPath::getAPathTo(childObject, childPath);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        meshPaths.append(childPath.fullPathName());
+    }
+
+    if (meshPaths.length() == 0)
+    {
+        return MS::kSuccess;
+    }
+
+    status = MGlobal::executeCommand(MString("delete -ch \"") + transformPath.fullPathName() + "\"", false, false);
+    if (!status)
+    {
+        return status;
+    }
+
+    for (unsigned int meshIndex = 0; meshIndex < meshPaths.length(); ++meshIndex)
+    {
+        status = MGlobal::executeCommand(MString("delete \"") + meshPaths[meshIndex] + "\"", false, false);
+        if (!status)
+        {
+            return status;
+        }
+    }
+
+    return MS::kSuccess;
+}
+
 MObject FindNodeByName(const MString &nodeName)
 {
     MSelectionList selection;
@@ -201,7 +266,7 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
 
     MStatus status;
     MObject transformObject = MObject::kNullObj;
-    if (dcc_import_policy::UsesAppendMissingObjects(scenePolicy_))
+    if (dcc_import_policy::UsesExistingObjectMerge(scenePolicy_))
     {
         transformObject = findExistingMeshGroup(parent, materialName);
     }
@@ -218,9 +283,27 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
         transformFn.setName((smd_mesh_import_impl::SanitizeMeshName(materialName) + "_grp#").c_str());
     }
 
-    if (reusedExistingGroup && !findPrimaryMeshChild(transformObject).isNull())
+    const bool hasExistingMeshChild = reusedExistingGroup && !findPrimaryMeshChild(transformObject).isNull();
+    if (hasExistingMeshChild)
     {
-        return MS::kSuccess;
+        if (dcc_import_policy::UsesUpdateCurrentScene(scenePolicy_))
+        {
+            status = smd_mesh_import_impl::DeleteExistingMeshGroupForUpdate(scenePolicy_, transformObject);
+            if (!status)
+            {
+                return maya_smd::ReportError(MString("maya_smd: failed to clear existing mesh for material group ") + materialName.c_str(), status);
+            }
+        }
+        else
+        {
+            return MS::kSuccess;
+        }
+    }
+
+    status = smd_mesh_import_impl::DeleteExistingMeshGroupForUpdate(scenePolicy_, transformObject);
+    if (!status)
+    {
+        return maya_smd::ReportError(MString("maya_smd: failed to clear mesh history for material group ") + materialName.c_str(), status);
     }
 
     MFnMesh meshFn;
