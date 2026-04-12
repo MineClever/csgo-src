@@ -4,8 +4,9 @@ setlocal
 set PLUGIN_ROOT=%~dp0
 set PLUGIN_ROOT=%PLUGIN_ROOT:~0,-1%
 for %%I in ("%PLUGIN_ROOT%\..") do set REPO_ROOT=%%~fI
-set BUILD_DIR=%REPO_ROOT%\build\maya_dmx
+set BUILD_DIR=%PLUGIN_ROOT%\build
 set PLATFORM=x64
+set BUILD_PDB=ON
 
 if not "%~1"=="" set PLATFORM=%~1
 
@@ -20,7 +21,7 @@ if /I not "%PLATFORM%"=="x64" (
     exit /b 1
 )
 
-cmake -S "%PLUGIN_ROOT%" -B "%BUILD_DIR%" -A %PLATFORM%
+cmake -S "%PLUGIN_ROOT%" -B "%BUILD_DIR%" -A %PLATFORM% -DMAYA_DMX_BUILD_PDB=%BUILD_PDB%
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo ERROR: cmake configuration failed.

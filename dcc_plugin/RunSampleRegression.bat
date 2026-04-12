@@ -4,7 +4,7 @@ setlocal
 set PLUGIN_ROOT=%~dp0
 set PLUGIN_ROOT=%PLUGIN_ROOT:~0,-1%
 for %%I in ("%PLUGIN_ROOT%\..") do set REPO_ROOT=%%~fI
-set BUILD_DIR=%REPO_ROOT%\build\maya_dmx
+set BUILD_DIR=%PLUGIN_ROOT%\build
 set CONFIG=Release
 if not "%~1"=="" set CONFIG=%~1
 

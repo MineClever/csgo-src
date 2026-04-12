@@ -11,6 +11,6 @@ if not "%~1"=="" set CONFIG=%~1
 powershell -ExecutionPolicy Bypass -File "%PLUGIN_ROOT%\tools\QueryMayaValidationEnv.ps1" ^
     -Config "%CONFIG%" ^
     -RepoRoot "%REPO_ROOT%" ^
-    -OutputPath "%REPO_ROOT%\build\maya_dmx\maya_validation_env_report.md"
+    -OutputPath "%PLUGIN_ROOT%\build\maya_validation_env_report.md"
 
 exit /b %ERRORLEVEL%

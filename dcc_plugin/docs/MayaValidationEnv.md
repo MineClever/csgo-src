@@ -4,7 +4,7 @@
 
 - 批处理入口：`dcc_plugin\QueryMayaValidationEnv.bat`
 - PowerShell 脚本：`dcc_plugin\tools\QueryMayaValidationEnv.ps1`
-- 默认输出报告：`build\maya_dmx\maya_validation_env_report.md`
+- 默认输出报告：`dcc_plugin\build\maya_validation_env_report.md`
 
 ## 查询范围
 

@@ -61,3 +61,4 @@ Run_Calude_AI.bat
 build_vpc/*
 dcc_plugin/maya_module/scripts/*
 *.pyc
+dcc_plugin/build/*

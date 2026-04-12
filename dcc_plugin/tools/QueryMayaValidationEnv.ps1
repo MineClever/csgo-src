@@ -57,7 +57,7 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 }
 
 $pluginRoot = Join-Path $RepoRoot "dcc_plugin"
-$buildDir = Join-Path $RepoRoot "build\maya_dmx"
+$buildDir = Join-Path $pluginRoot "build"
 $mayaExe = Join-Path $MayaInstallRoot "bin\maya.exe"
 $mayapyExe = Join-Path $MayaInstallRoot "bin\mayapy.exe"
 $pluginBinary = Join-Path $pluginRoot ("bin\" + $Config + "\maya_dmx.mll")

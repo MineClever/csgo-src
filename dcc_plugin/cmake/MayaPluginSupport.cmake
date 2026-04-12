@@ -69,12 +69,36 @@ endfunction()
 function(maya_dmx_configure_plugin_target target_name output_name)
     maya_dmx_apply_common_target_settings(${target_name})
     target_link_libraries(${target_name} PRIVATE ${MAYA_DMX_LIBRARIES})
-    set_target_properties(${target_name} PROPERTIES
-        PREFIX ""
-        SUFFIX ".mll"
-        OUTPUT_NAME "${output_name}"
-        ARCHIVE_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
-        LIBRARY_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
-        RUNTIME_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
-    )
+    if(MAYA_DMX_BUILD_PDB)
+        set_target_properties(${target_name} PROPERTIES
+            PREFIX ""
+            SUFFIX ".mll"
+            OUTPUT_NAME "${output_name}"
+            ARCHIVE_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
+            LIBRARY_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
+            RUNTIME_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
+            PDB_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
+            COMPILE_PDB_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
+        )
+        if(MSVC)
+            set_property(TARGET ${target_name} PROPERTY MSVC_DEBUG_INFORMATION_FORMAT
+                "$<$<CONFIG:Debug,RelWithDebInfo,Release,MinSizeRel>:ProgramDatabase>"
+            )
+            set_property(TARGET ${target_name} APPEND_STRING PROPERTY LINK_FLAGS_RELEASE " /DEBUG:FULL")
+            set_property(TARGET ${target_name} APPEND_STRING PROPERTY LINK_FLAGS_MINSIZEREL " /DEBUG:FULL")
+        endif()
+    else()
+        set_target_properties(${target_name} PROPERTIES
+            PREFIX ""
+            SUFFIX ".mll"
+            OUTPUT_NAME "${output_name}"
+            ARCHIVE_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
+            LIBRARY_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
+            RUNTIME_OUTPUT_DIRECTORY "${MAYA_DMX_OUTPUT_DIR}/$<CONFIG>"
+        )
+        if(MSVC)
+            set_property(TARGET ${target_name} APPEND_STRING PROPERTY LINK_FLAGS_RELEASE " /DEBUG:NONE")
+            set_property(TARGET ${target_name} APPEND_STRING PROPERTY LINK_FLAGS_MINSIZEREL " /DEBUG:NONE")
+        endif()
+    endif()
 endfunction()

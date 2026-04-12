@@ -5,6 +5,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 option(MAYA_DMX_PREFER_X64 "Prefer x64 builds for the Maya DMX plugin." ON)
+option(MAYA_DMX_BUILD_PDB "Generate deployable PDB files for Maya plugin targets." ON)
 set(MAYA_DEVKIT_ROOT "D:/_Code_Here/Maya/Autodesk_Maya_2022_5_Update_DEVKIT_Windows/devkitBase" CACHE PATH "Maya 2022.5 DevKit root")
 set(MAYA_INSTALL_ROOT "C:/Program Files/Autodesk/Maya2022" CACHE PATH "Maya 2022.5 install root")
 set(MAYA_DMX_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin" CACHE PATH "Output directory for Maya DMX plugin binaries")

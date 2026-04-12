@@ -154,17 +154,17 @@
   - Maya 2022.5 DevKit：`D:\_Code_Here\Maya\Autodesk_Maya_2022_5_Update_DEVKIT_Windows\devkitBase`
   - Maya 2022.5 安装目录：`C:\Program Files\Autodesk\Maya2022`
   - Maya 默认宿主执行入口：`C:\Program Files\Autodesk\Maya2022\`
-  - 插件独立构建目录：`build\maya_dmx`
+  - 插件独立构建目录：`dcc_plugin\build`
   - 最终项目级回归样本目录：`D:\_Code_Here\Git\csgo-src\dcc_plugin\samples\Ellis\DMX`
   - 宿主环境查询入口：[QueryMayaValidationEnv.bat](dcc_plugin/QueryMayaValidationEnv.bat)、[QueryMayaValidationEnv.ps1](dcc_plugin/tools/QueryMayaValidationEnv.ps1)
   - 宿主环境说明文档：[MayaValidationEnv.md](dcc_plugin/docs/MayaValidationEnv.md)
 
 - 当前概况：
-  - 构建、部署与 Maya module 安装链路已稳定，`cmake --build build\maya_dmx --config Release` 可生成 [maya_dmx.mll](dcc_plugin/bin/Release/maya_dmx.mll)，[InstallPluginModuleToMaya.bat](dcc_plugin/InstallPluginModuleToMaya.bat) 负责同步 `.mll`、`.pdb` 与 MEL 脚本。
+  - 构建、部署与 Maya module 安装链路已稳定，`cmake --build dcc_plugin\build --config Release` 可生成 [maya_dmx.mll](dcc_plugin/bin/Release/maya_dmx.mll)，[InstallPluginModuleToMaya.bat](dcc_plugin/InstallPluginModuleToMaya.bat) 负责同步 `.mll`、`.pdb` 与 MEL 脚本。
   - MEL 真源已统一到 [src/mel](dcc_plugin/src/mel)，`maya_module/scripts` 仅作为安装产物。
   - 实现约束：避免通过拼装 MEL 字串实现核心功能，优先使用 Maya C++ API；只有 file type specific options、option box 或 Maya 原生脚本入口确实要求 MEL 时，才保留最小必要脚本桥接。
   - 插件主线已形成“DMX 基础层 + importer/exporter + Maya UI/workflow + batch 回归 + 交互宿主验证”的最小闭环，但复杂角色样例 roundtrip 和完整 facial/animation/export 仍未收口。
-  - 2026-04-11 已通过宿主环境查询脚本确认当前机器具备 Maya 2022、mayapy、DevKit、插件二进制、MEL 脚本和回归入口的基础路径条件；查询报告输出到 `build\maya_dmx\maya_validation_env_report.md`。
+  - 2026-04-11 已通过宿主环境查询脚本确认当前机器具备 Maya 2022、mayapy、DevKit、插件二进制、MEL 脚本和回归入口的基础路径条件；查询报告输出到 `dcc_plugin\build\maya_validation_env_report.md`。
 
 - 已完成能力：
   - DMX 基础层：
@@ -258,6 +258,7 @@
 
 - 下一阶段计划：
   - 第一优先级：
+    - ✅ ~~统一 `dcc_plugin` 独立构建目录到 `dcc_plugin\build`，并把 module 安装链路继续固定为同时复制 `.mll` 与 `.pdb`，避免插件脚本与仓库根 `build\` 混用。~~（已完成，2026-04-12）：[BuildPlugin.bat](dcc_plugin/BuildPlugin.bat)、[CreatePluginSolution.bat](dcc_plugin/CreatePluginSolution.bat)、[RunSampleRegression.bat](dcc_plugin/RunSampleRegression.bat)、[RunMayaBatchRegression.bat](dcc_plugin/RunMayaBatchRegression.bat)、[QueryMayaValidationEnv.bat](dcc_plugin/QueryMayaValidationEnv.bat) 与 [QueryMayaValidationEnv.ps1](dcc_plugin/tools/QueryMayaValidationEnv.ps1) 已统一切到 `dcc_plugin\build`；[InstallPluginModuleToMaya.bat](dcc_plugin/InstallPluginModuleToMaya.bat) 的 `.pdb` 同步链路已复核保留，并同步更新了文档说明。
     - ✅ ~~补独立动画宿主回归，至少把 [vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx)、[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx)、[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 变成单独门槛，避免后续修改退回“只导骨架、不导关键帧”。~~（已完成，2026-04-11）：[MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 新增 `ANIMATION_GATE_EXPECTATIONS` 与 `validate_animation_gate()`，会在样例初始导入后直接校验动画绑定是否存在；[RunMayaBatchRegression.bat](dcc_plugin/RunMayaBatchRegression.bat) 的说明文本也已同步更新。
     - 收口 `simple_blendshape_animation` 的 blendShape 几何 diff，完成最小 facial 动画 roundtrip 稳定化。
     - 选 1 到 2 组更接近 Valve 角色资产的复合样例，验证 `skin + deltaStates + animation` 以及 `sculptTarget -regenerate` fallback 在复杂场景下仍稳定。
@@ -299,6 +300,11 @@
   - 任务同步（2026-04-11，export session helper 并回 internals）：已将 [DmxExportSession.cpp](dcc_plugin/src/exporter/DmxExportSession.cpp) 中的导出 debug log、binary/text 导出判定、选项解析与 bool 选项解析 helper 全部并回 [DmxExportInternals.h](dcc_plugin/src/exporter/DmxExportInternals.h) / `.cpp`，同时去除了 `DmxExportSession.cpp` 中的匿名 namespace；当前 exporter 入口实现也只保留 session 主流程，辅助工具已统一由 internals 层提供。`cmake --build build\maya_dmx --config Release --target maya_dmx` 复编通过。
   - 任务同步（2026-04-11，internals 收口后二次批回归）：已在 `MAYA_SKIP_USERSETUP_PY=1` 条件下再次运行 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 当前样例集；`simple_hierarchy`、`simple_blendshape`、`simple_mesh`、`simple_skinned_mesh`（含 `applyAxisCorrection=0`）、`complex_chr_mesh`（含 `applyAxisCorrection=0`）、`MostComplexSampleSet/chr_mesh`（含 `applyAxisCorrection=0`）、`simple_ngon_mesh`、`MostComplexSampleSet/vcaanim_VertexAnim`、`simple_float_animation`、`simple_blendshape_animation` 全部通过，说明 importer/exporter internals 收口后核心导入导出与动画路径仍稳定。
   - 任务同步（2026-04-11，debug log 注释校正）：当前 `AppendImportDebugLog()` 与 exporter 侧 `AppendDebugLog()` 的实现都已位于各自的 internals `.cpp` 中，translator 不再承载这类基础工具；本轮同步修正了 [DmxImportInternals.h](dcc_plugin/src/importer/DmxImportInternals.h) 中过时的实现位置注释，并再次确认 `cmake --build build\maya_dmx --config Release --target maya_dmx` 通过。
+  - 任务同步（2026-04-12，插件构建目录与符号部署约束收口）：已将 `dcc_plugin` 独立包装脚本统一到 `dcc_plugin\build`，不再写入仓库根 `build\maya_dmx`；宿主环境查询报告默认也改写到 `dcc_plugin\build\maya_validation_env_report.md`。同时复核 [InstallPluginModuleToMaya.bat](dcc_plugin/InstallPluginModuleToMaya.bat) 仍会随 `.mll` 一起复制 `maya_dmx.pdb` / `maya_smd.pdb`，并补齐了 README 与宿主环境文档中的显式说明。
+  - 任务同步（2026-04-12，插件 PDB 输出目录修正）：在 [MayaPluginSupport.cmake](dcc_plugin/cmake/MayaPluginSupport.cmake) 为插件目标补上 `PDB_OUTPUT_DIRECTORY` 与 `COMPILE_PDB_OUTPUT_DIRECTORY`，统一把 `maya_dmx` / `maya_smd` 的调试符号落到 `dcc_plugin\bin\Release`；这样 [BuildPlugin.bat](dcc_plugin/BuildPlugin.bat) 构建完成后，`InstallPluginModuleToMaya.bat` 复制 `.pdb` 的前提才真正成立。后续应以“`dcc_plugin\bin\Release` 同时存在 `.mll` 与 `.pdb`”作为插件构建完成的门槛。
+  - 任务同步（2026-04-12，Release PDB 链接开关补齐）：进一步复核生成的 `maya_dmx.vcxproj` / `maya_smd.vcxproj` 后，确认 Release 配置里 `ProgramDataBaseFile` 虽已指向 `dcc_plugin\bin\Release`，但 `GenerateDebugInformation` 仍是 `false`，导致不会实际生成 `.pdb`。现已在 [MayaPluginSupport.cmake](dcc_plugin/cmake/MayaPluginSupport.cmake) 为插件目标补上 MSVC `Release/MinSizeRel` 的 `/DEBUG:FULL`，要求 `BuildPlugin.bat` 的 Release 构建也产出可部署的 `.pdb`。
+  - 任务同步（2026-04-12，PDB 构建开关分流）：已新增 CMake 选项 `MAYA_DMX_BUILD_PDB`。当前 [CreatePluginSolution.bat](dcc_plugin/CreatePluginSolution.bat) 会用 `-DMAYA_DMX_BUILD_PDB=ON` 生成工程，保留可调试的 `.pdb` 输出；[BuildPlugin.bat](dcc_plugin/BuildPlugin.bat) 则固定用 `-DMAYA_DMX_BUILD_PDB=OFF` 做快速构建，并在构建前清理 `dcc_plugin\bin\%CONFIG%\maya_*.pdb`，避免旧符号残留误判。后续插件链路默认约束更新为：命令行快速构建不带 `.pdb`，Visual Studio 工程构建带 `.pdb`。
+  - 任务同步（2026-04-12，PDB 开关执行验证）：已在当前环境实测 [BuildPlugin.bat](dcc_plugin/BuildPlugin.bat) 的 `Release` 快速构建路径，确认脚本会以 `-DMAYA_DMX_BUILD_PDB=OFF` 重新配置，并在成功收尾后移除插件 `.pdb`，最终输出列表只保留 `.mll`。同时已复核 [CreatePluginSolution.bat](dcc_plugin/CreatePluginSolution.bat) 生成的 `Release` `.vcxproj` 在 `MAYA_DMX_BUILD_PDB=ON` 下会写入 `GenerateDebugInformation=DebugFull` 与 `ProgramDataBaseFile=...maya_*.pdb`；受当前沙箱/真实工作区输出路径混用影响，这一支的“最终磁盘上确有 `.pdb` 文件”未能在本轮环境里稳定二次复现，但工程配置层已切到产出 `.pdb` 的状态。
 
 ### 10. 基于现有 DMX 插件规格探索 Maya SMD 导入导出插件
 - 状态：进行中

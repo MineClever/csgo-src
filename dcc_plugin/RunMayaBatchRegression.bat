@@ -14,7 +14,7 @@ if not "%MAYA_PYTHON_EXE_OVERRIDE%"=="" set MAYA_PYTHON_EXE=%MAYA_PYTHON_EXE_OVE
 set PLUGIN_BINARY=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll
 set SMD_PLUGIN_BINARY=%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.mll
 set SAMPLE_DIR=%PLUGIN_ROOT%\samples
-set OUTPUT_DIR=%REPO_ROOT%\build\maya_dmx\maya_batch_regression\%CONFIG%
+set OUTPUT_DIR=%PLUGIN_ROOT%\build\maya_batch_regression\%CONFIG%
 set SCRIPT_PATH=%PLUGIN_ROOT%\tools\MayaBatchRegression.py
 
 echo ============================================================

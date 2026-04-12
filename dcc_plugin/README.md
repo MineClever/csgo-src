@@ -7,8 +7,15 @@ This directory hosts the Maya 2022.5 DMX importer/exporter plugin scaffold.
 Standalone x64 configure:
 
 ```powershell
-cmake -S dcc_plugin -B build\maya_dmx -A x64
-cmake --build build\maya_dmx --config Release
+cmake -S dcc_plugin -B dcc_plugin\build -A x64
+cmake --build dcc_plugin\build --config Release
+```
+
+PDB generation can be controlled explicitly:
+
+```powershell
+cmake -S dcc_plugin -B dcc_plugin\build -A x64 -DMAYA_DMX_BUILD_PDB=ON
+cmake -S dcc_plugin -B dcc_plugin\build -A x64 -DMAYA_DMX_BUILD_PDB=OFF
 ```
 
 Batch wrappers:
@@ -17,6 +24,8 @@ Batch wrappers:
 dcc_plugin\CreatePluginSolution.bat
 dcc_plugin\BuildPlugin.bat
 ```
+
+`CreatePluginSolution.bat` configures with `MAYA_DMX_BUILD_PDB=ON` so Visual Studio builds keep deployable `.pdb` files. `BuildPlugin.bat` configures with `MAYA_DMX_BUILD_PDB=OFF` and clears stale plugin `.pdb` files before building, so its default Release output only contains the `.mll` binaries.
 
 Standalone sample conversion utility:
 
@@ -75,7 +84,7 @@ MayaDmxShowExportAllOptions();
 Or through CMake:
 
 ```powershell
-cmake --build build\maya_dmx --config Release --target maya_dmx_sample_regression
+cmake --build dcc_plugin\build --config Release --target maya_dmx_sample_regression
 ```
 
 Repository configure with plugin enabled:
@@ -94,13 +103,13 @@ Install the built plugin as a Maya module:
 dcc_plugin\InstallPluginModuleToMaya.bat
 ```
 
-This writes `%USERPROFILE%\Documents\maya\modules\maya_dmx.mod`, clears the staged module payload directories under `dcc_plugin\maya_module\`, then copies the plugin to `dcc_plugin\maya_module\plug-ins\windows\2022\` and copies MEL scripts from `dcc_plugin\src\mel\` to `dcc_plugin\maya_module\scripts\`.
+This writes `%USERPROFILE%\Documents\maya\modules\maya_dmx.mod`, clears the staged module payload directories under `dcc_plugin\maya_module\`, then copies both plugin binaries and any matching `.pdb` files to `dcc_plugin\maya_module\plug-ins\windows\2022\`, and copies MEL scripts from `dcc_plugin\src\mel\` to `dcc_plugin\maya_module\scripts\`.
 
 `RunMayaBatchRegression.bat` defaults to `C:\Program Files\Autodesk\Maya2022\bin\mayapy.exe`. If Maya is installed elsewhere, set `MAYA_PYTHON_EXE_OVERRIDE` before running it.
 
 `RunMayaInteractiveValidation.bat` defaults to `C:\Program Files\Autodesk\Maya2022\bin\maya.exe`. It launches Maya with `MAYA_SKIP_USERSETUP_PY=1`, loads the built plugin, sources the DMX MEL scripts from `dcc_plugin\src\mel\`, verifies the expected MEL entrypoints exist, and opens a small validation window with buttons for the import/export option boxes. If Maya is installed elsewhere, set `MAYA_EXE_OVERRIDE` before running it.
 
-`QueryMayaValidationEnv.bat` / `tools\QueryMayaValidationEnv.ps1` query the host validation environment and write a Markdown report to `build\maya_dmx\maya_validation_env_report.md`.
+`QueryMayaValidationEnv.bat` / `tools\QueryMayaValidationEnv.ps1` query the host validation environment and write a Markdown report to `dcc_plugin\build\maya_validation_env_report.md`.
 
 `mayaDmxWorkflow` now executes both single exports and batch exports. Export presets still use Maya optionVars, while batch manifests are stored as files under the Maya user prefs directory to avoid DAG path corruption.
 
