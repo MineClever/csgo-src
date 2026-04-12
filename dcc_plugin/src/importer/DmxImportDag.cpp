@@ -199,7 +199,8 @@ MStatus ImportDagHierarchyRecursive(
     }
 
     const bool isJoint = dagElement->type == "DmeJoint";
-    const std::string nodeName = dagElement->name.empty() ? dagElement->type : dagElement->name;
+    const std::string rawNodeName = dagElement->name.empty() ? dagElement->type : dagElement->name;
+    const std::string nodeName = SanitizeNodeName(rawNodeName);
 
     MStatus status;
     MObject nodeObject = MObject::kNullObj;

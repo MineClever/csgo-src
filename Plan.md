@@ -650,6 +650,21 @@
     已通过：
     - `cmake --build dcc_plugin\build --config Release --target maya_smd maya_dmx -- /m:1`
     - `mayapy` 回归：`ctm_fbi/ctm_fbi.smd`、`ctm_fbi/ctm_fbi_anims/rom_skin.smd`、`ctm_fbi/ctm_fbi_anims/shield_deploy.smd`、`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/vcaanim_VertexAnim`
+  - 2026-04-12：已修复 DMX `Update Existing` 在“模型先导入，再导入动画 DMX”场景下错误新建整套 DAG 的问题。复现场景是：
+    - 先导入 `Ellis/DMX/mechanic_model.dmx`
+    - 再以 `useSceneRoot=1;importMode=update` 导入 `Ellis/DMX/animation/c1m1_intro_mechanic.dmx`
+    修复前会生成 `|ValveBiped_Bip01_Pelvis1`、`|ValveBiped_mechanicBody1` 等重复根节点，动画也不会绑定到原层级。
+    根因已确认：DMX importer 在 `Update Existing` 查找已有 DAG 时使用的是原始 DMX 名称，而 Maya 里实际节点名已被清洗成下划线形式；例如动画文件里的 `ValveBiped.Bip01_Pelvis` 在 Maya 中实际节点名是 `ValveBiped_Bip01_Pelvis`。SMD 这条路径此前之所以正常，是因为它在复用匹配前已经显式做了节点名清洗。
+    当前已在 [DmxImportDag.cpp](dcc_plugin/src/importer/DmxImportDag.cpp) 中统一把 DAG 节点的“创建名”和“复用匹配名”都改成 `SanitizeNodeName()` 后的形式，因此 `Update Existing` 下能正确复用已有层级，再把动画曲线绑定到原节点。
+    同时已在 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 新增一个成对场景的 `PAIRED_UPDATE_GATE_EXPECTATIONS`，专门覆盖：
+    - base case: `Ellis/DMX/mechanic_model.dmx`
+    - update case: `Ellis/DMX/animation/c1m1_intro_mechanic.dmx`
+    当前这条 gate 会验证两点：
+    - `update` 导入后不会新增任何新的根节点
+    - `|ValveBiped_Bip01_Pelvis.translateX / rotateX` 等已有节点 plug 上会实际收到动画连接/关键帧
+    已通过：
+    - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+    - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases Ellis/DMX/animation/c1m1_intro_mechanic.dmx`
 
 ## 环境与工具链说明
 

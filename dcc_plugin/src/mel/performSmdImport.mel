@@ -134,7 +134,7 @@ global proc string SmdImportOptionsUI(string $parent)
                 menuItem -label "Append Missing";
             separator -style "in";
             text -align "left" -label "Transform Correction";
-            text -align "left" -label "Applied directly during import as translation, rotation and scale correction. Namespace options use Maya's native Import file panel.";
+            text -align "left" -label "Applied directly during import as translation, rotation and scale correction.\n Namespace options use Maya's native Import file panel.";
             floatFieldGrp -numberOfFields 3 -label "Translation" -annotation "Applied directly during import before nodes are written into the Maya scene." smdImportTranslation;
             floatFieldGrp -numberOfFields 3 -label "Rotation" -annotation "Degrees. Applied directly during import instead of creating a correction wrapper node." smdImportRotation;
             floatFieldGrp -numberOfFields 3 -label "Scale" -annotation "Scale correction applied directly during import. Animated roots are best used with uniform scale." smdImportScale;

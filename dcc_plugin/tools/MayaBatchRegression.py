@@ -151,6 +151,18 @@ TOPOLOGY_UPDATE_GATE_EXPECTATIONS = {
     },
 }
 
+PAIRED_UPDATE_GATE_EXPECTATIONS = {
+    "Ellis/DMX/animation/c1m1_intro_mechanic.dmx": {
+        "base_case": "Ellis/DMX/mechanic_model.dmx",
+        "base_import_options": "useSceneRoot=1;importMode=create",
+        "update_import_options": "useSceneRoot=1;importMode=update",
+        "required_animated_plugs": [
+            "|ValveBiped_Bip01_Pelvis.translateX",
+            "|ValveBiped_Bip01_Pelvis.rotateX",
+        ],
+    },
+}
+
 
 def snapshot_imported_node_types(root_paths):
     import maya.api.OpenMaya as om
@@ -812,6 +824,77 @@ def validate_topology_update_gate(cmds, plugin_paths, format_config, input_path,
     compare_mesh_snapshots(mutated_meshes, snapshot_scene_meshes())
 
 
+def validate_paired_update_gate(cmds, plugin_paths_by_format, sample_dir, case_name):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = PAIRED_UPDATE_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    input_path = resolve_input_path(sample_dir, case_name)
+    format_name = detect_format(input_path)
+    format_config = FORMAT_CONFIGS[format_name]
+    plugin_path = plugin_paths_by_format.get(format_name)
+    if not plugin_path:
+        raise RuntimeError(f"Missing plugin for paired update gate format '{format_name}' while running case '{case_name}'")
+
+    base_input_path = resolve_input_path(sample_dir, expectation["base_case"])
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, [plugin_path])
+
+    base_import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        defaultNamespace=True,
+        options=expectation["base_import_options"],
+    )
+    update_import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        defaultNamespace=True,
+        options=expectation["update_import_options"],
+    )
+
+    before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+    cmds.file(base_input_path, **base_import_kwargs)
+    imported_roots = collect_imported_roots(cmds, before_assemblies)
+    if not imported_roots:
+        raise RuntimeError(
+            f"Paired update gate failed for {normalized_case_name}. "
+            f"base import produced no DAG roots"
+        )
+
+    roots_before_update = set(cmds.ls(assemblies=True, long=True) or [])
+    cmds.file(input_path, **update_import_kwargs)
+    new_roots_after_update = sorted(set(cmds.ls(assemblies=True, long=True) or []) - roots_before_update)
+    if new_roots_after_update:
+        raise RuntimeError(
+            f"Paired update gate failed for {normalized_case_name}. "
+            f"update import created unexpected new roots: {new_roots_after_update}"
+        )
+
+    for plug_name in expectation.get("required_animated_plugs", []):
+        if not cmds.objExists(plug_name):
+            raise RuntimeError(
+                f"Paired update gate failed for {normalized_case_name}. "
+                f"missing expected plug after update import: {plug_name}"
+            )
+
+        source_connections = cmds.listConnections(plug_name, source=True, destination=False, plugs=True) or []
+        key_count = cmds.keyframe(plug_name, query=True, keyframeCount=True) or 0
+        if not source_connections and not key_count:
+            raise RuntimeError(
+                f"Paired update gate failed for {normalized_case_name}. "
+                f"plug {plug_name} did not receive animation"
+            )
+
+
 def verify_roundtrip(
     cmds,
     plugin_paths,
@@ -1012,6 +1095,8 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
         validate_topology_update_gate(cmds, [plugin_path], format_config, input_path, case_name)
         with open(topology_update_gate_marker, "w", encoding="utf-8") as marker_file:
             marker_file.write("ok\n")
+
+        validate_paired_update_gate(cmds, plugin_paths_by_format, sample_dir, case_name)
 
     # For samples that contain skinned meshes, automatically run a second pass with
     # applyAxisCorrection=0 to verify that roundtrip is consistent regardless of the
