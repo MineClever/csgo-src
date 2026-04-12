@@ -1,6 +1,7 @@
 #include "DmxImportDeformers.h"
 #include "DmxImportInternals.h"
 
+#include <common/MayaCommandUtils.h>
 #include <common/MayaDmxCommon.h>
 
 #include <algorithm>
@@ -469,10 +470,7 @@ DeformerImporter::ExistingBlendShapeInfo DeformerImporter::inspectExistingBlendS
     info.nextTargetIndex = hasAnyTarget ? (maxLogicalIndex + 1) : 0;
 
     MStringArray aliasPairs;
-    MString queryCommand("aliasAttr -q \"");
-    queryCommand += info.nodeName;
-    queryCommand += "\"";
-    status = MGlobal::executeCommand(queryCommand, aliasPairs, false, false);
+    status = maya_cmd::GetNodeAliasList(blendShapeObject, aliasPairs);
     if (!status)
     {
         return info;
@@ -542,15 +540,7 @@ MStatus DeformerImporter::applyBlendShapeAliases(
             continue;
         }
 
-        MString attrName = weightElement.partialName();
-        MString aliasCmd("aliasAttr ");
-        aliasCmd += binding.second.c_str();
-        aliasCmd += " \"";
-        aliasCmd += blendShapeNodeName;
-        aliasCmd += ".";
-        aliasCmd += attrName;
-        aliasCmd += "\"";
-        MGlobal::executeCommand(aliasCmd, false, false);
+        maya_cmd::SetNodePlugAlias(blendShapeDependency.object(), weightElement, binding.second.c_str());
     }
 
     return MS::kSuccess;
@@ -886,30 +876,19 @@ MStatus DeformerImporter::ApplyDeltaStates(
                 continue;
             }
 
-            MStringArray duplicateResult;
-            MString duplicateCommand("duplicate -rr \"");
-            duplicateCommand += meshParentPath_.fullPathName();
-            duplicateCommand += "\"";
-            AppendImportDebugLog(duplicateCommand.asChar());
-            status = MGlobal::executeCommand(duplicateCommand, duplicateResult, false, false);
-            if (!status || duplicateResult.length() == 0)
+            MObject duplicateTransformObject;
+            MDagPath duplicateTransformPath;
+            AppendImportDebugLog("duplicate base mesh target via API");
+            status = maya_cmd::DuplicateDagNode(meshParentPath_, duplicateTransformObject, &duplicateTransformPath);
+            if (!status || duplicateTransformObject.isNull())
             {
                 return maya_dmx::ReportError(MString("maya_dmx: failed to duplicate base mesh for delta state ") + deltaState->name.c_str(), status);
-            }
-
-            MSelectionList selectionList;
-            selectionList.add(duplicateResult[0]);
-            MObject duplicateTransformObject;
-            status = selectionList.getDependNode(0, duplicateTransformObject);
-            if (!status)
-            {
-                return MStatus::kFailure;
             }
 
             const MObject duplicateMeshObject = findPrimaryMeshChildForDeformers(duplicateTransformObject);
             if (duplicateMeshObject.isNull())
             {
-                return maya_dmx::ReportWarning(MString("maya_dmx: delta target duplicate had no mesh shape: ") + duplicateResult[0]);
+                return maya_dmx::ReportWarning(MString("maya_dmx: delta target duplicate had no mesh shape: ") + duplicateTransformPath.fullPathName());
             }
 
             MFnMesh targetMeshFn(duplicateMeshObject, &status);
@@ -946,7 +925,7 @@ MStatus DeformerImporter::ApplyDeltaStates(
                 return MStatus::kFailure;
             }
 
-            targetTransforms.append(duplicateResult[0]);
+            targetTransforms.append(duplicateTransformPath.fullPathName());
             targetMeshObjects.push_back(duplicateMeshObject);
             newTargetBindings.push_back({existingBlendShape.nextTargetIndex++, targetName});
         }
@@ -1031,10 +1010,7 @@ MStatus DeformerImporter::ApplyDeltaStates(
                 newTargetBindings[targetIndex].second,
                 BlendShapeTargetBinding{blendShapeObject, newTargetBindings[targetIndex].first});
 
-            MString deleteCommand("delete \"");
-            deleteCommand += targetTransforms[targetIndex];
-            deleteCommand += "\"";
-            MGlobal::executeCommand(deleteCommand, false, false);
+            maya_cmd::DeleteNodeByName(targetTransforms[targetIndex]);
         }
 
         status = applyBlendShapeAliases(blendShapeDependency, blendShapeNodeName, newTargetBindings);

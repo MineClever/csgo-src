@@ -3,6 +3,8 @@
 #include "DmxImportDeformers.h"
 #include "DmxImportMeshMaterial.h"
 
+#include <common/MayaCommandUtils.h>
+
 #include <sstream>
 #include <string>
 #include <vector>
@@ -184,11 +186,7 @@ static bool HasProtectedMeshHistory(const MObject &meshObject)
     }
 
     MStringArray historyNames;
-    status = MGlobal::executeCommand(
-        MString("listHistory -pruneDagObjects true \"") + meshPath.fullPathName() + "\"",
-        historyNames,
-        false,
-        false);
+    status = maya_cmd::GetPrunedHistory(meshPath.fullPathName(), historyNames);
     if (!status)
     {
         return false;

@@ -1,5 +1,6 @@
 #include "WorkflowSupport.h"
 
+#include <common/MayaCommandUtils.h>
 #include <common/MayaDmxCommon.h>
 
 #include <maya/MGlobal.h>
@@ -216,7 +217,7 @@ MString MakeOptionVarName(const char *prefix, const MString &name)
 MStatus GetMayaUserPrefDirectory(std::filesystem::path &directory)
 {
     MString userPrefDir;
-    const MStatus status = MGlobal::executeCommand("internalVar -userPrefDir", userPrefDir);
+    const MStatus status = maya_cmd::GetMayaUserPrefDirectory(userPrefDir);
     if (!status || userPrefDir.length() == 0)
     {
         return maya_dmx::ReportError("maya_dmx: failed to resolve Maya user preference directory.", status);
@@ -317,7 +318,7 @@ MStatus CollectOptionVars(const char *prefix, MStringArray &names)
     names.clear();
 
     MStringArray optionVarNames;
-    const MStatus status = MGlobal::executeCommand("optionVar -list", optionVarNames);
+    const MStatus status = maya_cmd::ListOptionVarNames(optionVarNames);
     if (!status)
     {
         return MStatus::kFailure;

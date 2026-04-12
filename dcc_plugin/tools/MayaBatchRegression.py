@@ -127,6 +127,16 @@ UPDATE_GATE_EXPECTATIONS = {
     },
 }
 
+TOPOLOGY_UPDATE_GATE_EXPECTATIONS = {
+    "simple_mesh": {
+        "import_options": "useSceneRoot=1;importMode=update",
+        "warning_substrings": [
+            "update skipped mesh overwrite because existing mesh topology did not match incoming mesh",
+            "mismatch",
+        ],
+    },
+}
+
 
 def snapshot_imported_node_types(root_paths):
     import maya.api.OpenMaya as om
@@ -278,6 +288,41 @@ def snapshot_scene_meshes():
         iterator.next()
 
     return mesh_snapshots
+
+
+def find_single_visible_mesh_path(cmds, root_paths):
+    mesh_paths = []
+    for root_path in root_paths:
+        descendant_meshes = cmds.listRelatives(root_path, allDescendents=True, fullPath=True, type="mesh") or []
+        root_meshes = cmds.listRelatives(root_path, shapes=True, fullPath=True, type="mesh") or []
+        for mesh_path in root_meshes + descendant_meshes:
+            if cmds.getAttr(mesh_path + ".intermediateObject"):
+                continue
+            mesh_paths.append(mesh_path)
+
+    unique_mesh_paths = sorted(set(mesh_paths))
+    if len(unique_mesh_paths) != 1:
+        raise RuntimeError(f"Expected exactly one visible mesh, got {unique_mesh_paths}")
+
+    return unique_mesh_paths[0]
+
+
+def capture_warning_messages(callback):
+    import maya.OpenMaya as om
+
+    warning_messages = []
+
+    def command_output_callback(message, message_type, _client_data):
+        if message_type == om.MCommandMessage.kWarning:
+            warning_messages.append(message)
+
+    callback_id = om.MCommandMessage.addCommandOutputCallback(command_output_callback)
+    try:
+        callback()
+    finally:
+        om.MMessage.removeCallback(callback_id)
+
+    return warning_messages
 
 
 def compare_mesh_snapshots(reference_meshes, candidate_meshes, tolerance=1.0e-4):
@@ -702,6 +747,57 @@ def validate_update_gate(cmds, plugin_paths, format_config, input_path, case_nam
     compare_blendshape_snapshots(reference_blendshapes, snapshot_blendshape_bindings(cmds, imported_roots))
 
 
+def validate_topology_update_gate(cmds, plugin_paths, format_config, input_path, case_name):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = TOPOLOGY_UPDATE_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, plugin_paths)
+
+    import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        options=expectation["import_options"],
+    )
+
+    before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+    cmds.file(input_path, **import_kwargs)
+    imported_roots = collect_imported_roots(cmds, before_assemblies)
+    mesh_path = find_single_visible_mesh_path(cmds, imported_roots)
+    reference_meshes = snapshot_scene_meshes()
+
+    cmds.xform(f"{mesh_path}.vtx[0]", relative=True, objectSpace=True, translation=(1.0, 0.0, 0.0))
+    warning_messages = capture_warning_messages(lambda: cmds.file(input_path, **import_kwargs))
+    if any(expectation["warning_substrings"][0] in warning for warning in warning_messages):
+        raise RuntimeError(
+            f"Topology update gate failed for {normalized_case_name}. "
+            f"same-topology update unexpectedly produced topology mismatch warning: {warning_messages}"
+        )
+    compare_mesh_snapshots(reference_meshes, snapshot_scene_meshes())
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, plugin_paths)
+    before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+    cmds.file(input_path, **import_kwargs)
+    imported_roots = collect_imported_roots(cmds, before_assemblies)
+    mesh_path = find_single_visible_mesh_path(cmds, imported_roots)
+
+    cmds.polySubdivideFacet(f"{mesh_path}.f[0]", divisions=1, constructionHistory=False)
+    mutated_meshes = snapshot_scene_meshes()
+    warning_messages = capture_warning_messages(lambda: cmds.file(input_path, **import_kwargs))
+    if not any(expectation["warning_substrings"][0] in warning and expectation["warning_substrings"][1] in warning for warning in warning_messages):
+        raise RuntimeError(
+            f"Topology update gate failed for {normalized_case_name}. "
+            f"missing topology mismatch warning, got {warning_messages}"
+        )
+    compare_mesh_snapshots(mutated_meshes, snapshot_scene_meshes())
+
+
 def verify_roundtrip(
     cmds,
     plugin_paths,
@@ -819,6 +915,7 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     import_animation_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.import_animgate.txt")
     append_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.append_gate.txt")
     update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.update_gate.txt")
+    topology_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.topology_update_gate.txt")
 
     import_kwargs = dict(i=True, type=format_config["import_type"], ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
     if import_options:
@@ -889,6 +986,10 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
 
         validate_update_gate(cmds, [plugin_path], format_config, input_path, case_name)
         with open(update_gate_marker, "w", encoding="utf-8") as marker_file:
+            marker_file.write("ok\n")
+
+        validate_topology_update_gate(cmds, [plugin_path], format_config, input_path, case_name)
+        with open(topology_update_gate_marker, "w", encoding="utf-8") as marker_file:
             marker_file.write("ok\n")
 
     # For samples that contain skinned meshes, automatically run a second pass with

@@ -1,6 +1,8 @@
 #include "DmxExportDeformers.h"
 #include "DmxExportInternals.h"
 
+#include <common/MayaCommandUtils.h>
+
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -441,10 +443,7 @@ void DeformerExporter::AppendBlendShapeDeltaStates(
                 {
                     if (temporaryTargetTransform.length() > 0)
                     {
-                        MString deleteCommand("delete \"");
-                        deleteCommand += temporaryTargetTransform;
-                        deleteCommand += "\"";
-                        MGlobal::executeCommand(deleteCommand, false, false);
+                        maya_cmd::DeleteNodeByName(temporaryTargetTransform);
                     }
                     continue;
                 }
@@ -456,10 +455,7 @@ void DeformerExporter::AppendBlendShapeDeltaStates(
             {
                 if (temporaryTargetTransform.length() > 0)
                 {
-                    MString deleteCommand("delete \"");
-                    deleteCommand += temporaryTargetTransform;
-                    deleteCommand += "\"";
-                    MGlobal::executeCommand(deleteCommand, false, false);
+                    maya_cmd::DeleteNodeByName(temporaryTargetTransform);
                 }
                 continue;
             }
@@ -470,10 +466,7 @@ void DeformerExporter::AppendBlendShapeDeltaStates(
             {
                 if (temporaryTargetTransform.length() > 0)
                 {
-                    MString deleteCommand("delete \"");
-                    deleteCommand += temporaryTargetTransform;
-                    deleteCommand += "\"";
-                    MGlobal::executeCommand(deleteCommand, false, false);
+                    maya_cmd::DeleteNodeByName(temporaryTargetTransform);
                 }
                 continue;
             }
@@ -498,10 +491,7 @@ void DeformerExporter::AppendBlendShapeDeltaStates(
             {
                 if (temporaryTargetTransform.length() > 0)
                 {
-                    MString deleteCommand("delete \"");
-                    deleteCommand += temporaryTargetTransform;
-                    deleteCommand += "\"";
-                    MGlobal::executeCommand(deleteCommand, false, false);
+                    maya_cmd::DeleteNodeByName(temporaryTargetTransform);
                 }
                 continue;
             }
@@ -546,10 +536,7 @@ void DeformerExporter::AppendBlendShapeDeltaStates(
 
             if (temporaryTargetTransform.length() > 0)
             {
-                MString deleteCommand("delete \"");
-                deleteCommand += temporaryTargetTransform;
-                deleteCommand += "\"";
-                MGlobal::executeCommand(deleteCommand, false, false);
+                maya_cmd::DeleteNodeByName(temporaryTargetTransform);
             }
 
             deltaStateElements_->push_back(deltaElement);

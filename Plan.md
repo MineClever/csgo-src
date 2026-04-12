@@ -507,6 +507,43 @@
   - 2026-04-12：已在真实 `mayapy` 宿主下继续验证 `update gate`。当前 [MostComplexSampleSet/chr_mesh.smd](dcc_plugin/samples/MostComplexSampleSet/chr_mesh.smd) 已可在 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 下通过 `update gate`，期间顺手修正了 gate 对默认相机 root 的误判（第二次 `update` 后改为继续用 `collect_imported_roots(before_assemblies)` 比较，而不是直接比较全量 assemblies）。同时确认新的明确阻塞点：`simple_blendshape_animation.dmx` 的第二次 `importMode=update` 仍会在 Maya 宿主内部旧 blendShape alias/target 链清理阶段失败，现象是即便直接在 `mayapy` 里手动 `delete blendshapeAnimMeshShape_blendShape`，也会因为残留 alias/target 名（如 `blendshapeAnimMeshShape_blendShape_smile`）报错；这说明当前 DMX facial 的 `update` 还不能只靠“删旧 deformer + 重建”收口，后续需要改成更细的 blendShape target/alias 解绑或就地覆盖策略。
   - 2026-04-12：已继续把 DMX `update` 从“删旧 deformer 再重建”切到“就地复用并覆盖”。当前 [DmxImportMesh.cpp](dcc_plugin/src/importer/DmxImportMesh.cpp) 在 `importMode=update` 命中已有 mesh shape 时，会优先复用现有 shape、要求拓扑兼容，并在没有受保护 deformer history 时才直接写 base points；[DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 则恢复为 `append/update` 都可复用已有 blendShape 节点；[DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 现已在写新 animCurve 前先清理目标 plug 上旧的 animCurve 连接，使 `update` 真正具备覆盖 base animation 的行为。已在真实 `mayapy` 宿主下验证 `simple_float_animation.dmx`、`simple_blendshape_animation.dmx` 的“双次 update 导入”通过，且 `|combinationOperator_controls.smile` 会从手工改值恢复到样例值；随后 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 下的 `simple_blendshape_animation` 与 `MostComplexSampleSet/chr_mesh.smd` 两条 `update gate` 也已实跑通过。当前剩余缺口已收窄为：拓扑变化场景下的 DMX mesh update 策略、以及更细粒度的 blendShape target 几何覆盖，而不再是重复 update 导入本身会失败。
   - 2026-04-12：已把 DMX mesh update 的拓扑判定收紧成显式规则。[DmxImportMesh.cpp](dcc_plugin/src/importer/DmxImportMesh.cpp) 当前在 `importMode=update` 命中已有 mesh shape 时，只会在“顶点数量一致且 polygon counts / connects 拓扑一致”时允许继续做 mesh 覆盖；如果不一致，则不再尝试覆盖，并会给出明确 warning，区分 `vertex count mismatch`、`polygon topology size mismatch`、`polygon vertex-count layout mismatch`、`polygon connectivity mismatch` 等原因。已通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1` 编译验证。
+  - 2026-04-12：新增一条 `MGlobal::executeCommand` 统一重构主线，先完成官方 API / 命令文档评估，再分批替换。当前基于 Autodesk 官方文档的初步结论如下：
+    - 可优先改成 API 的类别：
+      - `duplicate`：可优先评估改用 `MFnDagNode::duplicate()`。
+      - `aliasAttr -q / aliasAttr`：可优先评估改用 `MFnDependencyNode::getAliasList()`、`setAlias()`、`plugsAlias()`。
+      - `optionVar -list / query / set`：可优先评估改用 `MGlobal::optionVarIntValue()`、`optionVarDoubleValue()`、`optionVarStringValue()`、`setOptionVarValue()` 等 API。
+      - `connectAttr` / 纯 DG 连接修改：优先改用 `MDGModifier::connect()` / `disconnect()`。
+      - `sets -forceElement / addMember`：优先改用 `MFnSet::addMember()` / `removeMember()`。
+      - `shadingNode` 创建普通 dependency node：优先改用 `MFnDependencyNode::create(type, name)`，并配合 API 连接材质网络。
+      - `delete` 指向已知 node/object：优先改用 `MDGModifier::deleteNode()`、`MGlobal::deleteNode()`、`MFnDagNode` / `MSelectionList` 定位后删除。
+    - 需要谨慎评估语义对齐、可能先保留 MEL helper 的类别：
+      - `listHistory -pruneDagObjects true`：官方有 `MItDependencyGraph` 可遍历 DG，但是否完全对齐当前 MEL `listHistory` 语义需要逐调用点验证。
+      - `internalVar -userPrefDir`：当前官方文档明确给出命令接口，但这轮未找到同等直接的 C++ API；若暂时保留 MEL，应在 helper 注释中明确“因缺少等价公开 API / 语义需要命令层查询”。
+    - 重构实施约束：
+      - 不管最终是否能完全去掉 MEL，所有现有 `MGlobal::executeCommand` 调用都先统一收口为公用 helper，放到 `dcc_plugin/src/common` 下的公共头文件中，避免继续在 importer / exporter / workflow 中散落字符串命令。
+      - 若某条命令已能用 API 替代，则 helper 内部直接走 API，不再暴露 MEL 字符串给业务层。
+      - 若某条命令暂时不能安全替代，则 helper 必须在实现处附简短注释，说明为何仍保留 MEL、缺的是哪类 API 或哪段语义对齐。
+      - 后续替换优先级建议：`workflow` 的 `optionVar/internalVar` 与 importer/exporter 中的 `delete/duplicate/connect/alias/set` 先做；`listHistory` 这类语义较细的命令后做。
+  - 2026-04-12：已补一个专门覆盖 DMX mesh `update` 拓扑行为的回归 gate。[MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 当前新增 `TOPOLOGY_UPDATE_GATE_EXPECTATIONS` 与 `validate_topology_update_gate()`，并以 [simple_mesh.dmx](dcc_plugin/samples/simple_mesh.dmx) 为样例在真实 `mayapy` 宿主下验证两条行为：
+    - 同拓扑场景：先手工改一个顶点位置，再做第二次 `importMode=update`，mesh 几何会恢复到原始样例。
+    - 不同拓扑场景：先手工改 mesh 拓扑，再做第二次 `importMode=update`，会保留被修改后的 mesh，并产出包含 `update skipped mesh overwrite because existing mesh topology did not match incoming mesh` 的 warning。
+    当前该 gate 已实跑通过。
+  - 2026-04-12：已开始执行 `executeCommand` 统一收口的第一轮落地，新增 [MayaCommandUtils.h](dcc_plugin/src/common/MayaCommandUtils.h) / [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp)，并通过 `maya_dmx_common` 向 `maya_smd_common` 共享。当前已把业务层散落的 `MGlobal::executeCommand` 入口先统一收到 helper 中，业务侧已改用显式 helper，剩余 MEL 只保留在 helper 实现里，且都附了保留原因注释。当前已完成的首批替换包括：
+    - 已 API 化：
+      - `delete` 已知 node：改为 `maya_cmd::DeleteNodeByName()`，当前内部走 `MGlobal::deleteNode()`。
+      - `duplicate` DAG 节点：改为 `maya_cmd::DuplicateDagNode()`，当前内部走 `MFnDagNode::duplicate()`。
+      - `aliasAttr -q / aliasAttr`：改为 `maya_cmd::GetNodeAliasList()` / `SetNodePlugAlias()`，当前内部走 `MFnDependencyNode::getAliasList()` / `setAlias()`。
+      - `shadingNode lambert`、`sets -renderable ... -empty`、`connectAttr -f`、`sets -forceElement`：已分别改成 helper + API 组合（`MFnDependencyNode::create`、`MFnSet`、`MDGModifier::connect`）。
+      - `internalVar -userPrefDir` 与 `optionVar -list`：业务层已改为 helper 调用，当前 helper 内部暂时仍保留 MEL。
+    - 先保留 MEL helper：
+      - `listHistory -pruneDagObjects true`
+      - `internalVar -userPrefDir`
+      - `optionVar -list`
+      - `sculptTarget -e -regenerate`
+    已通过：
+    - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+    - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
+    - `mayapy` 回归：`simple_blendshape_animation`、`simple_mesh`、`MostComplexSampleSet/chr_mesh.smd`
 
 ## 环境与工具链说明
 

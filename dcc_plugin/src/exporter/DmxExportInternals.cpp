@@ -1,5 +1,7 @@
 #include "DmxExportInternals.h"
 
+#include <common/MayaCommandUtils.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cctype>
@@ -401,14 +403,8 @@ bool TryRegenerateBlendShapeTarget(
 {
     temporaryTransformName.clear();
 
-    MString command("sculptTarget -e -regenerate true -target ");
-    command += static_cast<int>(weightIndex);
-    command += " \"";
-    command += blendShapeNodeName;
-    command += "\"";
-
     MStringArray result;
-    if (MGlobal::executeCommand(command, result, false, false) != MS::kSuccess || result.length() == 0)
+    if (maya_cmd::RegenerateBlendShapeTarget(blendShapeNodeName, weightIndex, result) != MS::kSuccess || result.length() == 0)
     {
         return false;
     }

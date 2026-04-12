@@ -1,5 +1,6 @@
 #include "SmdMeshImporter.h"
 
+#include <common/MayaCommandUtils.h>
 #include <common_smd/MayaSmdCommon.h>
 
 #include <cctype>
@@ -152,11 +153,7 @@ MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPol
         meshPaths.append(childPath.fullPathName());
 
         MStringArray historyNames;
-        status = MGlobal::executeCommand(
-            MString("listHistory -pruneDagObjects true \"") + childPath.fullPathName() + "\"",
-            historyNames,
-            false,
-            false);
+        status = maya_cmd::GetPrunedHistory(childPath.fullPathName(), historyNames);
         if (!status)
         {
             status = MS::kSuccess;
@@ -217,7 +214,7 @@ MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPol
             continue;
         }
 
-        status = MGlobal::executeCommand(MString("delete \"") + historyNodeNames[historyIndex] + "\"", false, false);
+        status = maya_cmd::DeleteNodeByName(historyNodeNames[historyIndex]);
         if (!status)
         {
             return status;
@@ -231,7 +228,7 @@ MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPol
             continue;
         }
 
-        status = MGlobal::executeCommand(MString("delete \"") + meshPaths[meshIndex] + "\"", false, false);
+        status = maya_cmd::DeleteNodeByName(meshPaths[meshIndex]);
         if (!status)
         {
             return status;
@@ -518,29 +515,21 @@ MStatus SmdMeshImporter::assignMaterial(const std::string &materialName, const M
     MObject shaderObject = smd_mesh_import_impl::FindNodeByName(shaderName);
     if (shaderObject.isNull())
     {
-        MString createdShaderName;
-        status = MGlobal::executeCommand(
-            MString("shadingNode -asShader lambert -name \"") + shaderName + "\"",
-            createdShaderName);
-        if (!status || createdShaderName.length() == 0)
+        status = maya_cmd::CreateNamedDependencyNode("lambert", shaderName, shaderObject);
+        if (!status || shaderObject.isNull())
         {
             return maya_smd::ReportError(MString("maya_smd: failed to create lambert shader for material group ") + materialName.c_str(), status);
         }
-        shaderObject = smd_mesh_import_impl::FindNodeByName(createdShaderName);
     }
 
     MObject shadingGroupObject = smd_mesh_import_impl::FindNodeByName(shadingGroupName);
     if (shadingGroupObject.isNull())
     {
-        MString createdShadingGroupName;
-        status = MGlobal::executeCommand(
-            MString("sets -renderable true -noSurfaceShader true -empty -name \"") + shadingGroupName + "\"",
-            createdShadingGroupName);
-        if (!status || createdShadingGroupName.length() == 0)
+        status = maya_cmd::EnsureRenderableShadingGroup(shadingGroupName, shadingGroupObject);
+        if (!status || shadingGroupObject.isNull())
         {
             return maya_smd::ReportError(MString("maya_smd: failed to create shading group for material group ") + materialName.c_str(), status);
         }
-        shadingGroupObject = smd_mesh_import_impl::FindNodeByName(createdShadingGroupName);
     }
 
     MDagPath meshPath;
@@ -550,15 +539,37 @@ MStatus SmdMeshImporter::assignMaterial(const std::string &materialName, const M
         return maya_smd::ReportError(MString("maya_smd: failed to resolve mesh path for material binding ") + materialName.c_str(), status);
     }
 
-    status = MGlobal::executeCommand(
-        MString("connectAttr -f \"") + shaderName + ".outColor\" \"" + shadingGroupName + ".surfaceShader\"");
+    MFnDependencyNode shaderFn(shaderObject, &status);
+    if (!status)
+    {
+        return maya_smd::ReportError(MString("maya_smd: failed to bind shader node for material group ") + materialName.c_str(), status);
+    }
+
+    MFnDependencyNode shadingGroupFn(shadingGroupObject, &status);
+    if (!status)
+    {
+        return maya_smd::ReportError(MString("maya_smd: failed to bind shading group node for material group ") + materialName.c_str(), status);
+    }
+
+    MPlug outColorPlug = shaderFn.findPlug("outColor", true, &status);
+    if (!status)
+    {
+        return maya_smd::ReportError(MString("maya_smd: failed to resolve shader outColor plug for material group ") + materialName.c_str(), status);
+    }
+
+    MPlug surfaceShaderPlug = shadingGroupFn.findPlug("surfaceShader", true, &status);
+    if (!status)
+    {
+        return maya_smd::ReportError(MString("maya_smd: failed to resolve shading group surfaceShader plug for material group ") + materialName.c_str(), status);
+    }
+
+    status = maya_cmd::ConnectPlugsForce(outColorPlug, surfaceShaderPlug);
     if (!status)
     {
         return maya_smd::ReportError(MString("maya_smd: failed to connect shader to shading group for material group ") + materialName.c_str(), status);
     }
 
-    status = MGlobal::executeCommand(
-        MString("sets -e -forceElement \"") + shadingGroupName + "\" \"" + meshPath.fullPathName() + "\"");
+    status = maya_cmd::AddDagPathToSet(meshPath, shadingGroupObject);
     if (!status)
     {
         return maya_smd::ReportError(MString("maya_smd: failed to assign mesh to shading group for material group ") + materialName.c_str(), status);

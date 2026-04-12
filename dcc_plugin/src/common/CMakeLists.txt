@@ -14,6 +14,8 @@ add_library(maya_dmx_serialization STATIC
 maya_dmx_apply_common_target_settings(maya_dmx_serialization)
 
 add_library(maya_dmx_common STATIC
+    MayaCommandUtils.cpp
+    MayaCommandUtils.h
     MayaDmxCommon.cpp
     MayaDmxCommon.h
 )
