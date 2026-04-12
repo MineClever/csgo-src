@@ -860,9 +860,17 @@
       - `ctm_fbi__ctm_fbi.skin_influence_update_gate.txt` = ok
       - `ctm_fbi__ctm_fbi_anims__rom_skin.delta_layer_gate.txt` = ok
       - `Ellis__DMX__animation__c1m1_intro_mechanic.delta_layer_gate.txt` = ok
-  - 2026-04-13：已确认以下两条为预先存在的已知问题，与本轮改动无关，暂维持挂起状态：
-    - `simple_blendshape_animation` append gate：首次 `importMode=append` 导入后 `|combinationOperator_controls.smile` plug 不存在，导致 gate 始终失败。根因疑与 `importMode=append` 下 blendShape animation channel 的建立顺序有关，需要单独排查。
-    - `MostComplexSampleSet/chr_mesh.smd` SMD append gate：首次 `importMode=append` 导入后 `|pelvis` 关节不存在，原因是 SMD append 匹配在该样本的 Maya rename 前缀下仍不稳定。
+  - 2026-04-13：✅ 已关闭 DMX/SMD append 挂起门槛误报。
+    - 根因复核：`simple_blendshape_animation` 与 `MostComplexSampleSet/chr_mesh.smd` 的 importer append 主路径并未失效；真实 `mayapy` 宿主下首次 `importMode=append` 后，Maya 会把 scene-root 导入对象自动改名为带文件名前缀的形式，例如 `|simple_blendshape_animation_combinationOperator_controls`、`|chr_mesh_pelvis`。原回归脚本仍按旧的裸名 `|combinationOperator_controls.smile`、`|pelvis` 做断言，因此把已通过的 append 行为误判成失败。
+    - 修复：[MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已把 append/update gate 的目标解析改为兼容 Maya rename 前缀：
+      - `retain_values` / `overwrite_values` 新增按 `plug_suffix` 解析实际场景 plug；
+      - `single_node_types` 新增按 `name_suffix` 匹配；
+      - `simple_blendshape_animation`、`MostComplexSampleSet/chr_mesh.smd`、`ctm_fbi/ctm_fbi.smd` 的 gate 期望已改为前缀无关匹配。
+    - 宿主验证：
+      - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases simple_blendshape_animation MostComplexSampleSet/chr_mesh.smd` 已通过；
+      - `simple_blendshape_animation` 二次 append 后仍只有一个 `*combinationOperator_controls` 与一个 `*blendshapeAnimMeshShape_blendShape`，且手工改写的 `smile=0.75` 保持不变；
+      - `MostComplexSampleSet/chr_mesh.smd` 二次 append 后 `*pelvis` 与 `*tex_d_bmp_grp1` 仍各只有一个实例。
+  - 2026-04-13：任务盘点同步（DMX/SMD 剩余事项核对）。本次已关闭“SMD/DMX append 挂起问题”这一项；当前剩余任务收敛为 `simple_blendshape_animation` 几何保真、复杂复合动画样例补强、材质网络补全、facial/rig 语义扩展，以及中期的 translator/common 层继续收口。
 
 ## 环境与工具链说明
 

@@ -98,26 +98,26 @@ APPEND_GATE_EXPECTATIONS = {
     "simple_blendshape_animation": {
         "import_options": "useSceneRoot=1;importMode=append",
         "retain_values": [
-            {"plug": "|combinationOperator_controls.smile", "value": 0.75},
+            {"plug_suffix": "combinationOperator_controls.smile", "value": 0.75},
         ],
         "single_nodes": [
-            {"pattern": "|combinationOperator_controls", "type": "transform"},
+            {"pattern": "*combinationOperator_controls", "type": "transform"},
         ],
         "single_node_types": [
-            {"type": "blendShape", "name": "blendshapeAnimMeshShape_blendShape"},
+            {"type": "blendShape", "name_suffix": "blendshapeAnimMeshShape_blendShape"},
         ],
     },
     "MostComplexSampleSet/chr_mesh.smd": {
         "import_options": "useSceneRoot=1;importMode=append",
         "single_nodes": [
-            {"pattern": "|pelvis", "type": "joint"},
-            {"pattern": "|tex_d_bmp_grp1", "type": "transform"},
+            {"pattern": "*pelvis", "type": "joint"},
+            {"pattern": "*tex_d_bmp_grp1", "type": "transform"},
         ],
     },
     "ctm_fbi/ctm_fbi.smd": {
         "import_options": "useSceneRoot=1;importMode=append",
         "single_nodes": [
-            {"pattern": "|ctm_fbi_pelvis", "type": "joint"},
+            {"pattern": "*ctm_fbi_pelvis", "type": "joint"},
         ],
     },
 }
@@ -126,29 +126,29 @@ UPDATE_GATE_EXPECTATIONS = {
     "simple_blendshape_animation": {
         "import_options": "useSceneRoot=1;importMode=update",
         "overwrite_values": [
-            {"plug": "|combinationOperator_controls.smile", "value": 0.75},
+            {"plug_suffix": "combinationOperator_controls.smile", "value": 0.75},
         ],
         "single_nodes": [
-            {"pattern": "|combinationOperator_controls", "type": "transform"},
+            {"pattern": "*combinationOperator_controls", "type": "transform"},
         ],
         "single_node_types": [
-            {"type": "blendShape", "name": "blendshapeAnimMeshShape_blendShape"},
+            {"type": "blendShape", "name_suffix": "blendshapeAnimMeshShape_blendShape"},
         ],
     },
     "MostComplexSampleSet/chr_mesh.smd": {
         "import_options": "useSceneRoot=1;importMode=update",
         "overwrite_values": [
-            {"plug": "|pelvis.translateX", "value": 17.0},
+            {"plug_suffix": "pelvis.translateX", "value": 17.0},
         ],
         "single_nodes": [
-            {"pattern": "|pelvis", "type": "joint"},
-            {"pattern": "|tex_d_bmp_grp1", "type": "transform"},
+            {"pattern": "*pelvis", "type": "joint"},
+            {"pattern": "*tex_d_bmp_grp1", "type": "transform"},
         ],
     },
     "ctm_fbi/ctm_fbi.smd": {
         "import_options": "useSceneRoot=1;importMode=update",
         "single_nodes": [
-            {"pattern": "|ctm_fbi_pelvis", "type": "joint"},
+            {"pattern": "*ctm_fbi_pelvis", "type": "joint"},
         ],
     },
 }
@@ -701,6 +701,47 @@ def validate_animation_gate(case_name, animation_snapshots):
             )
 
 
+def resolve_expected_plug(cmds, plug_expectation):
+    explicit_plug = plug_expectation.get("plug")
+    if explicit_plug:
+        return explicit_plug if cmds.objExists(explicit_plug) else None
+
+    plug_suffix = plug_expectation.get("plug_suffix")
+    if not plug_suffix:
+        return None
+
+    if "." not in plug_suffix:
+        raise RuntimeError(f"Invalid plug_suffix without attribute name: {plug_suffix}")
+
+    node_suffix, attribute_name = plug_suffix.rsplit(".", 1)
+    candidate_nodes = cmds.ls("*" + node_suffix, long=True) or []
+    candidate_plugs = []
+    for node_name in candidate_nodes:
+        candidate_plug = node_name + "." + attribute_name
+        if cmds.objExists(candidate_plug):
+            candidate_plugs.append(candidate_plug)
+
+    unique_candidates = sorted(set(candidate_plugs))
+    if len(unique_candidates) != 1:
+        return None
+
+    return unique_candidates[0]
+
+
+def find_single_node_type_matches(cmds, expectation):
+    candidate_nodes = cmds.ls(type=expectation["type"]) or []
+
+    exact_name = expectation.get("name")
+    if exact_name:
+        return [node_name for node_name in candidate_nodes if node_name == exact_name]
+
+    name_suffix = expectation.get("name_suffix")
+    if name_suffix:
+        return [node_name for node_name in candidate_nodes if node_name.endswith(name_suffix)]
+
+    return candidate_nodes
+
+
 def validate_append_gate(cmds, plugin_paths, format_config, input_path, case_name):
     normalized_case_name = case_name.replace("\\", "/")
     expectation = APPEND_GATE_EXPECTATIONS.get(normalized_case_name)
@@ -721,12 +762,14 @@ def validate_append_gate(cmds, plugin_paths, format_config, input_path, case_nam
 
     cmds.file(input_path, **import_kwargs)
     for retain_value in expectation.get("retain_values", []):
-        if not cmds.objExists(retain_value["plug"]):
+        plug_name = resolve_expected_plug(cmds, retain_value)
+        if not plug_name:
             raise RuntimeError(
                 f"Append gate failed for {normalized_case_name}. "
-                f"missing plug before second append: {retain_value['plug']}"
+                f"missing plug before second append: {retain_value.get('plug') or retain_value.get('plug_suffix')}"
             )
-        cmds.setAttr(retain_value["plug"], retain_value["value"])
+        retain_value["_resolved_plug"] = plug_name
+        cmds.setAttr(plug_name, retain_value["value"])
 
     cmds.file(input_path, **import_kwargs)
 
@@ -739,23 +782,25 @@ def validate_append_gate(cmds, plugin_paths, format_config, input_path, case_nam
             )
 
     for single_node_type in expectation.get("single_node_types", []):
-        matching_nodes = [
-            node_name
-            for node_name in (cmds.ls(type=single_node_type["type"]) or [])
-            if node_name == single_node_type["name"]
-        ]
+        matching_nodes = find_single_node_type_matches(cmds, single_node_type)
         if len(matching_nodes) != 1:
             raise RuntimeError(
                 f"Append gate failed for {normalized_case_name}. "
-                f"expected exactly one {single_node_type['type']} named {single_node_type['name']}, got {matching_nodes}"
+                f"expected exactly one {single_node_type['type']} matching {single_node_type.get('name') or single_node_type.get('name_suffix')}, got {matching_nodes}"
             )
 
     for retain_value in expectation.get("retain_values", []):
-        current_value = cmds.getAttr(retain_value["plug"])
+        plug_name = retain_value.get("_resolved_plug") or resolve_expected_plug(cmds, retain_value)
+        if not plug_name:
+            raise RuntimeError(
+                f"Append gate failed for {normalized_case_name}. "
+                f"missing preserved plug after second append: {retain_value.get('plug') or retain_value.get('plug_suffix')}"
+            )
+        current_value = cmds.getAttr(plug_name)
         if abs(float(current_value) - float(retain_value["value"])) > 1.0e-6:
             raise RuntimeError(
                 f"Append gate failed for {normalized_case_name}. "
-                f"expected preserved value {retain_value['plug']}={retain_value['value']}, got {current_value}"
+                f"expected preserved value {plug_name}={retain_value['value']}, got {current_value}"
             )
 
 
@@ -792,13 +837,15 @@ def validate_update_gate(cmds, plugin_paths, format_config, input_path, case_nam
     reference_blendshapes = snapshot_blendshape_bindings(cmds, imported_roots)
     original_values = {}
     for overwrite_value in expectation.get("overwrite_values", []):
-        if not cmds.objExists(overwrite_value["plug"]):
+        plug_name = resolve_expected_plug(cmds, overwrite_value)
+        if not plug_name:
             raise RuntimeError(
                 f"Update gate failed for {normalized_case_name}. "
-                f"missing plug before second update: {overwrite_value['plug']}"
+                f"missing plug before second update: {overwrite_value.get('plug') or overwrite_value.get('plug_suffix')}"
             )
-        original_values[overwrite_value["plug"]] = cmds.getAttr(overwrite_value["plug"])
-        cmds.setAttr(overwrite_value["plug"], overwrite_value["value"])
+        overwrite_value["_resolved_plug"] = plug_name
+        original_values[plug_name] = cmds.getAttr(plug_name)
+        cmds.setAttr(plug_name, overwrite_value["value"])
 
     cmds.file(input_path, **import_kwargs)
 
@@ -818,30 +865,32 @@ def validate_update_gate(cmds, plugin_paths, format_config, input_path, case_nam
             )
 
     for single_node_type in expectation.get("single_node_types", []):
-        matching_nodes = [
-            node_name
-            for node_name in (cmds.ls(type=single_node_type["type"]) or [])
-            if node_name == single_node_type["name"]
-        ]
+        matching_nodes = find_single_node_type_matches(cmds, single_node_type)
         if len(matching_nodes) != 1:
             raise RuntimeError(
                 f"Update gate failed for {normalized_case_name}. "
-                f"expected exactly one {single_node_type['type']} named {single_node_type['name']}, got {matching_nodes}"
+                f"expected exactly one {single_node_type['type']} matching {single_node_type.get('name') or single_node_type.get('name_suffix')}, got {matching_nodes}"
             )
 
     for overwrite_value in expectation.get("overwrite_values", []):
-        current_value = cmds.getAttr(overwrite_value["plug"])
+        plug_name = overwrite_value.get("_resolved_plug") or resolve_expected_plug(cmds, overwrite_value)
+        if not plug_name:
+            raise RuntimeError(
+                f"Update gate failed for {normalized_case_name}. "
+                f"missing overwritten plug after second update: {overwrite_value.get('plug') or overwrite_value.get('plug_suffix')}"
+            )
+        current_value = cmds.getAttr(plug_name)
         if abs(float(current_value) - float(overwrite_value["value"])) <= 1.0e-6:
             raise RuntimeError(
                 f"Update gate failed for {normalized_case_name}. "
-                f"expected {overwrite_value['plug']} to be overwritten away from {overwrite_value['value']}, got {current_value}"
+                f"expected {plug_name} to be overwritten away from {overwrite_value['value']}, got {current_value}"
             )
 
-        original_value = original_values[overwrite_value["plug"]]
+        original_value = original_values[plug_name]
         if abs(float(current_value) - float(original_value)) > 1.0e-6:
             raise RuntimeError(
                 f"Update gate failed for {normalized_case_name}. "
-                f"expected restored value {overwrite_value['plug']}={original_value}, got {current_value}"
+                f"expected restored value {plug_name}={original_value}, got {current_value}"
             )
 
     compare_mesh_snapshots(reference_meshes, snapshot_scene_meshes())
