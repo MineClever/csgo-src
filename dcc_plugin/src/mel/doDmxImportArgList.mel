@@ -14,6 +14,8 @@ global proc MayaDmxImport_syncOptionVars(string $version, string $args[])
     if (size($args) > 11) { optionVar -floatValue MayaDmx_scaleX $args[11]; }
     if (size($args) > 12) { optionVar -floatValue MayaDmx_scaleY $args[12]; }
     if (size($args) > 13) { optionVar -floatValue MayaDmx_scaleZ $args[13]; }
+    if (size($args) > 14) { optionVar -intValue MayaDmx_forceDeltaAnimationLayer $args[14]; }
+    if (size($args) > 15) { optionVar -stringValue MayaDmx_deltaReferenceMode $args[15]; }
 }
 
 global proc doDmxImportArgList(string $version, string $args[])
@@ -68,7 +70,9 @@ global proc doDmxImportArgList(string $version, string $args[])
         + ";rotateZ=" + `optionVar -q MayaDmx_rotateZ`
         + ";scaleX=" + `optionVar -q MayaDmx_scaleX`
         + ";scaleY=" + `optionVar -q MayaDmx_scaleY`
-        + ";scaleZ=" + `optionVar -q MayaDmx_scaleZ`);
+        + ";scaleZ=" + `optionVar -q MayaDmx_scaleZ`
+        + ";forceDeltaAnimationLayer=" + `optionVar -q MayaDmx_forceDeltaAnimationLayer`
+        + ";deltaReferenceMode=" + `optionVar -q MayaDmx_deltaReferenceMode`);
 
     file
         -import

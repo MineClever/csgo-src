@@ -14,11 +14,13 @@ global proc MayaDmxImport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_scaleX`) { optionVar -floatValue MayaDmx_scaleX 1; }
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_scaleY`) { optionVar -floatValue MayaDmx_scaleY 1; }
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_scaleZ`) { optionVar -floatValue MayaDmx_scaleZ 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_forceDeltaAnimationLayer`) { optionVar -intValue MayaDmx_forceDeltaAnimationLayer 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_deltaReferenceMode`) { optionVar -stringValue MayaDmx_deltaReferenceMode "bindPose"; }
 }
 
 global proc string MayaDmxImport_defaultOptionsString()
 {
-    return "importMaterials=1;importSkin=1;importDeltaStates=1;useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
+    return "importMaterials=1;importSkin=1;importDeltaStates=1;useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1;forceDeltaAnimationLayer=0;deltaReferenceMode=bindPose";
 }
 
 global proc string MayaDmxImport_collectOptionVarString()
@@ -37,7 +39,9 @@ global proc string MayaDmxImport_collectOptionVarString()
         + ";rotateZ=" + `optionVar -q MayaDmx_rotateZ`
         + ";scaleX=" + `optionVar -q MayaDmx_scaleX`
         + ";scaleY=" + `optionVar -q MayaDmx_scaleY`
-        + ";scaleZ=" + `optionVar -q MayaDmx_scaleZ`);
+        + ";scaleZ=" + `optionVar -q MayaDmx_scaleZ`
+        + ";forceDeltaAnimationLayer=" + `optionVar -q MayaDmx_forceDeltaAnimationLayer`
+        + ";deltaReferenceMode=" + `optionVar -q MayaDmx_deltaReferenceMode`);
 }
 
 global proc MayaDmxImport_applyOptionsString(string $options)
@@ -52,6 +56,8 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     float $translateX = 0; float $translateY = 0; float $translateZ = 0;
     float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
     float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
+    int $forceDeltaAnimationLayer = 0;
+    string $deltaReferenceMode = "bindPose";
 
     string $optionList[]; tokenize($effectiveOptions, ";", $optionList);
     for ($option in $optionList) {
@@ -71,6 +77,8 @@ global proc MayaDmxImport_applyOptionsString(string $options)
         else if ($parts[0] == "scaleX") { $scaleX = $parts[1]; }
         else if ($parts[0] == "scaleY") { $scaleY = $parts[1]; }
         else if ($parts[0] == "scaleZ") { $scaleZ = $parts[1]; }
+        else if ($parts[0] == "forceDeltaAnimationLayer") { $forceDeltaAnimationLayer = $parts[1]; }
+        else if ($parts[0] == "deltaReferenceMode") { $deltaReferenceMode = $parts[1]; }
     }
 
     if (`checkBoxGrp -exists dmxImportMaterials`) { checkBoxGrp -e -value1 $importMaterials dmxImportMaterials; }
@@ -85,6 +93,12 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     if (`floatFieldGrp -exists dmxImportTranslation`) { floatFieldGrp -e -value1 $translateX -value2 $translateY -value3 $translateZ dmxImportTranslation; }
     if (`floatFieldGrp -exists dmxImportRotation`) { floatFieldGrp -e -value1 $rotateX -value2 $rotateY -value3 $rotateZ dmxImportRotation; }
     if (`floatFieldGrp -exists dmxImportScale`) { floatFieldGrp -e -value1 $scaleX -value2 $scaleY -value3 $scaleZ dmxImportScale; }
+    if (`checkBoxGrp -exists dmxImportForceDeltaLayer`) { checkBoxGrp -e -value1 $forceDeltaAnimationLayer dmxImportForceDeltaLayer; }
+    if (`optionMenuGrp -exists dmxImportDeltaRefMode`) {
+        if ($deltaReferenceMode == "firstFrame") { optionMenuGrp -e -select 2 dmxImportDeltaRefMode; }
+        else { optionMenuGrp -e -select 1 dmxImportDeltaRefMode; }
+    }
+    MayaDmxImport_updateDeltaUI();
 }
 
 global proc string MayaDmxImport_collectOptionsString()
@@ -129,6 +143,15 @@ global proc string MayaDmxImport_collectOptionsString()
         $scaleZ = `floatFieldGrp -q -value3 dmxImportScale`;
     }
 
+    int $forceDeltaAnimationLayer = 0;
+    if (`checkBoxGrp -exists dmxImportForceDeltaLayer`) {
+        $forceDeltaAnimationLayer = `checkBoxGrp -q -value1 dmxImportForceDeltaLayer`;
+    }
+    string $deltaReferenceMode = "bindPose";
+    if (`optionMenuGrp -exists dmxImportDeltaRefMode`) {
+        if (`optionMenuGrp -q -select dmxImportDeltaRefMode` == 2) { $deltaReferenceMode = "firstFrame"; }
+    }
+
     return ("importMaterials=" + $importMaterials
         + ";importSkin=" + $importSkin
         + ";importDeltaStates=" + $importDeltaStates
@@ -142,7 +165,9 @@ global proc string MayaDmxImport_collectOptionsString()
         + ";rotateZ=" + $rotateZ
         + ";scaleX=" + $scaleX
         + ";scaleY=" + $scaleY
-        + ";scaleZ=" + $scaleZ);
+        + ";scaleZ=" + $scaleZ
+        + ";forceDeltaAnimationLayer=" + $forceDeltaAnimationLayer
+        + ";deltaReferenceMode=" + $deltaReferenceMode);
 }
 
 global proc MayaDmx_importSetup(string $parent, int $forceFactorySettings)
@@ -175,8 +200,27 @@ global proc MayaDmx_importCallback(string $parent, int $doIt)
         else if ($parts[0] == "scaleX") { optionVar -floatValue MayaDmx_scaleX $parts[1]; }
         else if ($parts[0] == "scaleY") { optionVar -floatValue MayaDmx_scaleY $parts[1]; }
         else if ($parts[0] == "scaleZ") { optionVar -floatValue MayaDmx_scaleZ $parts[1]; }
+        else if ($parts[0] == "forceDeltaAnimationLayer") { optionVar -intValue MayaDmx_forceDeltaAnimationLayer $parts[1]; }
+        else if ($parts[0] == "deltaReferenceMode") { optionVar -stringValue MayaDmx_deltaReferenceMode $parts[1]; }
     }
     if ($doIt) { performDmxImport 0; }
+}
+
+// Updates enabled/disabled state of delta layer controls based on current mode selection.
+global proc MayaDmxImport_updateDeltaUI()
+{
+    int $isUpdate = 0;
+    if (`optionMenuGrp -exists dmxImportMode`) {
+        $isUpdate = (`optionMenuGrp -q -select dmxImportMode` == 2);
+    }
+    int $forceDelta = 0;
+    if (`checkBoxGrp -exists dmxImportForceDeltaLayer`) {
+        checkBoxGrp -e -enable $isUpdate dmxImportForceDeltaLayer;
+        $forceDelta = `checkBoxGrp -q -value1 dmxImportForceDeltaLayer`;
+    }
+    if (`optionMenuGrp -exists dmxImportDeltaRefMode`) {
+        optionMenuGrp -e -enable ($isUpdate && $forceDelta) dmxImportDeltaRefMode;
+    }
 }
 
 global proc string DmxImportOptionsUI(string $parent)
@@ -190,10 +234,24 @@ global proc string DmxImportOptionsUI(string $parent)
             checkBoxGrp -numberOfCheckBoxes 1 -label "Skinning" -label1 "Import Skin Weights" dmxImportSkin;
             checkBoxGrp -numberOfCheckBoxes 1 -label "Deformers" -label1 "Import Delta States" dmxImportDeltaStates;
             checkBoxGrp -numberOfCheckBoxes 1 -label "Root Target" -label1 "Import Directly Into Scene Root" -annotation "When enabled, import skips the dedicated wrapper root and places content directly in the Maya scene." dmxImportUseSceneRoot;
-            optionMenuGrp -label "Merge Mode" -annotation "Create creates new nodes. Update reuses matching nodes and overwrites supported mesh/deformer/animation data. Append only fills missing nodes and preserves existing values." dmxImportMode;
+            optionMenuGrp -label "Merge Mode" -annotation "Create creates new nodes. Update reuses matching nodes and overwrites supported mesh/deformer/animation data. Append only fills missing nodes and preserves existing values." -changeCommand "MayaDmxImport_updateDeltaUI" dmxImportMode;
                 menuItem -label "Create New";
                 menuItem -label "Update Existing";
                 menuItem -label "Append Missing";
+            separator -style "in";
+            text -align "left" -label "Animation Layer  (Update mode only)";
+            checkBoxGrp -numberOfCheckBoxes 1
+                -label "Delta Layer"
+                -label1 "Force Into Animation Layer as Deltas"
+                -annotation "When importing with Update mode, routes all animation into a Maya animation layer using delta encoding instead of writing directly to base channels."
+                -changeCommand "MayaDmxImport_updateDeltaUI"
+                dmxImportForceDeltaLayer;
+            optionMenuGrp
+                -label "Reference Mode"
+                -annotation "Bind Pose: uses current joint transforms as the zero-delta reference. First Frame: uses the first animation frame as the reference."
+                dmxImportDeltaRefMode;
+                menuItem -label "Bind Pose";
+                menuItem -label "First Frame";
             separator -style "in";
             text -align "left" -label "Transform Correction";
             text -align "left" -label "Applied directly during import as translation, rotation and scale correction.\n Namespace options use Maya's native Import file panel.";
@@ -244,6 +302,8 @@ global proc string[] captureDmxImportOptionVars(string $version)
     $args[11] = `optionVar -q MayaDmx_scaleX`;
     $args[12] = `optionVar -q MayaDmx_scaleY`;
     $args[13] = `optionVar -q MayaDmx_scaleZ`;
+    $args[14] = `optionVar -q MayaDmx_forceDeltaAnimationLayer`;
+    $args[15] = `optionVar -q MayaDmx_deltaReferenceMode`;
     return $args;
 }
 
