@@ -102,6 +102,31 @@ APPEND_GATE_EXPECTATIONS = {
     },
 }
 
+UPDATE_GATE_EXPECTATIONS = {
+    "simple_blendshape_animation": {
+        "import_options": "useSceneRoot=1;importMode=update",
+        "overwrite_values": [
+            {"plug": "|combinationOperator_controls.smile", "value": 0.75},
+        ],
+        "single_nodes": [
+            {"pattern": "|combinationOperator_controls", "type": "transform"},
+        ],
+        "single_node_types": [
+            {"type": "blendShape", "name": "blendshapeAnimMeshShape_blendShape"},
+        ],
+    },
+    "MostComplexSampleSet/chr_mesh.smd": {
+        "import_options": "useSceneRoot=1;importMode=update",
+        "overwrite_values": [
+            {"plug": "|pelvis.translateX", "value": 17.0},
+        ],
+        "single_nodes": [
+            {"pattern": "|pelvis", "type": "joint"},
+            {"pattern": "|tex_d_bmp_grp1", "type": "transform"},
+        ],
+    },
+}
+
 
 def snapshot_imported_node_types(root_paths):
     import maya.api.OpenMaya as om
@@ -586,6 +611,97 @@ def validate_append_gate(cmds, plugin_paths, format_config, input_path, case_nam
             )
 
 
+def validate_update_gate(cmds, plugin_paths, format_config, input_path, case_name):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = UPDATE_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, plugin_paths)
+
+    import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        options=expectation["import_options"],
+    )
+
+    before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+    cmds.file(input_path, **import_kwargs)
+    imported_roots = collect_imported_roots(cmds, before_assemblies)
+    if not imported_roots:
+        raise RuntimeError(
+            f"Update gate failed for {normalized_case_name}. "
+            f"first import produced no DAG roots"
+        )
+
+    reference_meshes = snapshot_scene_meshes()
+    reference_node_types = snapshot_imported_node_types(imported_roots)
+    reference_skins = snapshot_skin_bindings(cmds, imported_roots)
+    reference_blendshapes = snapshot_blendshape_bindings(cmds, imported_roots)
+    original_values = {}
+    for overwrite_value in expectation.get("overwrite_values", []):
+        if not cmds.objExists(overwrite_value["plug"]):
+            raise RuntimeError(
+                f"Update gate failed for {normalized_case_name}. "
+                f"missing plug before second update: {overwrite_value['plug']}"
+            )
+        original_values[overwrite_value["plug"]] = cmds.getAttr(overwrite_value["plug"])
+        cmds.setAttr(overwrite_value["plug"], overwrite_value["value"])
+
+    cmds.file(input_path, **import_kwargs)
+
+    current_imported_roots = collect_imported_roots(cmds, before_assemblies)
+    if sorted(imported_roots) != current_imported_roots:
+        raise RuntimeError(
+            f"Update gate failed for {normalized_case_name}. "
+            f"assembly roots changed after second update. expected={sorted(imported_roots)} actual={current_imported_roots}"
+        )
+
+    for single_node in expectation.get("single_nodes", []):
+        matching_nodes = cmds.ls(single_node["pattern"], long=True, type=single_node["type"]) or []
+        if len(matching_nodes) != 1:
+            raise RuntimeError(
+                f"Update gate failed for {normalized_case_name}. "
+                f"expected exactly one {single_node['type']} matching {single_node['pattern']}, got {matching_nodes}"
+            )
+
+    for single_node_type in expectation.get("single_node_types", []):
+        matching_nodes = [
+            node_name
+            for node_name in (cmds.ls(type=single_node_type["type"]) or [])
+            if node_name == single_node_type["name"]
+        ]
+        if len(matching_nodes) != 1:
+            raise RuntimeError(
+                f"Update gate failed for {normalized_case_name}. "
+                f"expected exactly one {single_node_type['type']} named {single_node_type['name']}, got {matching_nodes}"
+            )
+
+    for overwrite_value in expectation.get("overwrite_values", []):
+        current_value = cmds.getAttr(overwrite_value["plug"])
+        if abs(float(current_value) - float(overwrite_value["value"])) <= 1.0e-6:
+            raise RuntimeError(
+                f"Update gate failed for {normalized_case_name}. "
+                f"expected {overwrite_value['plug']} to be overwritten away from {overwrite_value['value']}, got {current_value}"
+            )
+
+        original_value = original_values[overwrite_value["plug"]]
+        if abs(float(current_value) - float(original_value)) > 1.0e-6:
+            raise RuntimeError(
+                f"Update gate failed for {normalized_case_name}. "
+                f"expected restored value {overwrite_value['plug']}={original_value}, got {current_value}"
+            )
+
+    compare_mesh_snapshots(reference_meshes, snapshot_scene_meshes())
+    compare_node_type_snapshots(reference_node_types, snapshot_imported_node_types(imported_roots))
+    compare_skin_snapshots(reference_skins, snapshot_skin_bindings(cmds, imported_roots))
+    compare_blendshape_snapshots(reference_blendshapes, snapshot_blendshape_bindings(cmds, imported_roots))
+
+
 def verify_roundtrip(
     cmds,
     plugin_paths,
@@ -702,6 +818,7 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
         options_suffix = f".{safe_options}"
     import_animation_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.import_animgate.txt")
     append_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.append_gate.txt")
+    update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.update_gate.txt")
 
     import_kwargs = dict(i=True, type=format_config["import_type"], ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
     if import_options:
@@ -768,6 +885,10 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     if not import_options:
         validate_append_gate(cmds, [plugin_path], format_config, input_path, case_name)
         with open(append_gate_marker, "w", encoding="utf-8") as marker_file:
+            marker_file.write("ok\n")
+
+        validate_update_gate(cmds, [plugin_path], format_config, input_path, case_name)
+        with open(update_gate_marker, "w", encoding="utf-8") as marker_file:
             marker_file.write("ok\n")
 
     # For samples that contain skinned meshes, automatically run a second pass with

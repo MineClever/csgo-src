@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <maya/MAnimControl.h>
+#include <maya/MDGModifier.h>
 #include <maya/MEulerRotation.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
@@ -20,6 +21,56 @@
 namespace dmx_import_impl
 {
 
+static MStatus ClearExistingAnimationCurve(const MPlug &plug)
+{
+    if (plug.isNull())
+    {
+        return MS::kSuccess;
+    }
+
+    MPlugArray sourceConnections;
+    MStatus status;
+    plug.connectedTo(sourceConnections, true, false, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    for (unsigned int sourceIndex = 0; sourceIndex < sourceConnections.length(); ++sourceIndex)
+    {
+        const MPlug sourcePlug = sourceConnections[sourceIndex];
+        if (sourcePlug.isNull() || !sourcePlug.node().hasFn(MFn::kAnimCurve))
+        {
+            continue;
+        }
+
+        MDGModifier disconnectModifier;
+        status = disconnectModifier.disconnect(sourcePlug, plug);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = disconnectModifier.doIt();
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+
+        MDGModifier deleteModifier;
+        status = deleteModifier.deleteNode(sourcePlug.node());
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = deleteModifier.doIt();
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+    }
+
+    return MS::kSuccess;
+}
 
 AnimationImporter::AnimationImporter(std::shared_ptr<ImportContext> context)
     : context_(context)
@@ -58,7 +109,12 @@ MStatus AnimationImporter::setCurveKeys(
         return MS::kSuccess;
     }
 
-    MStatus status;
+    MStatus status = ClearExistingAnimationCurve(plug);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     MFnAnimCurve curveFn;
     curveFn.create(plug, curveType, nullptr, &status);
     if (!status)
@@ -94,7 +150,12 @@ MStatus AnimationImporter::setCurveKeysAuto(
         return MS::kSuccess;
     }
 
-    MStatus status;
+    MStatus status = ClearExistingAnimationCurve(plug);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     MFnAnimCurve curveFn;
     curveFn.create(plug, nullptr, &status);
     if (!status)

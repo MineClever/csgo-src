@@ -16,6 +16,7 @@
 #include <maya/MIntArray.h>
 #include <maya/MDagPath.h>
 #include <maya/MPointArray.h>
+#include <maya/MSelectionList.h>
 #include <maya/MStatus.h>
 #include <maya/MString.h>
 #include <maya/MStringArray.h>
@@ -76,29 +77,15 @@ static std::string JoinLines(const std::vector<std::string> &values)
     return stream.str();
 }
 
-static MStatus DeleteExistingMeshForUpdate(const dcc_import_policy::SceneImportPolicy &scenePolicy, MObject parent)
+static MObject FindExistingMeshChild(MObject parent)
 {
-    if (!dcc_import_policy::UsesUpdateCurrentScene(scenePolicy))
-    {
-        return MS::kSuccess;
-    }
-
     MStatus status;
     MFnDagNode parentDagNode(parent, &status);
     if (!status)
     {
-        return MS::kSuccess;
+        return MObject::kNullObj;
     }
 
-    MDagPath parentPath;
-    status = MDagPath::getAPathTo(parent, parentPath);
-    if (!status)
-    {
-        return MS::kSuccess;
-    }
-
-    bool hasMeshChild = false;
-    MStringArray meshPaths;
     for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
     {
         const MObject childObject = parentDagNode.child(childIndex, &status);
@@ -108,39 +95,134 @@ static MStatus DeleteExistingMeshForUpdate(const dcc_import_policy::SceneImportP
             continue;
         }
 
-        MDagPath childPath;
-        status = MDagPath::getAPathTo(childObject, childPath);
+        MFnDagNode meshDagNode(childObject, &status);
+        if (status && !meshDagNode.isIntermediateObject())
+        {
+            return childObject;
+        }
+        status = MS::kSuccess;
+    }
+
+    return MObject::kNullObj;
+}
+
+static MString DescribeMeshTopologyMismatch(
+    const MObject &meshObject,
+    const MIntArray &polygonCounts,
+    const MIntArray &polygonConnects)
+{
+    MStatus status;
+    MFnMesh meshFn(meshObject, &status);
+    if (!status)
+    {
+        return "failed to query existing mesh";
+    }
+
+    MIntArray existingCounts;
+    MIntArray existingConnects;
+    status = meshFn.getVertices(existingCounts, existingConnects);
+    if (!status)
+    {
+        return "failed to query existing mesh topology";
+    }
+
+    const unsigned int existingVertexCount = meshFn.numVertices(&status);
+    if (!status)
+    {
+        return "failed to query existing vertex count";
+    }
+
+    unsigned int incomingVertexCount = 0;
+    for (unsigned int index = 0; index < polygonConnects.length(); ++index)
+    {
+        const int pointIndex = polygonConnects[index];
+        if (pointIndex >= 0)
+        {
+            incomingVertexCount = std::max(incomingVertexCount, static_cast<unsigned int>(pointIndex + 1));
+        }
+    }
+
+    if (existingVertexCount != incomingVertexCount)
+    {
+        return MString("vertex count mismatch (existing=") + existingVertexCount + ", incoming=" + incomingVertexCount + ")";
+    }
+
+    if (existingCounts.length() != polygonCounts.length() || existingConnects.length() != polygonConnects.length())
+    {
+        return MString("polygon topology size mismatch (existing counts/connects=")
+            + existingCounts.length() + "/" + existingConnects.length()
+            + ", incoming=" + polygonCounts.length() + "/" + polygonConnects.length() + ")";
+    }
+
+    for (unsigned int index = 0; index < polygonCounts.length(); ++index)
+    {
+        if (existingCounts[index] != polygonCounts[index])
+        {
+            return MString("polygon vertex-count layout mismatch at polygon index ") + index;
+        }
+    }
+
+    for (unsigned int index = 0; index < polygonConnects.length(); ++index)
+    {
+        if (existingConnects[index] != polygonConnects[index])
+        {
+            return MString("polygon connectivity mismatch at connect index ") + index;
+        }
+    }
+
+    return "";
+}
+
+static bool HasProtectedMeshHistory(const MObject &meshObject)
+{
+    MStatus status;
+    MDagPath meshPath;
+    status = MDagPath::getAPathTo(meshObject, meshPath);
+    if (!status)
+    {
+        return false;
+    }
+
+    MStringArray historyNames;
+    status = MGlobal::executeCommand(
+        MString("listHistory -pruneDagObjects true \"") + meshPath.fullPathName() + "\"",
+        historyNames,
+        false,
+        false);
+    if (!status)
+    {
+        return false;
+    }
+
+    for (unsigned int historyIndex = 0; historyIndex < historyNames.length(); ++historyIndex)
+    {
+        MSelectionList historySelection;
+        if (historySelection.add(historyNames[historyIndex]) != MS::kSuccess)
+        {
+            continue;
+        }
+
+        MObject historyObject;
+        if (historySelection.getDependNode(0, historyObject) != MS::kSuccess || historyObject.isNull())
+        {
+            continue;
+        }
+
+        MFnDependencyNode historyNode(historyObject, &status);
         if (!status)
         {
             status = MS::kSuccess;
             continue;
         }
 
-        meshPaths.append(childPath.fullPathName());
-        hasMeshChild = true;
-    }
-
-    if (!hasMeshChild)
-    {
-        return MS::kSuccess;
-    }
-
-    status = MGlobal::executeCommand(MString("delete -ch \"") + parentPath.fullPathName() + "\"", false, false);
-    if (!status)
-    {
-        return status;
-    }
-
-    for (unsigned int meshIndex = 0; meshIndex < meshPaths.length(); ++meshIndex)
-    {
-        status = MGlobal::executeCommand(MString("delete \"") + meshPaths[meshIndex] + "\"", false, false);
-        if (!status)
+        const MString typeName = historyNode.typeName();
+        if (typeName == "blendShape" || typeName == "skinCluster")
         {
-            return status;
+            return true;
         }
     }
 
-    return MS::kSuccess;
+    return false;
 }
 
 MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagElement, MObject parent)
@@ -158,32 +240,10 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         return maya_dmx::ReportWarning(MString("maya_dmx: mesh has no bind/base state: ") + dagElement->name.c_str());
     }
 
-    bool reusedExistingMesh = false;
-    if (dcc_import_policy::UsesExistingObjectMerge(context.scenePolicy))
-    {
-        MStatus status;
-        MFnDagNode parentDagNode(parent, &status);
-        if (status)
-        {
-            for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
-            {
-                const MObject childObject = parentDagNode.child(childIndex, &status);
-                if (!status || !childObject.hasFn(MFn::kMesh))
-                {
-                    status = MS::kSuccess;
-                    continue;
-                }
-
-                MFnDagNode meshDagNode(childObject, &status);
-                if (status && !meshDagNode.isIntermediateObject())
-                {
-                    reusedExistingMesh = true;
-                    break;
-                }
-                status = MS::kSuccess;
-            }
-        }
-    }
+    const MObject existingMeshObject = dcc_import_policy::UsesExistingObjectMerge(context.scenePolicy)
+        ? FindExistingMeshChild(parent)
+        : MObject::kNullObj;
+    const bool reusedExistingMesh = !existingMeshObject.isNull();
 
     if (reusedExistingMesh && !dcc_import_policy::UsesUpdateCurrentScene(context.scenePolicy))
     {
@@ -392,20 +452,42 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         return maya_dmx::ReportWarning(MString("maya_dmx: mesh geometry was empty after parsing: ") + dagElement->name.c_str());
     }
 
-    MStatus status = DeleteExistingMeshForUpdate(context.scenePolicy, parent);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
+    MStatus status;
     MFnMesh meshFn;
-    const MObject meshObject = meshFn.create(points.length(), polygonCounts.length(), points, polygonCounts, polygonConnects, parent, &status);
-    if (!status)
+    MObject meshObject = existingMeshObject;
+    if (dcc_import_policy::UsesUpdateCurrentScene(context.scenePolicy) && reusedExistingMesh)
     {
-        return MStatus::kFailure;
-    }
+        const MString mismatchReason = DescribeMeshTopologyMismatch(existingMeshObject, polygonCounts, polygonConnects);
+        if (mismatchReason.length() > 0)
+        {
+            return maya_dmx::ReportWarning(
+                MString("maya_dmx: update skipped mesh overwrite because existing mesh topology did not match incoming mesh for ")
+                + dagElement->name.c_str()
+                + " ("
+                + mismatchReason
+                + ")");
+        }
 
-    meshFn.setName((dagElement->name.empty() ? std::string("dmx_meshShape") : dagElement->name + "Shape").c_str());
+        meshFn.setObject(existingMeshObject);
+        if (!HasProtectedMeshHistory(existingMeshObject))
+        {
+            status = meshFn.setPoints(points, MSpace::kObject);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+        }
+    }
+    else
+    {
+        meshObject = meshFn.create(points.length(), polygonCounts.length(), points, polygonCounts, polygonConnects, parent, &status);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+
+        meshFn.setName((dagElement->name.empty() ? std::string("dmx_meshShape") : dagElement->name + "Shape").c_str());
+    }
 
     for (size_t uvSetIndex = 0; uvSetIndex < uvSets.size(); ++uvSetIndex)
     {

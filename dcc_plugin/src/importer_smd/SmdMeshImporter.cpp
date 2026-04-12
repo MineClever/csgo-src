@@ -95,6 +95,20 @@ MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const 
     return attributePlug.setString(value.c_str());
 }
 
+bool ShouldDeleteMeshHistoryNodeType(const MString &typeName)
+{
+    return typeName == "skinCluster" ||
+        typeName == "blendShape" ||
+        typeName == "tweak" ||
+        typeName == "dagPose";
+}
+
+bool DependencyNodeExists(const MString &nodeName)
+{
+    MSelectionList selection;
+    return selection.add(nodeName) == MS::kSuccess;
+}
+
 MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPolicy &scenePolicy, const MObject &transformObject)
 {
     if (!dcc_import_policy::UsesUpdateCurrentScene(scenePolicy))
@@ -117,6 +131,7 @@ MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPol
     }
 
     MStringArray meshPaths;
+    MStringArray historyNodeNames;
     for (unsigned int childIndex = 0; childIndex < transformDagNode.childCount(); ++childIndex)
     {
         const MObject childObject = transformDagNode.child(childIndex, &status);
@@ -135,6 +150,59 @@ MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPol
         }
 
         meshPaths.append(childPath.fullPathName());
+
+        MStringArray historyNames;
+        status = MGlobal::executeCommand(
+            MString("listHistory -pruneDagObjects true \"") + childPath.fullPathName() + "\"",
+            historyNames,
+            false,
+            false);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        for (unsigned int historyIndex = 0; historyIndex < historyNames.length(); ++historyIndex)
+        {
+            MSelectionList historySelection;
+            if (historySelection.add(historyNames[historyIndex]) != MS::kSuccess)
+            {
+                continue;
+            }
+
+            MObject historyObject;
+            if (historySelection.getDependNode(0, historyObject) != MS::kSuccess || historyObject.isNull())
+            {
+                continue;
+            }
+
+            MFnDependencyNode historyNode(historyObject, &status);
+            if (!status)
+            {
+                status = MS::kSuccess;
+                continue;
+            }
+
+            if (!ShouldDeleteMeshHistoryNodeType(historyNode.typeName()))
+            {
+                continue;
+            }
+
+            bool alreadyQueued = false;
+            for (unsigned int existingIndex = 0; existingIndex < historyNodeNames.length(); ++existingIndex)
+            {
+                if (historyNodeNames[existingIndex] == historyNames[historyIndex])
+                {
+                    alreadyQueued = true;
+                    break;
+                }
+            }
+            if (!alreadyQueued)
+            {
+                historyNodeNames.append(historyNames[historyIndex]);
+            }
+        }
     }
 
     if (meshPaths.length() == 0)
@@ -142,14 +210,27 @@ MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPol
         return MS::kSuccess;
     }
 
-    status = MGlobal::executeCommand(MString("delete -ch \"") + transformPath.fullPathName() + "\"", false, false);
-    if (!status)
+    for (unsigned int historyIndex = 0; historyIndex < historyNodeNames.length(); ++historyIndex)
     {
-        return status;
+        if (!DependencyNodeExists(historyNodeNames[historyIndex]))
+        {
+            continue;
+        }
+
+        status = MGlobal::executeCommand(MString("delete \"") + historyNodeNames[historyIndex] + "\"", false, false);
+        if (!status)
+        {
+            return status;
+        }
     }
 
     for (unsigned int meshIndex = 0; meshIndex < meshPaths.length(); ++meshIndex)
     {
+        if (!DependencyNodeExists(meshPaths[meshIndex]))
+        {
+            continue;
+        }
+
         status = MGlobal::executeCommand(MString("delete \"") + meshPaths[meshIndex] + "\"", false, false);
         if (!status)
         {

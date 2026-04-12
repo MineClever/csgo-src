@@ -377,7 +377,7 @@ MStatus DeformerImporter::restoreSkinClusterSettings(const MObject &skinClusterO
 
 MObject DeformerImporter::findExistingBlendShapeNode(const std::string &blendShapeName) const
 {
-    if (!dcc_import_policy::UsesAppendMissingObjects(context_->scenePolicy) || blendShapeName.empty() || meshObject_.isNull())
+    if (!dcc_import_policy::UsesExistingObjectMerge(context_->scenePolicy) || blendShapeName.empty() || meshObject_.isNull())
     {
         return MObject::kNullObj;
     }
