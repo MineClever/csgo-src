@@ -255,7 +255,7 @@ MStatus ImportDagHierarchyRecursive(
         context.importedControlPaths.push_back(nodePath);
     }
 
-    if (!reusedExistingNode || !appendMissingMode)
+    if (!reusedExistingNode || (!appendMissingMode && !context.scenePolicy.forceDeltaAnimationLayer))
     {
         const bool topLevelNode = parent == context.sceneRoot;
         AppendImportDebugLog((std::string("dag: apply transform name=") + nodeName + " topLevel=" + (topLevelNode ? "1" : "0")).c_str());

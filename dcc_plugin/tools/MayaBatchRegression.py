@@ -201,6 +201,14 @@ DELTA_LAYER_GATE_EXPECTATIONS = {
         "base_plug": "|pelvis.translateX",
         "min_curve_count": 6,
     },
+    "Ellis/DMX/animation/c1m1_intro_mechanic.dmx": {
+        "base_case": "Ellis/DMX/mechanic_model.dmx",
+        "base_import_options": "useSceneRoot=1;importMode=create",
+        "update_import_options": "useSceneRoot=1;importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=bindPose",
+        "layer_name": "c1m1_intro_mechanic_dmx_delta",
+        "base_plug": "|ValveBiped_Bip01_Pelvis.translateX",
+        "min_curve_count": 6,
+    },
 }
 
 
@@ -1060,7 +1068,11 @@ def validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_nam
             f"expected at least {expectation['min_curve_count']} layer curves, got {layer_curves}"
         )
 
-    updated_value = cmds.getAttr(expectation["base_plug"])
+    cmds.animLayer(expectation["layer_name"], edit=True, mute=True)
+    try:
+        updated_value = cmds.getAttr(expectation["base_plug"])
+    finally:
+        cmds.animLayer(expectation["layer_name"], edit=True, mute=False)
     if abs(updated_value - base_value) > 1.0e-6:
         raise RuntimeError(
             f"Delta layer gate failed for {normalized_case_name}. "
