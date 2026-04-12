@@ -342,8 +342,9 @@ MStatus SmdSceneImporter::applyBindPose()
     const simple_smd::SkeletonFrame &bindFrame = document_->skeletonFrames.front();
     for (const simple_smd::Node &node : document_->nodes)
     {
-        if (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy) &&
-            reusedBoneIndices_.find(node.index) != reusedBoneIndices_.end())
+        if (reusedBoneIndices_.find(node.index) != reusedBoneIndices_.end() &&
+            (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy) ||
+             importOptions_.scenePolicy.forceDeltaAnimationLayer))
         {
             continue;
         }

@@ -182,6 +182,21 @@ SKIN_INFLUENCE_UPDATE_GATE_EXPECTATIONS = {
     "MostComplexSampleSet/chr_mesh.smd": {
         "import_options": "useSceneRoot=1;importMode=update",
     },
+    "ctm_fbi/ctm_fbi.smd": {
+        "import_options": "useSceneRoot=1;importMode=update",
+    },
+}
+
+# Verifies that skinCluster nodes are reused in-place (same node names) when
+# the same file is imported twice with importMode=update, rather than being
+# deleted and recreated.
+SKIN_CLUSTER_REUSE_GATE_EXPECTATIONS = {
+    "MostComplexSampleSet/chr_mesh.smd": {
+        "import_options": "useSceneRoot=1;importMode=update",
+    },
+    "ctm_fbi/ctm_fbi.smd": {
+        "import_options": "useSceneRoot=1;importMode=update",
+    },
 }
 
 DELTA_LAYER_GATE_EXPECTATIONS = {
@@ -1008,6 +1023,50 @@ def validate_skin_influence_update_gate(cmds, plugin_paths, format_config, input
     compare_skin_snapshots(reference_skins, snapshot_skin_bindings(cmds, imported_roots))
 
 
+def validate_skin_cluster_reuse_gate(cmds, plugin_paths, format_config, input_path, case_name):
+    """
+    Verifies that skinCluster nodes are reused in-place (same node names, not deleted+recreated)
+    when the same file is imported twice with importMode=update.
+    """
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = SKIN_CLUSTER_REUSE_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, plugin_paths)
+
+    import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        defaultNamespace=True,
+        options=expectation["import_options"],
+    )
+
+    cmds.file(input_path, **import_kwargs)
+    skin_nodes_before = set(cmds.ls(type="skinCluster") or [])
+    if not skin_nodes_before:
+        raise RuntimeError(
+            f"Skin cluster reuse gate failed for {normalized_case_name}. "
+            f"initial import produced no skinCluster nodes"
+        )
+
+    cmds.file(input_path, **import_kwargs)
+    skin_nodes_after = set(cmds.ls(type="skinCluster") or [])
+
+    new_nodes = skin_nodes_after - skin_nodes_before
+    deleted_nodes = skin_nodes_before - skin_nodes_after
+    if new_nodes or deleted_nodes:
+        raise RuntimeError(
+            f"Skin cluster reuse gate failed for {normalized_case_name}. "
+            f"skinCluster nodes were not reused in-place on second update import: "
+            f"new={sorted(new_nodes)} deleted={sorted(deleted_nodes)}"
+        )
+
+
 def validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_name):
     normalized_case_name = case_name.replace("\\", "/")
     expectation = DELTA_LAYER_GATE_EXPECTATIONS.get(normalized_case_name)
@@ -1199,6 +1258,7 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.update_gate.txt")
     topology_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.topology_update_gate.txt")
     skin_influence_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.skin_influence_update_gate.txt")
+    skin_cluster_reuse_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.skin_cluster_reuse_gate.txt")
     delta_layer_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.delta_layer_gate.txt")
 
     import_kwargs = dict(
@@ -1286,6 +1346,10 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
         validate_paired_update_gate(cmds, plugin_paths_by_format, sample_dir, case_name)
         validate_skin_influence_update_gate(cmds, [plugin_path], format_config, input_path, case_name)
         with open(skin_influence_update_gate_marker, "w", encoding="utf-8") as marker_file:
+            marker_file.write("ok\n")
+
+        validate_skin_cluster_reuse_gate(cmds, [plugin_path], format_config, input_path, case_name)
+        with open(skin_cluster_reuse_gate_marker, "w", encoding="utf-8") as marker_file:
             marker_file.write("ok\n")
 
         validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_name)

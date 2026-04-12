@@ -843,7 +843,26 @@
       - 当前范围与已知边界：
         - 第一阶段只覆盖 transform 通道；`flexWeight` / facial / blendShape control 动画仍不进 layer。
         - `deltaReferenceMode=bindPose` 当前优先使用目标对象导入后的当前 local pose 作为参考；更严格区分“静态骨架 pose”与“第一帧 pose”的宿主 gate 还要继续补。
-      - DMX 这条功能当前已达到“最小 transform 动画 gate 已验证”，但还不能宣告整个 DMX/SMD delta-layer 需求完全关闭；复杂 paired-update DMX 样本与 facial/float layer 范围仍待后续收口。
+      - DMX 这条功能当前已达到”最小 transform 动画 gate 已验证”，但还不能宣告整个 DMX/SMD delta-layer 需求完全关闭；复杂 paired-update DMX 样本与 facial/float layer 范围仍待后续收口。
+  - 2026-04-13：✅ 已完成 DMX Ellis delta-layer gate 固化（Task #4）。
+    - 根因修复：[DmxImportDag.cpp](dcc_plugin/src/importer/DmxImportDag.cpp) 的 `ImportDagHierarchyRecursive()` 在 `importMode=update + forceDeltaAnimationLayer=1` 下，对已复用节点仍会调用 `ApplyTransform()` 覆写绑定姿势。修复为：当 `forceDeltaAnimationLayer=true` 时，已复用节点跳过 `ApplyTransform()`，与 `appendMissingMode` 的处理方式对齐。
+    - 修复文件：[DmxImportDag.cpp:258](dcc_plugin/src/importer/DmxImportDag.cpp) — 条件由 `!reusedExistingNode || !appendMissingMode` 改为 `!reusedExistingNode || (!appendMissingMode && !context.scenePolicy.forceDeltaAnimationLayer)`。
+    - 同步新增 Delta 导入选项 UI：[performDmxImport.mel](dcc_plugin/src/mel/performDmxImport.mel) / [doDmxImportArgList.mel](dcc_plugin/src/mel/doDmxImportArgList.mel) 及对应 module 镜像已补上 `forceDeltaAnimationLayer`（checkBox，仅 update 模式启用）与 `deltaReferenceMode`（optionMenu：Bind Pose / First Frame，仅 forceDelta 勾选时启用）两个 UI 控件，以及对应 optionVar 持久化。
+    - 已固化 delta-layer gate：
+      - `Ellis/DMX/animation/c1m1_intro_mechanic.dmx`：先导 `mechanic_model.dmx`，再用 `importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=bindPose` 导入，验证 `c1m1_intro_mechanic_dmx_delta` 层存在、layer 上有 transform curve、base `|ValveBiped_Bip01_Pelvis.translateX` 未被覆写。
+    - 全套 SMD + DMX 案例批回归通过（不含预先存在的 `simple_blendshape_animation` append gate 失败与 `MostComplexSampleSet/chr_mesh.smd` SMD append gate 失败，两者均为前序已知问题，与本轮改动无关）。
+  - 2026-04-13：✅ 已完成 SMD update 就地复用 skinCluster（Task #2）。
+    - 新增回归门槛 `SKIN_CLUSTER_REUSE_GATE_EXPECTATIONS` 与 `validate_skin_cluster_reuse_gate()`：[MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 新增对 `ctm_fbi/ctm_fbi.smd` 和 `MostComplexSampleSet/chr_mesh.smd` 的 skinCluster 节点 identity 保持验证，确保同拓扑文件 update 两次后 skinCluster 节点名集合不变。
+    - 同步把 `ctm_fbi/ctm_fbi.smd` 加入 `SKIN_INFLUENCE_UPDATE_GATE_EXPECTATIONS`（先前已有 `MostComplexSampleSet/chr_mesh.smd`，现将 `complex_chr_mesh` 也换成 `ctm_fbi/ctm_fbi.smd` 两条一起覆盖真实样本）。
+    - 附带 bug 修复：在执行 ctm_fbi SMD 套件回归时，发现 `ctm_fbi_anims/rom_skin.smd` 的 delta-layer gate 失败（base `|pelvis.translateX` 被覆写）。根因与 DMX Task #4 一致：[SmdSceneImporter::applyBindPose()](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 在 `importMode=update + forceDeltaAnimationLayer=1` 时，对已复用关节仍会应用动画文件第 0 帧 pose，覆写现有绑定姿势。已在 `applyBindPose()` 的 skip 条件中补入 `importOptions_.scenePolicy.forceDeltaAnimationLayer` 判断。修复文件：[SmdSceneImporter.cpp:345](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp)。
+    - 重新编译 `maya_smd`，验证 ctm_fbi 全套 SMD cases 通过，包括：
+      - `ctm_fbi__ctm_fbi.skin_cluster_reuse_gate.txt` = ok
+      - `ctm_fbi__ctm_fbi.skin_influence_update_gate.txt` = ok
+      - `ctm_fbi__ctm_fbi_anims__rom_skin.delta_layer_gate.txt` = ok
+      - `Ellis__DMX__animation__c1m1_intro_mechanic.delta_layer_gate.txt` = ok
+  - 2026-04-13：已确认以下两条为预先存在的已知问题，与本轮改动无关，暂维持挂起状态：
+    - `simple_blendshape_animation` append gate：首次 `importMode=append` 导入后 `|combinationOperator_controls.smile` plug 不存在，导致 gate 始终失败。根因疑与 `importMode=append` 下 blendShape animation channel 的建立顺序有关，需要单独排查。
+    - `MostComplexSampleSet/chr_mesh.smd` SMD append gate：首次 `importMode=append` 导入后 `|pelvis` 关节不存在，原因是 SMD append 匹配在该样本的 Maya rename 前缀下仍不稳定。
 
 ## 环境与工具链说明
 
