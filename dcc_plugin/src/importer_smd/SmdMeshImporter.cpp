@@ -56,7 +56,7 @@ MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const 
     MFnDependencyNode nodeFn(nodeObject, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     MObject attributeObject = nodeFn.attribute(attributeName, &status);
@@ -67,13 +67,13 @@ MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const 
         MObject defaultValue = stringDataFn.create("", &status);
         if (!status)
         {
-            return status;
+            return MS::kFailure;
         }
 
         attributeObject = attributeFn.create(attributeName, attributeName, MFnData::kString, defaultValue, &status);
         if (!status)
         {
-            return status;
+            return MS::kFailure;
         }
         attributeFn.setWritable(true);
         attributeFn.setStorable(true);
@@ -83,14 +83,14 @@ MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const 
         status = nodeFn.addAttribute(attributeObject);
         if (!status)
         {
-            return status;
+            return MS::kFailure;
         }
     }
 
     MPlug attributePlug = nodeFn.findPlug(attributeName, true, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     return attributePlug.setString(value.c_str());
@@ -217,7 +217,7 @@ MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPol
         status = maya_cmd::DeleteNodeByName(historyNodeNames[historyIndex]);
         if (!status)
         {
-            return status;
+            return MS::kFailure;
         }
     }
 
@@ -231,7 +231,7 @@ MStatus DeleteExistingMeshGroupForUpdate(const dcc_import_policy::SceneImportPol
         status = maya_cmd::DeleteNodeByName(meshPaths[meshIndex]);
         if (!status)
         {
-            return status;
+            return MS::kFailure;
         }
     }
 
@@ -657,19 +657,19 @@ MStatus SmdMeshImporter::createSkinClusterWithApi(
         MPlug srcPlug = srcFn.findPlug(srcAttr, true, &status);
         if (!status)
         {
-            return status;
+            return MS::kFailure;
         }
         MPlug dstPlug = dstFn.findPlug(dstAttr, true, &status);
         if (!status)
         {
-            return status;
+            return MS::kFailure;
         }
         if (srcPlug.isArray())
         {
             srcPlug = srcPlug.elementByLogicalIndex(srcIndex, &status);
             if (!status)
             {
-                return status;
+                return MS::kFailure;
             }
         }
         if (dstPlug.isArray())
@@ -677,7 +677,7 @@ MStatus SmdMeshImporter::createSkinClusterWithApi(
             dstPlug = dstPlug.elementByLogicalIndex(dstIndex, &status);
             if (!status)
             {
-                return status;
+                return MS::kFailure;
             }
         }
         return dgModifier.connect(srcPlug, dstPlug);

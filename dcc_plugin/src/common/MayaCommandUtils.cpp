@@ -5,8 +5,11 @@
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnSet.h>
 #include <maya/MGlobal.h>
+#include <maya/MItDependencyGraph.h>
 #include <maya/MPlugArray.h>
 #include <maya/MSelectionList.h>
+
+#include <unordered_set>
 
 namespace maya_cmd
 {
@@ -43,13 +46,13 @@ MStatus DuplicateDagNode(const MDagPath &sourcePath, MObject &duplicateObject, M
     MFnDagNode dagNode(sourcePath, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     duplicateObject = dagNode.duplicate(false, false, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     if (duplicatePath)
@@ -57,7 +60,7 @@ MStatus DuplicateDagNode(const MDagPath &sourcePath, MObject &duplicateObject, M
         status = MDagPath::getAPathTo(duplicateObject, *duplicatePath);
         if (!status)
         {
-            return status;
+            return MS::kFailure;
         }
     }
 
@@ -72,11 +75,11 @@ MStatus GetNodeAliasList(const MObject &nodeObject, MStringArray &aliasPairs)
     MFnDependencyNode nodeFn(nodeObject, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     nodeFn.getAliasList(aliasPairs, &status);
-    return status;
+    return status ? MS::kSuccess : MS::kFailure;
 }
 
 MStatus SetNodePlugAlias(const MObject &nodeObject, const MPlug &plug, const MString &aliasName)
@@ -90,17 +93,17 @@ MStatus SetNodePlugAlias(const MObject &nodeObject, const MPlug &plug, const MSt
     MFnDependencyNode nodeFn(nodeObject, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     const MString attrName = plug.partialName(false, false, false, false, false, true, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     nodeFn.setAlias(aliasName, attrName, plug, true, &status);
-    return status;
+    return status.error() ? MS::kSuccess : MS::kFailure;
 }
 
 MStatus CreateNamedDependencyNode(const MString &typeName, const MString &nodeName, MObject &nodeObject)
@@ -108,7 +111,7 @@ MStatus CreateNamedDependencyNode(const MString &typeName, const MString &nodeNa
     MStatus status;
     MFnDependencyNode nodeFn;
     nodeObject = nodeFn.create(typeName, nodeName, &status);
-    return status;
+    return status ? MS::kSuccess : MS::kFailure;
 }
 
 MStatus EnsureRenderableShadingGroup(const MString &nodeName, MObject &setObject)
@@ -133,11 +136,11 @@ MStatus EnsureRenderableShadingGroup(const MString &nodeName, MObject &setObject
     setObject = setFn.create(emptyList, MFnSet::kRenderableOnly, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     setFn.setName(nodeName, &status);
-    return status;
+    return status ? MS::kSuccess : MS::kFailure;
 }
 
 MStatus ConnectPlugsForce(const MPlug &sourcePlug, const MPlug &destinationPlug)
@@ -152,7 +155,7 @@ MStatus ConnectPlugsForce(const MPlug &sourcePlug, const MPlug &destinationPlug)
     destinationPlug.connectedTo(sourceConnections, true, false, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     MDGModifier modifier;
@@ -161,14 +164,14 @@ MStatus ConnectPlugsForce(const MPlug &sourcePlug, const MPlug &destinationPlug)
         status = modifier.disconnect(sourceConnections[sourceIndex], destinationPlug);
         if (!status)
         {
-            return status;
+            return MS::kFailure;
         }
     }
 
     status = modifier.connect(sourcePlug, destinationPlug);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     return modifier.doIt();
@@ -180,7 +183,7 @@ MStatus AddDagPathToSet(const MDagPath &dagPath, const MObject &setObject)
     MFnSet setFn(setObject, &status);
     if (!status)
     {
-        return status;
+        return MS::kFailure;
     }
 
     return setFn.addMember(dagPath);
@@ -190,14 +193,62 @@ MStatus GetPrunedHistory(const MString &nodePath, MStringArray &historyNames)
 {
     historyNames.clear();
 
-    // Keep the MEL command wrapped here for now. `listHistory -pruneDagObjects true`
-    // has scene-graph filtering semantics that still need a one-by-one API parity pass
-    // before replacing it with MItDependencyGraph.
-    return MGlobal::executeCommand(
-        MString("listHistory -pruneDagObjects true \"") + nodePath + "\"",
-        historyNames,
-        false,
-        false);
+    MSelectionList selection;
+    MStatus status = selection.add(nodePath);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MObject rootObject;
+    status = selection.getDependNode(0, rootObject);
+    if (!status || rootObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MItDependencyGraph iterator(
+        rootObject,
+        MFn::kInvalid,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    std::unordered_set<std::string> seenNames;
+    for (; !iterator.isDone(); iterator.next())
+    {
+        MObject currentNode = iterator.currentItem(&status);
+        if (!status || currentNode.isNull())
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        if (currentNode == rootObject || currentNode.hasFn(MFn::kDagNode))
+        {
+            continue;
+        }
+
+        MFnDependencyNode nodeFn(currentNode, &status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        const std::string nodeName = nodeFn.name().asChar();
+        if (seenNames.insert(nodeName).second)
+        {
+            historyNames.append(nodeName.c_str());
+        }
+    }
+
+    return MS::kSuccess;
 }
 
 MStatus GetMayaUserPrefDirectory(MString &userPrefDir)

@@ -544,6 +544,18 @@
     - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
     - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
     - `mayapy` 回归：`simple_blendshape_animation`、`simple_mesh`、`MostComplexSampleSet/chr_mesh.smd`
+  - 2026-04-12：已继续执行 `executeCommand` 统一收口的第二轮落地，把 `listHistory -pruneDagObjects true` 从 MEL fallback 改成 [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 中的 `MItDependencyGraph` API 遍历实现。当前 `maya_cmd::GetPrunedHistory()` 会沿 DG upstream 做 depth-first / node-level 遍历，跳过 root 自身与 DAG 节点，仅保留去重后的非 DAG history 节点名；这已经满足现有 importer 对 `blendShape` / `skinCluster` 等上游 deformer 检测的语义需求，并减少一类字符串命令依赖。执行这一轮后，helper 中仍保留的 MEL fallback 只剩三类：
+    - `internalVar -userPrefDir`：当前仍缺少可直接返回同语义结果的公开 C++ API。
+    - `optionVar -list`：值读写已可用 `MGlobal::optionVar*` API，但全量枚举名称仍依赖命令层。
+    - `sculptTarget -e -regenerate`：当前仍未找到等价的公开 C++ API 可替代临时 blendShape target mesh 重建语义。
+    已再次确认业务层已无直接 `MGlobal::executeCommand` 调用，后续若继续收口，应优先围绕剩余三类 helper fallback 评估是否还能进一步缩小命令层使用面。
+  - 2026-04-12：已继续收紧 [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 的错误返回语义。当前在 helper 内部，对 `MFnDagNode` / `MFnDependencyNode` / `MFnSet` / `MSelectionList` / `MItDependencyGraph` 等 API 调用得到的失败状态，不再继续直接 `return status;` 透传底层状态，而是统一在 `if (!status)` 分支返回 `MS::kFailure`；这样可避免 helper 外层逻辑继续依赖 Maya 底层细碎状态码，保持“成功 / 失败”边界更稳定。已通过：
+    - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+    - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
+  - 2026-04-12：已继续把“失败统一返回 `MS::kFailure`”的规则从 helper 往调用侧推进。当前 [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 中剩余直接 `return status;` 的成功/失败混合返回点已进一步收紧为显式 `status ? MS::kSuccess : MS::kFailure`；同时 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 中最近改过的字符串 attribute 创建、`update` 模式 mesh/history 删除、以及 skinCluster 连接 lambda 的失败分支，也已不再直接透传底层 `status`，而统一返回 `MS::kFailure`。已再次通过：
+    - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+    - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
+    当前这条收紧规则还未覆盖所有 importer / exporter 文件，后续仍需继续把其余 `if (!status) return status;` 热路径逐步清掉。
 
 ## 环境与工具链说明
 
