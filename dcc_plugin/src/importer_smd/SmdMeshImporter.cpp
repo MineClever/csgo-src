@@ -267,7 +267,38 @@ std::unordered_map<std::string, unsigned int> BuildInfluenceIndexByPath(const MD
     return influenceByPath;
 }
 
+bool FindMatchingInfluencePath(
+    const dcc_import_policy::SceneImportPolicy &scenePolicy,
+    const MDagPathArray &influencePaths,
+    const MDagPath &requiredInfluencePath,
+    MDagPath &matchedInfluencePath)
+{
+    const std::string requiredFullPath = requiredInfluencePath.fullPathName().asChar();
+    const std::string requiredLeafName = requiredInfluencePath.partialPathName().asChar();
+    for (unsigned int influenceIndex = 0; influenceIndex < influencePaths.length(); ++influenceIndex)
+    {
+        const MDagPath &candidatePath = influencePaths[influenceIndex];
+        if (requiredFullPath == candidatePath.fullPathName().asChar())
+        {
+            matchedInfluencePath = candidatePath;
+            return true;
+        }
+
+        if (dcc_import_policy::MatchesNodeNameForAppend(
+            scenePolicy,
+            candidatePath.partialPathName().asChar(),
+            requiredLeafName))
+        {
+            matchedInfluencePath = candidatePath;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 MStatus EnsureSkinClusterContainsInfluences(
+    const dcc_import_policy::SceneImportPolicy &scenePolicy,
     const MObject &skinClusterObject,
     const MDagPathArray &requiredInfluencePaths,
     MDagPathArray &resolvedInfluencePaths)
@@ -291,7 +322,6 @@ MStatus EnsureSkinClusterContainsInfluences(
         return MS::kFailure;
     }
 
-    std::unordered_map<std::string, unsigned int> existingInfluenceByPath = BuildInfluenceIndexByPath(resolvedInfluencePaths);
     MFnDependencyNode skinClusterNode(skinClusterObject, &status);
     if (!status)
     {
@@ -300,8 +330,8 @@ MStatus EnsureSkinClusterContainsInfluences(
 
     for (unsigned int influenceIndex = 0; influenceIndex < requiredInfluencePaths.length(); ++influenceIndex)
     {
-        const std::string fullPath = requiredInfluencePaths[influenceIndex].fullPathName().asChar();
-        if (existingInfluenceByPath.find(fullPath) != existingInfluenceByPath.end())
+        MDagPath matchedInfluencePath;
+        if (FindMatchingInfluencePath(scenePolicy, resolvedInfluencePaths, requiredInfluencePaths[influenceIndex], matchedInfluencePath))
         {
             continue;
         }
@@ -574,11 +604,6 @@ MObject SmdMeshImporter::findExistingMeshGroup(MObject parent, const std::string
         MItDag dagIterator(MItDag::kDepthFirst);
         for (; !dagIterator.isDone(); dagIterator.next())
         {
-            if (dagIterator.depth() != 1)
-            {
-                continue;
-            }
-
             MDagPath dagPath;
             if (dagIterator.getPath(dagPath) != MS::kSuccess || !dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint))
             {
@@ -819,7 +844,7 @@ MStatus SmdMeshImporter::updateExistingSkinClusterBindings(
     }
 
     MDagPathArray existingInfluencePaths;
-    status = smd_mesh_import_impl::EnsureSkinClusterContainsInfluences(skinClusterObject, influencePaths, existingInfluencePaths);
+    status = smd_mesh_import_impl::EnsureSkinClusterContainsInfluences(scenePolicy_, skinClusterObject, influencePaths, existingInfluencePaths);
     if (!status)
     {
         return MS::kFailure;
@@ -851,7 +876,21 @@ MStatus SmdMeshImporter::updateExistingSkinClusterBindings(
                 + meshParentPath.fullPathName());
         }
 
-        MPlug bindPreMatrixPlug = bindPreMatrixArrayPlug.elementByLogicalIndex(existingIt->second, &status);
+        MDagPath matchedInfluencePath;
+        if (!smd_mesh_import_impl::FindMatchingInfluencePath(scenePolicy_, existingInfluencePaths, influencePaths[influenceIndex], matchedInfluencePath))
+        {
+            return maya_smd::ReportWarning(
+                MString("maya_smd: update skipped skinCluster overwrite because a required influence path could not be resolved for ")
+                + meshParentPath.fullPathName());
+        }
+
+        const unsigned int logicalInfluenceIndex = skinClusterFn.indexForInfluenceObject(matchedInfluencePath, &status);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        MPlug bindPreMatrixPlug = bindPreMatrixArrayPlug.elementByLogicalIndex(logicalInfluenceIndex, &status);
         if (!status)
         {
             return MS::kFailure;
@@ -1174,37 +1213,34 @@ MStatus SmdMeshImporter::applySkinning(
             continue;
         }
 
-        const std::string activeInfluencePath = jointIt->second.fullPathName().asChar();
-        bool matchedInfluence = false;
-        for (unsigned int influencePathIndex = 0; influencePathIndex < influencePaths.length(); ++influencePathIndex)
-        {
-            if (activeInfluencePath != influencePaths[influencePathIndex].fullPathName().asChar())
-            {
-                continue;
-            }
-
-            boneToInfluenceSlot[boneIndex] = influencePathIndex;
-            matchedInfluence = true;
-            break;
-        }
-
-        if (!matchedInfluence)
+        MDagPath matchedInfluencePath;
+        if (!smd_mesh_import_impl::FindMatchingInfluencePath(scenePolicy_, influencePaths, jointIt->second, matchedInfluencePath))
         {
             return maya_smd::ReportError(
                 MString("maya_smd: failed to match skin influence for bone index ") + std::to_string(boneIndex).c_str(),
+                MS::kFailure);
+        }
+
+        for (unsigned int influencePathIndex = 0; influencePathIndex < influencePaths.length(); ++influencePathIndex)
+        {
+            if (matchedInfluencePath.fullPathName() == influencePaths[influencePathIndex].fullPathName())
+            {
+                boneToInfluenceSlot[boneIndex] = influencePathIndex;
+                break;
+            }
+        }
+
+        if (boneToInfluenceSlot.find(boneIndex) == boneToInfluenceSlot.end())
+        {
+            return maya_smd::ReportError(
+                MString("maya_smd: failed to resolve matched skin influence slot for bone index ") + std::to_string(boneIndex).c_str(),
                 MS::kFailure);
         }
     }
 
     for (unsigned int influencePathIndex = 0; influencePathIndex < influencePaths.length(); ++influencePathIndex)
     {
-        const unsigned int influenceIndex = skinClusterFn.indexForInfluenceObject(influencePaths[influencePathIndex], &status);
-        if (!status)
-        {
-            return maya_smd::ReportError(MString("maya_smd: failed to query influence index for ") + influencePaths[influencePathIndex].fullPathName(), status);
-        }
-
-        influenceIndices.append(static_cast<int>(influenceIndex));
+        influenceIndices.append(static_cast<int>(influencePathIndex));
     }
 
     if (influenceIndices.length() == 0)

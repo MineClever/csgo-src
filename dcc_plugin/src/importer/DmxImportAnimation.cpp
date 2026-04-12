@@ -1,6 +1,7 @@
 #include "DmxImportAnimation.h"
 #include "DmxImportInternals.h"
 
+#include <common/MayaCommandUtils.h>
 #include <common/ImportTransformCorrection.h>
 
 #include <algorithm>
@@ -185,6 +186,28 @@ MStatus AnimationImporter::setCurveKeysAuto(
     return MS::kSuccess;
 }
 
+MStatus AnimationImporter::setTransformCurveKeys(
+    const MPlug &plug,
+    const std::vector<double> &times,
+    const std::vector<double> &values,
+    MFnAnimCurve::AnimCurveType curveType) const
+{
+    if (!usesDeltaAnimationLayerForTransforms())
+    {
+        return setCurveKeys(plug, times, values, curveType);
+    }
+
+    MString layerName;
+    MStatus status = ensureTransformAnimationLayer(layerName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    AppendImportDebugLog((std::string("animLayer: set keys for ") + plug.name().asChar() + " on " + layerName.asChar()).c_str());
+    return maya_cmd::SetKeyframesOnAnimationLayer(layerName, plug, times.data(), values.data(), times.size(), true);
+}
+
 MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, const simple_dmx::Element *logLayer) const
 {
     if (!logLayer)
@@ -203,6 +226,7 @@ MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, con
     std::vector<double> xValues;
     std::vector<double> yValues;
     std::vector<double> zValues;
+    std::vector<MVector> sampledTranslations;
     const bool applyTopLevelCorrection =
         isTopLevelImportedPath(targetPath) &&
         !context_->topLevelPreTransform.isEquivalent(MMatrix::identity);
@@ -223,9 +247,7 @@ MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, con
         }
 
         times.push_back(timeValues[0]);
-        xValues.push_back(correctedValue.x);
-        yValues.push_back(correctedValue.y);
-        zValues.push_back(correctedValue.z);
+        sampledTranslations.push_back(correctedValue);
     }
 
     if (times.empty())
@@ -245,6 +267,38 @@ MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, con
     {
         return MStatus::kFailure;
     }
+
+    MVector referenceTranslation;
+    if (usesDeltaAnimationLayerForTransforms())
+    {
+        if (context_->scenePolicy.deltaReferenceMode == dcc_import_policy::DeltaReferenceMode::FirstFrame)
+        {
+            referenceTranslation = sampledTranslations.front();
+        }
+        else
+        {
+            MFnTransform transformFn(targetPath, &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+            referenceTranslation = transformFn.translation(MSpace::kTransform, &status);
+            if (!status)
+            {
+                return MStatus::kFailure;
+            }
+        }
+    }
+
+    for (size_t valueIndex = 0; valueIndex < sampledTranslations.size(); ++valueIndex)
+    {
+        const MVector finalValue = usesDeltaAnimationLayerForTransforms()
+            ? sampledTranslations[valueIndex] - referenceTranslation
+            : sampledTranslations[valueIndex];
+        xValues.push_back(finalValue.x);
+        yValues.push_back(finalValue.y);
+        zValues.push_back(finalValue.z);
+    }
     MPlug translateYPlug = targetNodeFn.findPlug("translateY", true, &status);
     if (!status)
     {
@@ -256,17 +310,17 @@ MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, con
         return MStatus::kFailure;
     }
 
-    status = setCurveKeys(translateXPlug, times, xValues, MFnAnimCurve::kAnimCurveTL);
+    status = setTransformCurveKeys(translateXPlug, times, xValues, MFnAnimCurve::kAnimCurveTL);
     if (!status)
     {
         return MStatus::kFailure;
     }
-    status = setCurveKeys(translateYPlug, times, yValues, MFnAnimCurve::kAnimCurveTL);
+    status = setTransformCurveKeys(translateYPlug, times, yValues, MFnAnimCurve::kAnimCurveTL);
     if (!status)
     {
         return MStatus::kFailure;
     }
-    return setCurveKeys(translateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTL);
+    return setTransformCurveKeys(translateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTL);
 }
 
 MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, const simple_dmx::Element *logLayer) const
@@ -287,6 +341,7 @@ MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, 
     std::vector<double> xValues;
     std::vector<double> yValues;
     std::vector<double> zValues;
+    std::vector<MQuaternion> sampledRotations;
     const bool applyTopLevelCorrection =
         isTopLevelImportedPath(targetPath) &&
         !context_->topLevelPreTransform.isEquivalent(MMatrix::identity);
@@ -315,12 +370,8 @@ MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, 
             correctedRotation = correctionRotation * correctedRotation;
         }
 
-        const MEulerRotation eulerRotation = correctedRotation.asEulerRotation();
-
         times.push_back(timeValues[0]);
-        xValues.push_back(eulerRotation.x);
-        yValues.push_back(eulerRotation.y);
-        zValues.push_back(eulerRotation.z);
+        sampledRotations.push_back(correctedRotation);
     }
 
     if (times.empty())
@@ -333,6 +384,37 @@ MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, 
     if (!status)
     {
         return MStatus::kFailure;
+    }
+
+    MFnTransform transformFn(targetPath, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MEulerRotation currentEulerRotation;
+    status = transformFn.getRotation(currentEulerRotation);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    const MQuaternion referenceRotation = usesDeltaAnimationLayerForTransforms()
+        ? (context_->scenePolicy.deltaReferenceMode == dcc_import_policy::DeltaReferenceMode::FirstFrame
+            ? sampledRotations.front()
+            : currentEulerRotation.asQuaternion())
+        : MQuaternion::identity;
+
+    for (size_t valueIndex = 0; valueIndex < sampledRotations.size(); ++valueIndex)
+    {
+        const MQuaternion finalRotation = usesDeltaAnimationLayerForTransforms()
+            ? (sampledRotations[valueIndex] * referenceRotation.inverse())
+            : sampledRotations[valueIndex];
+        MEulerRotation eulerRotation = finalRotation.asEulerRotation();
+        eulerRotation.reorderIt(currentEulerRotation.order);
+        xValues.push_back(eulerRotation.x);
+        yValues.push_back(eulerRotation.y);
+        zValues.push_back(eulerRotation.z);
     }
 
     MPlug rotateXPlug = targetNodeFn.findPlug("rotateX", true, &status);
@@ -351,17 +433,17 @@ MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, 
         return MStatus::kFailure;
     }
 
-    status = setCurveKeys(rotateXPlug, times, xValues, MFnAnimCurve::kAnimCurveTA);
+    status = setTransformCurveKeys(rotateXPlug, times, xValues, MFnAnimCurve::kAnimCurveTA);
     if (!status)
     {
         return MStatus::kFailure;
     }
-    status = setCurveKeys(rotateYPlug, times, yValues, MFnAnimCurve::kAnimCurveTA);
+    status = setTransformCurveKeys(rotateYPlug, times, yValues, MFnAnimCurve::kAnimCurveTA);
     if (!status)
     {
         return MStatus::kFailure;
     }
-    return setCurveKeys(rotateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTA);
+    return setTransformCurveKeys(rotateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTA);
 }
 
 MStatus AnimationImporter::addScalarAnimationTarget(
@@ -828,6 +910,38 @@ void AnimationImporter::bindCurrentChannel(const simple_dmx::Element *channel)
     currentTargetElement_ = FindAttributeElement(context_->document, currentChannel_, "toElement");
     currentLogElement_ = FindAttributeElement(context_->document, currentChannel_, "log");
     currentLogLayer_ = findFirstLogLayer(currentLogElement_);
+}
+
+bool AnimationImporter::usesDeltaAnimationLayerForTransforms() const
+{
+    return context_->scenePolicy.forceDeltaAnimationLayer;
+}
+
+MStatus AnimationImporter::ensureTransformAnimationLayer(MString &layerName) const
+{
+    if (transformAnimationLayerInitialized_)
+    {
+        layerName = transformAnimationLayerName_;
+        return layerName.length() > 0 ? MS::kSuccess : MS::kFailure;
+    }
+
+    transformAnimationLayerInitialized_ = true;
+    const std::string configuredName = context_->scenePolicy.animationLayerName.empty() ?
+        std::string("dmx_delta") :
+        context_->scenePolicy.animationLayerName;
+    MStatus status = maya_cmd::EnsureAnimationLayer(
+        configuredName.c_str(),
+        context_->scenePolicy.animationImportMode == dcc_import_policy::AnimationImportMode::ReplaceLayer,
+        &transformAnimationLayerName_);
+    if (!status)
+    {
+        transformAnimationLayerName_.clear();
+        return MStatus::kFailure;
+    }
+
+    AppendImportDebugLog((std::string("animLayer: ensured layer ") + transformAnimationLayerName_.asChar()).c_str());
+    layerName = transformAnimationLayerName_;
+    return MS::kSuccess;
 }
 
 MStatus AnimationImporter::ApplyChannelsClipAnimation(const simple_dmx::Element *channelsClip)

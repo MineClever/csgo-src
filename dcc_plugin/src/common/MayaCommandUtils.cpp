@@ -3,6 +3,7 @@
 #include <maya/MDGModifier.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
+#include <maya/MFnMesh.h>
 #include <maya/MFnSet.h>
 #include <maya/MGlobal.h>
 #include <maya/MItDependencyGraph.h>
@@ -186,7 +187,110 @@ MStatus AddDagPathToSet(const MDagPath &dagPath, const MObject &setObject)
         return MS::kFailure;
     }
 
+    if (dagPath.hasFn(MFn::kMesh))
+    {
+        MFnMesh meshFn(dagPath, &status);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        MObjectArray connectedShaders;
+        MIntArray shaderIndices;
+        status = meshFn.getConnectedShaders(dagPath.instanceNumber(), connectedShaders, shaderIndices);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        for (unsigned int shaderIndex = 0; shaderIndex < connectedShaders.length(); ++shaderIndex)
+        {
+            const MObject &connectedSetObject = connectedShaders[shaderIndex];
+            if (connectedSetObject.isNull() || connectedSetObject == setObject || !connectedSetObject.hasFn(MFn::kSet))
+            {
+                continue;
+            }
+
+            MFnSet connectedSetFn(connectedSetObject, &status);
+            if (!status)
+            {
+                return MS::kFailure;
+            }
+
+            if (connectedSetFn.restriction() != MFnSet::kRenderableOnly)
+            {
+                continue;
+            }
+
+            status = connectedSetFn.removeMember(dagPath.node());
+            if (!status)
+            {
+                return MS::kFailure;
+            }
+        }
+    }
+
     return setFn.addMember(dagPath);
+}
+
+MStatus AddComponentToSet(const MDagPath &dagPath, const MObject &componentObject, const MObject &setObject)
+{
+    if (componentObject.isNull())
+    {
+        return MStatus::kFailure;
+    }
+
+    MStatus status;
+    MFnSet setFn(setObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    if (dagPath.hasFn(MFn::kMesh))
+    {
+        MFnMesh meshFn(dagPath, &status);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        MObjectArray connectedShaders;
+        MIntArray shaderIndices;
+        status = meshFn.getConnectedShaders(dagPath.instanceNumber(), connectedShaders, shaderIndices);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        for (unsigned int shaderIndex = 0; shaderIndex < connectedShaders.length(); ++shaderIndex)
+        {
+            const MObject &connectedSetObject = connectedShaders[shaderIndex];
+            if (connectedSetObject.isNull() || connectedSetObject == setObject || !connectedSetObject.hasFn(MFn::kSet))
+            {
+                continue;
+            }
+
+            MFnSet connectedSetFn(connectedSetObject, &status);
+            if (!status)
+            {
+                return MS::kFailure;
+            }
+
+            if (connectedSetFn.restriction() != MFnSet::kRenderableOnly)
+            {
+                continue;
+            }
+
+            status = connectedSetFn.removeMember(dagPath, componentObject);
+            if (!status)
+            {
+                return MS::kFailure;
+            }
+        }
+    }
+
+    return setFn.addMember(dagPath, componentObject);
 }
 
 MStatus GetPrunedHistory(const MString &nodePath, MStringArray &historyNames)
@@ -299,12 +403,267 @@ MStatus AddSkinClusterInfluence(
     // Keep the MEL command wrapped here for now. Maya does not expose a small
     // direct C++ helper for `skinCluster -e -addInfluence`, and the command keeps
     // the node's internal matrix/bind arrays consistent when expanding influences.
-    MString command("skinCluster -e -lw true -wt 0.0 -ai \"");
+    MString command("skinCluster -e -ibp -lw true -wt 0.0 -ai \"");
     command += influencePath.fullPathName();
     command += "\" \"";
     command += skinClusterNodeName;
     command += "\"";
     return MGlobal::executeCommand(command, false, false);
+}
+
+MStatus EnsureSkinClusterBindPose(
+    const MDagPathArray &influencePaths,
+    const MDagPath &skinnedDagPath)
+{
+    if (!skinnedDagPath.isValid())
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status;
+    MObject skinnedNode = skinnedDagPath.node();
+    MItDependencyGraph iterator(
+        skinnedNode,
+        MFn::kInvalid,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (; !iterator.isDone(); iterator.next())
+    {
+        MObject currentNode = iterator.currentItem(&status);
+        if (!status || currentNode.isNull())
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        MFnDependencyNode dependencyNode(currentNode, &status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        if (dependencyNode.typeName() == "dagPose")
+        {
+            return MS::kSuccess;
+        }
+    }
+
+    MSelectionList previousSelection;
+    MGlobal::getActiveSelectionList(previousSelection);
+
+    MSelectionList bindPoseSelection;
+    status = bindPoseSelection.add(skinnedDagPath);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (unsigned int influenceIndex = 0; influenceIndex < influencePaths.length(); ++influenceIndex)
+    {
+        status = bindPoseSelection.add(influencePaths[influenceIndex]);
+        if (!status)
+        {
+            MGlobal::setActiveSelectionList(previousSelection, MGlobal::kReplaceList);
+            return MS::kFailure;
+        }
+    }
+
+    status = MGlobal::setActiveSelectionList(bindPoseSelection, MGlobal::kReplaceList);
+    if (!status)
+    {
+        MGlobal::setActiveSelectionList(previousSelection, MGlobal::kReplaceList);
+        return MS::kFailure;
+    }
+
+    MStringArray result;
+    status = MGlobal::executeCommand("dagPose -save -selection -bindPose", result, false, false);
+    const MStatus restoreStatus = MGlobal::setActiveSelectionList(previousSelection, MGlobal::kReplaceList);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    return restoreStatus;
+}
+
+MStatus EnsureAnimationLayer(
+    const MString &layerName,
+    bool replaceExisting,
+    MString *resolvedLayerName)
+{
+    if (layerName.length() == 0)
+    {
+        return MS::kFailure;
+    }
+
+    int layerExists = 0;
+    MString existsCommand("animLayer -q -ex \"");
+    existsCommand += layerName;
+    existsCommand += "\"";
+    MStatus status = MGlobal::executeCommand(existsCommand, layerExists, false, false);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    if (layerExists != 0 && replaceExisting)
+    {
+        status = DeleteNodeByName(layerName);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+        layerExists = 0;
+    }
+
+    if (layerExists == 0)
+    {
+        MString createCommand("animLayer \"");
+        createCommand += layerName;
+        createCommand += "\"";
+        MString createdLayerName;
+        status = MGlobal::executeCommand(createCommand, createdLayerName, false, false);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        if (resolvedLayerName)
+        {
+            *resolvedLayerName = createdLayerName;
+        }
+        return MS::kSuccess;
+    }
+
+    if (resolvedLayerName)
+    {
+        *resolvedLayerName = layerName;
+    }
+    return MS::kSuccess;
+}
+
+MStatus AddPlugToAnimationLayer(
+    const MString &layerName,
+    const MPlug &plug)
+{
+    if (layerName.length() == 0 || plug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MString command("animLayer -e -attribute \"");
+    command += plug.name();
+    command += "\" \"";
+    command += layerName;
+    command += "\"";
+    return MGlobal::executeCommand(command, false, false);
+}
+
+MStatus ClearAnimationLayerCurve(
+    const MString &layerName,
+    const MPlug &plug)
+{
+    if (layerName.length() == 0 || plug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MString queryCommand("animLayer -q -findCurveForPlug \"");
+    queryCommand += plug.name();
+    queryCommand += "\" \"";
+    queryCommand += layerName;
+    queryCommand += "\"";
+
+    MStringArray curveNames;
+    MStatus status = MGlobal::executeCommand(queryCommand, curveNames, false, false);
+    if (!status)
+    {
+        return MS::kSuccess;
+    }
+
+    for (unsigned int curveIndex = 0; curveIndex < curveNames.length(); ++curveIndex)
+    {
+        status = DeleteNodeByName(curveNames[curveIndex]);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus SetKeyframesOnAnimationLayer(
+    const MString &layerName,
+    const MPlug &plug,
+    const double *times,
+    const double *values,
+    size_t keyCount,
+    bool timesAreSeconds)
+{
+    if (layerName.length() == 0 || plug.isNull() || !times || !values || keyCount == 0)
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status = AddPlugToAnimationLayer(layerName, plug);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    status = ClearAnimationLayerCurve(layerName, plug);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MFnDependencyNode nodeFn(plug.node(), &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    const MString nodeName = nodeFn.name();
+    const MString attrName = plug.partialName(false, false, false, false, false, true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (size_t keyIndex = 0; keyIndex < keyCount; ++keyIndex)
+    {
+        MString command("setKeyframe -animLayer \"");
+        command += layerName;
+        command += "\" -attribute \"";
+        command += attrName;
+        command += "\" -time ";
+        command += times[keyIndex];
+        if (timesAreSeconds)
+        {
+            command += "sec";
+        }
+        command += " -value ";
+        command += values[keyIndex];
+        command += " \"";
+        command += nodeName;
+        command += "\"";
+        status = MGlobal::executeCommand(command, false, false);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+    }
+
+    return MS::kSuccess;
 }
 
 } // namespace maya_cmd

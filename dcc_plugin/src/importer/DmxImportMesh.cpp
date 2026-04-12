@@ -472,7 +472,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
             status = meshFn.setPoints(points, MSpace::kObject);
             if (!status)
             {
-                return MStatus::kFailure;
+                return maya_dmx::ReportWarning(MString("maya_dmx: failed to update mesh points for ") + dagElement->name.c_str());
             }
         }
     }
@@ -481,7 +481,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         meshObject = meshFn.create(points.length(), polygonCounts.length(), points, polygonCounts, polygonConnects, parent, &status);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_dmx::ReportWarning(MString("maya_dmx: failed to create mesh shape for ") + dagElement->name.c_str());
         }
 
         meshFn.setName((dagElement->name.empty() ? std::string("dmx_meshShape") : dagElement->name + "Shape").c_str());
@@ -548,6 +548,13 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
             }
         }
 
+        status = meshFn.clearUVs(&uvSetName);
+        if (!status)
+        {
+            maya_dmx::ReportWarning(MString("maya_dmx: failed to clear UV set before update for ") + dagElement->name.c_str() + " (" + uvSetName + ")");
+            status = MS::kSuccess;
+        }
+
         status = meshFn.setUVs(uValues, vValues, &uvSetName);
         if (status)
         {
@@ -555,7 +562,8 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         }
         if (!status)
         {
-            return MStatus::kFailure;
+            maya_dmx::ReportWarning(MString("maya_dmx: failed to assign UV set for ") + dagElement->name.c_str() + " (" + uvSetName + ")");
+            status = MS::kSuccess;
         }
     }
 
@@ -564,7 +572,8 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = meshFn.setFaceVertexNormals(faceVertexNormals, faceIds, normalVertexIds, MSpace::kObject);
         if (!status)
         {
-            return MStatus::kFailure;
+            maya_dmx::ReportWarning(MString("maya_dmx: failed to assign face-vertex normals for ") + dagElement->name.c_str());
+            status = MS::kSuccess;
         }
     }
 
@@ -573,7 +582,8 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = AssignFaceSetMaterials(meshFn, faceSetAssignments);
         if (!status)
         {
-            return MStatus::kFailure;
+            maya_dmx::ReportWarning(MString("maya_dmx: failed to assign face set materials for ") + dagElement->name.c_str());
+            status = MS::kSuccess;
         }
     }
 
@@ -582,13 +592,15 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = SetOrCreateStringAttribute(meshObject, "mayaDmxTangents", JoinLines(tangentStrings));
         if (!status)
         {
-            return MStatus::kFailure;
+            maya_dmx::ReportWarning(MString("maya_dmx: failed to persist tangent data for ") + dagElement->name.c_str());
+            status = MS::kSuccess;
         }
 
         status = SetOrCreateStringAttribute(meshObject, "mayaDmxTangentsIndices", JoinLines(tangentIndexStrings));
         if (!status)
         {
-            return MStatus::kFailure;
+            maya_dmx::ReportWarning(MString("maya_dmx: failed to persist tangent indices for ") + dagElement->name.c_str());
+            status = MS::kSuccess;
         }
 
         const std::string tangentUvSetName = FindAttributeString(vertexData, "mayaTangentUvSetName");
@@ -597,7 +609,8 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
             status = SetOrCreateStringAttribute(meshObject, "mayaDmxTangentUvSetName", tangentUvSetName);
             if (!status)
             {
-                return MStatus::kFailure;
+                maya_dmx::ReportWarning(MString("maya_dmx: failed to persist tangent uv-set name for ") + dagElement->name.c_str());
+                status = MS::kSuccess;
             }
         }
     }
@@ -607,7 +620,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = ApplySkinning(context, vertexData, meshObject, parent);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_dmx::ReportWarning(MString("maya_dmx: failed to apply skinning for ") + dagElement->name.c_str());
         }
     }
 
@@ -616,7 +629,7 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         status = ApplyDeltaStates(context, document, meshElement, meshObject, parent, points);
         if (!status)
         {
-            return MStatus::kFailure;
+            return maya_dmx::ReportWarning(MString("maya_dmx: failed to apply delta states for ") + dagElement->name.c_str());
         }
     }
 

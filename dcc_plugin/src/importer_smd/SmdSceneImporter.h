@@ -9,6 +9,7 @@
 #include <maya/MDagPath.h>
 #include <maya/MObject.h>
 #include <maya/MStatus.h>
+#include <maya/MString.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -32,10 +33,14 @@ private:
     MObject findParentObject(const simple_smd::Node &node) const;
     const simple_smd::SkeletonPose *findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const;
     bool isTopLevelNode(const simple_smd::Node &node) const;
+    MStatus ensureTransformAnimationLayer(MString &layerName) const;
+    bool usesDeltaAnimationLayerForTransforms() const;
 
     std::shared_ptr<const simple_smd::Document> document_;
     SmdImportOptions importOptions_;
     MObject importRoot_ = MObject::kNullObj;
     std::unordered_map<int, MDagPath> jointPathsByBone_;
     std::unordered_set<int> reusedBoneIndices_;
+    mutable bool transformAnimationLayerInitialized_ = false;
+    mutable MString transformAnimationLayerName_;
 };

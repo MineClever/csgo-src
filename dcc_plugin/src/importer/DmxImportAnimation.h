@@ -14,6 +14,7 @@
 #include <maya/MPlug.h>
 #include <maya/MPlugArray.h>
 #include <maya/MStatus.h>
+#include <maya/MString.h>
 
 namespace dmx_import_impl
 {
@@ -48,6 +49,11 @@ private:
         const MPlug &plug,
         const std::vector<double> &times,
         const std::vector<double> &values) const;
+    MStatus setTransformCurveKeys(
+        const MPlug &plug,
+        const std::vector<double> &times,
+        const std::vector<double> &values,
+        MFnAnimCurve::AnimCurveType curveType) const;
     MStatus applyVector3Animation(const MDagPath &targetPath, const simple_dmx::Element *logLayer) const;
     MStatus applyQuaternionAnimation(const MDagPath &targetPath, const simple_dmx::Element *logLayer) const;
     MStatus addScalarAnimationTarget(std::vector<MPlug> &targets, const MObject &nodeObject, const std::string &attributeName) const;
@@ -67,6 +73,8 @@ private:
         const std::string &targetName,
         const dmx_import_translator::ScalarAttributeBinding &binding);
     void bindCurrentChannel(const simple_dmx::Element *channel);
+    bool usesDeltaAnimationLayerForTransforms() const;
+    MStatus ensureTransformAnimationLayer(MString &layerName) const;
 
     std::shared_ptr<ImportContext> context_;
     const simple_dmx::Element *documentRoot_ = nullptr;
@@ -77,6 +85,8 @@ private:
     const simple_dmx::Element *currentLogElement_ = nullptr;
     const simple_dmx::Element *currentLogLayer_ = nullptr;
     std::string currentTargetAttribute_;
+    mutable bool transformAnimationLayerInitialized_ = false;
+    mutable MString transformAnimationLayerName_;
 };
 
 const simple_dmx::Element *FindAnimationList(

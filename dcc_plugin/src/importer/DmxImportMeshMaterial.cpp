@@ -1,6 +1,8 @@
 #include "DmxImportMeshMaterial.h"
 #include "DmxImportInternals.h"
 
+#include <common/MayaCommandUtils.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -285,13 +287,7 @@ MStatus AssignFaceSetMaterials(
             return MStatus::kFailure;
         }
 
-        MFnSet shadingGroupSetFn(shadingGroupObject, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        status = shadingGroupSetFn.addMember(meshPath, faceComponent);
+        status = maya_cmd::AddComponentToSet(meshPath, faceComponent, shadingGroupObject);
         if (!status)
         {
             return MStatus::kFailure;

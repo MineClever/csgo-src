@@ -32,6 +32,12 @@ enum class AnimationImportMode
     ReplaceLayer,
 };
 
+enum class DeltaReferenceMode
+{
+    BindPose,
+    FirstFrame,
+};
+
 struct SceneImportPolicy
 {
     RootMode rootMode = RootMode::DedicatedRoot;
@@ -40,6 +46,9 @@ struct SceneImportPolicy
     std::string currentNamespace;
     bool importAnimationToLayer = false;
     AnimationImportMode animationImportMode = AnimationImportMode::None;
+    bool forceDeltaAnimationLayer = false;
+    DeltaReferenceMode deltaReferenceMode = DeltaReferenceMode::BindPose;
+    std::string animationLayerName;
 };
 
 inline std::unordered_map<std::string, std::string> ParseOptionMap(const MString &options)
@@ -123,6 +132,11 @@ inline SceneImportPolicy ParseSceneImportPolicy(const std::unordered_map<std::st
     policy.importAnimationToLayer =
         ParseBoolOption(optionMap, "importanimationtolayer", false) ||
         ParseBoolOption(optionMap, "useanimationlayer", false);
+    policy.forceDeltaAnimationLayer = ParseBoolOption(optionMap, "forcedeltaanimationlayer", false);
+    if (policy.forceDeltaAnimationLayer)
+    {
+        policy.importAnimationToLayer = true;
+    }
 
     auto animationLayerModeIt = optionMap.find("animationlayermode");
     if (policy.importAnimationToLayer || animationLayerModeIt != optionMap.end())
@@ -139,6 +153,25 @@ inline SceneImportPolicy ParseSceneImportPolicy(const std::unordered_map<std::st
                 policy.animationImportMode = AnimationImportMode::ReplaceLayer;
             }
         }
+    }
+
+    auto deltaReferenceModeIt = optionMap.find("deltareferencemode");
+    if (deltaReferenceModeIt != optionMap.end())
+    {
+        std::string deltaReferenceMode = deltaReferenceModeIt->second;
+        std::transform(deltaReferenceMode.begin(), deltaReferenceMode.end(), deltaReferenceMode.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        if (deltaReferenceMode == "firstframe")
+        {
+            policy.deltaReferenceMode = DeltaReferenceMode::FirstFrame;
+        }
+    }
+
+    auto animationLayerNameIt = optionMap.find("animationlayername");
+    if (animationLayerNameIt != optionMap.end())
+    {
+        policy.animationLayerName = animationLayerNameIt->second;
     }
 
     return policy;

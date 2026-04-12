@@ -15,6 +15,19 @@
 
 namespace
 {
+std::string SanitizeLayerName(std::string value)
+{
+    for (char &character : value)
+    {
+        if (!std::isalnum(static_cast<unsigned char>(character)) && character != '_')
+        {
+            character = '_';
+        }
+    }
+
+    return value.empty() ? std::string("smd_delta") : value;
+}
+
 std::unordered_set<int> CollectTopLevelBoneIndices(const simple_smd::Document &document)
 {
     std::unordered_set<int> knownBoneIndices;
@@ -149,7 +162,7 @@ MStatus SmdImportSession::Run()
         maya_smd::ReportWarning("maya_smd: importMode=animationOnly is parsed but not implemented yet; falling back to create-new import behavior.");
     }
 
-    if (importOptions.scenePolicy.importAnimationToLayer)
+    if (importOptions.scenePolicy.importAnimationToLayer && !importOptions.scenePolicy.forceDeltaAnimationLayer)
     {
         maya_smd::ReportWarning("maya_smd: animation layer import options are parsed but not implemented yet; imported animation will still target the base scene.");
     }
@@ -179,6 +192,10 @@ SmdImportOptions SmdImportSession::parseOptions() const
     const std::unordered_map<std::string, std::string> optionMap = dcc_import_policy::ParseOptionMap(options_);
     parsedOptions.scenePolicy = dcc_import_policy::ParseSceneImportPolicy(optionMap);
     dcc_import_policy::CaptureCurrentNamespace(parsedOptions.scenePolicy);
+    if (parsedOptions.scenePolicy.forceDeltaAnimationLayer && parsedOptions.scenePolicy.animationLayerName.empty())
+    {
+        parsedOptions.scenePolicy.animationLayerName = SanitizeLayerName(fileObject_.rawName().asChar()) + "_delta";
+    }
     parsedOptions.transformCorrection = dcc_import_transform::ParseTransformCorrection(optionMap);
     return parsedOptions;
 }

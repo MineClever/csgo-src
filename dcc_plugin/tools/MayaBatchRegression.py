@@ -176,11 +176,22 @@ PAIRED_UPDATE_GATE_EXPECTATIONS = {
 }
 
 SKIN_INFLUENCE_UPDATE_GATE_EXPECTATIONS = {
-    "simple_skinned_mesh": {
+    "complex_chr_mesh": {
         "import_options": "useSceneRoot=1;importMode=update",
     },
     "MostComplexSampleSet/chr_mesh.smd": {
         "import_options": "useSceneRoot=1;importMode=update",
+    },
+}
+
+DELTA_LAYER_GATE_EXPECTATIONS = {
+    "ctm_fbi/ctm_fbi_anims/rom_skin.smd": {
+        "base_case": "ctm_fbi/ctm_fbi.smd",
+        "base_import_options": "useSceneRoot=1",
+        "update_import_options": "useSceneRoot=1;importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=firstFrame",
+        "layer_name": "rom_skin_smd_delta",
+        "base_plug": "|pelvis.translateX",
+        "min_curve_count": 6,
     },
 }
 
@@ -981,6 +992,74 @@ def validate_skin_influence_update_gate(cmds, plugin_paths, format_config, input
     compare_skin_snapshots(reference_skins, snapshot_skin_bindings(cmds, imported_roots))
 
 
+def validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_name):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = DELTA_LAYER_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    input_path = resolve_input_path(sample_dir, case_name)
+    format_name = detect_format(input_path)
+    format_config = FORMAT_CONFIGS[format_name]
+    plugin_path = plugin_paths_by_format.get(format_name)
+    if not plugin_path:
+        raise RuntimeError(f"Missing plugin for delta-layer gate format '{format_name}' while running case '{case_name}'")
+
+    base_input_path = resolve_input_path(sample_dir, expectation["base_case"])
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, [plugin_path])
+
+    base_import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        defaultNamespace=True,
+        options=expectation["base_import_options"],
+    )
+    delta_import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        defaultNamespace=True,
+        options=expectation["update_import_options"],
+    )
+
+    cmds.file(base_input_path, **base_import_kwargs)
+    if not cmds.objExists(expectation["base_plug"]):
+        raise RuntimeError(
+            f"Delta layer gate failed for {normalized_case_name}. "
+            f"missing base plug before delta import: {expectation['base_plug']}"
+        )
+
+    base_value = cmds.getAttr(expectation["base_plug"])
+    cmds.file(input_path, **delta_import_kwargs)
+
+    if not cmds.objExists(expectation["layer_name"]):
+        raise RuntimeError(
+            f"Delta layer gate failed for {normalized_case_name}. "
+            f"missing expected animation layer: {expectation['layer_name']}"
+        )
+
+    layer_curves = cmds.animLayer(expectation["layer_name"], query=True, animCurves=True) or []
+    if len(layer_curves) < expectation["min_curve_count"]:
+        raise RuntimeError(
+            f"Delta layer gate failed for {normalized_case_name}. "
+            f"expected at least {expectation['min_curve_count']} layer curves, got {layer_curves}"
+        )
+
+    updated_value = cmds.getAttr(expectation["base_plug"])
+    if abs(updated_value - base_value) > 1.0e-6:
+        raise RuntimeError(
+            f"Delta layer gate failed for {normalized_case_name}. "
+            f"base plug was overwritten: before={base_value} after={updated_value}"
+        )
+
+
 def verify_roundtrip(
     cmds,
     plugin_paths,
@@ -1100,6 +1179,7 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.update_gate.txt")
     topology_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.topology_update_gate.txt")
     skin_influence_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.skin_influence_update_gate.txt")
+    delta_layer_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.delta_layer_gate.txt")
 
     import_kwargs = dict(
         i=True,
@@ -1186,6 +1266,10 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
         validate_paired_update_gate(cmds, plugin_paths_by_format, sample_dir, case_name)
         validate_skin_influence_update_gate(cmds, [plugin_path], format_config, input_path, case_name)
         with open(skin_influence_update_gate_marker, "w", encoding="utf-8") as marker_file:
+            marker_file.write("ok\n")
+
+        validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_name)
+        with open(delta_layer_gate_marker, "w", encoding="utf-8") as marker_file:
             marker_file.write("ok\n")
 
     # For samples that contain skinned meshes, automatically run a second pass with

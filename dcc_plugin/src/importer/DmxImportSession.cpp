@@ -28,6 +28,19 @@ using namespace dmx_import_impl;
 
 namespace
 {
+std::string SanitizeLayerName(std::string value)
+{
+    for (char &character : value)
+    {
+        if (!std::isalnum(static_cast<unsigned char>(character)) && character != '_')
+        {
+            character = '_';
+        }
+    }
+
+    return value.empty() ? std::string("dmx_delta") : value;
+}
+
 MMatrix ComputeLegacyAxisCorrectionMatrix(const std::string &sourceUpAxis, MString &warning)
 {
     const std::string normalizedSourceUpAxis = NormalizeAxisName(sourceUpAxis);
@@ -501,6 +514,13 @@ MStatus DmxImportSession::LoadDocument()
 
     importOptions_ = ParseImportOptions(optionsText_);
     dcc_import_policy::CaptureCurrentNamespace(importOptions_.scenePolicy);
+    if (importOptions_.scenePolicy.forceDeltaAnimationLayer && importOptions_.scenePolicy.animationLayerName.empty())
+    {
+        const std::string resolvedPath = filePath_.asChar();
+        const size_t lastSeparator = resolvedPath.find_last_of("/\\");
+        const std::string baseName = lastSeparator == std::string::npos ? resolvedPath : resolvedPath.substr(lastSeparator + 1);
+        importOptions_.scenePolicy.animationLayerName = SanitizeLayerName(baseName) + "_delta";
+    }
 
     dcc_import_transform::TransformCorrection documentCorrection = importOptions_.transformCorrection;
     if (importOptions_.applyLegacyAxisCorrection)
@@ -536,7 +556,7 @@ MStatus DmxImportSession::LoadDocument()
         maya_dmx::ReportWarning("maya_dmx: importMode=animationOnly is parsed but not implemented yet; falling back to create-new import behavior.");
     }
 
-    if (importOptions_.scenePolicy.importAnimationToLayer)
+    if (importOptions_.scenePolicy.importAnimationToLayer && !importOptions_.scenePolicy.forceDeltaAnimationLayer)
     {
         maya_dmx::ReportWarning("maya_dmx: animation layer import options are parsed but not implemented yet; imported animation will still target the base scene.");
     }

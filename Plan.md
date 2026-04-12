@@ -679,6 +679,164 @@
       - DMX：对 `complex_chr_mesh.dmx` 这类多 influence 样本，手工先移除一个已存在的 skin influence 后，再做第二次 `importMode=update` 导入，当前会在 Maya 宿主里直接报 `Error reading file`；批处理输出没有带出更细的插件错误文本，说明剩余失败点已经从“不会尝试补 influence”收窄到“补 influence 后某个更后续的 deformer/update 步骤仍在返回 failure”。这条根因还需要继续补更细粒度的错误上报后再推进。
     - 结论：
       - “节点名 rename 前缀复用” 与 “skin influence 增量 update” 这两条主线都已开始落地到真实代码路径，但截至当前回合，宿主回归还没有完全收口，不能把这两项标记为已完成。
+  - 2026-04-12：新增“DMX/SMD 动画强制导入为 delta 动画层”子计划，目标是给动画导入增加一个显式选项，把导入文件解释为“相对静态骨架或参考帧的差值动画”，再以 Maya 动画层形式应用到现有骨架，而不是直接覆写 base animCurve。当前代码现状与实施计划如下：
+    - 当前现状确认：
+      - [ImportPolicy.h](dcc_plugin/src/common/ImportPolicy.h) 已经能解析 `importAnimationToLayer` / `useAnimationLayer` / `animationLayerMode`，但语义只有 `NewLayer` / `ReplaceLayer`，还没有“delta 层”这一档。
+      - [DmxImportSession.cpp](dcc_plugin/src/importer/DmxImportSession.cpp) 与 [SmdImportSession.cpp](dcc_plugin/src/importer_smd/SmdImportSession.cpp) 当前都会在检测到动画层选项时直接 warning：“已解析但未实现，仍写入 base scene”。
+      - [DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 和 [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 现在都直接创建/覆盖目标 plug 上的 animCurve，没有抽象出“采样结果”和“写入宿主层”的分离层，因此还不具备安全插入 delta-layer 逻辑的结构。
+    - 建议的选项语义：
+      - 新增导入选项 `forceDeltaAnimationLayer=1`，并扩展 `animationLayerMode`，至少支持 `base`、`layer`、`replace`、`delta` 四种模式；其中 `delta` 表示“强制导入为动画层，且导入值先转为相对参考姿态的差值”。
+      - 新增参考姿态选项 `deltaReferenceMode=bindPose|firstFrame`。`bindPose` 表示以后续静态骨架/已存在场景骨架为基准；`firstFrame` 表示以导入动画第 0 帧为参考，只把后续帧相对第 0 帧的变化写入层。
+      - 第一阶段建议限制 `delta` 仅覆盖 transform 通道：`position`、`orientation` 和 SMD skeleton TR；`flexWeight`、blendShape 权重先继续走绝对值层，避免把 facial 也一并拉进第一轮风险面。
+    - 建议的实现拆分：
+      - 第一步，先把 DMX/SMD 动画导入重构为“两段式”：先把源文件解析成统一的采样缓存，再决定写入 base curve 还是 animation layer。这样可以避免在 [DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 和 [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 里继续把“读文件”“做 correction”“直接建 animCurve”三件事耦在一起。
+      - 第二步，在 common 层新增动画目标抽象，至少统一描述：目标 plug、时间序列、原始值序列、参考值序列、是否角度通道。这样 DMX 的 `DmeVector3Log` / `DmeQuaternionLog` 与 SMD 的 skeleton frame 都能走同一套 delta 化流程。
+      - 第三步，实现参考姿态采样：
+        - `bindPose` 路径优先读取当前已绑定/已复用 DAG 的静态 local TR；若目标不存在，再回退到导入文档第 0 帧或 bind pose。
+        - `firstFrame` 路径直接取导入动画第一个有效关键帧作为 reference sample，并要求生成的 layer 在 reference 帧处为零差值。
+      - 第四步，实现 delta 计算：
+        - 平移通道：`delta = animated - reference`。
+        - 旋转通道：不要直接做欧拉角减法，必须先在 quaternion 空间做 `deltaQ = animated * inverse(reference)`，再转换成写层所需的欧拉值；否则跨 180 度/万向节场景会明显失真。
+        - 第一阶段不处理 scale delta；若后续要支持，也应只在验证过 uniform scale 后再放开。
+      - 第五步，实现 Maya 动画层写入：
+        - 需要补一个统一 helper，把目标 plug 加入指定 animation layer，并把新曲线明确创建到该层，而不是默认挂到 base animCurve。
+        - `replace` 语义仍可视作“清理旧层后重建绝对层”；`delta` 语义则要求层上的曲线值永远是差值，而 base pose 保持现有场景值不被覆写。
+        - 推荐层命名包含源文件名和模式后缀，例如 `c1m1_intro_mechanic_delta`，避免 update/重复导入时难以追踪。
+    - 关键风险与约束：
+      - 这项功能必须优先绑定到 `importMode=update` 或“场景中已有宿主骨架”的路径；如果在纯 create-new 场景下强制做 delta layer，语义会退化成“对零姿态做差值”，价值较低且更容易让用户误解。
+      - DMX 顶层 correction 已前移到数据层，delta 参考姿态必须建立在“校正后 local pose”上比较，不能把 correction 前后的姿态混在一起，否则 layer 结果会双重偏移。
+      - 旋转层在 Maya 中最终仍落到欧拉通道，deltaQ -> Euler 的展开顺序必须与现有 joint rotateOrder 保持一致；否则即便 reference 正确，也会出现可见抖动。
+      - `append/update` 下如果目标节点名经过 Maya rename 前缀改写，delta 层目标匹配仍会继承当前“节点复用匹配未完全收口”的风险，因此这条功能不应在 rename 前缀问题关闭前直接作为高置信默认行为。
+    - 建议的回归顺序：
+      - 最小 DMX：新增一个 2-3 帧 `position + orientation` 样本，分别验证 `bindPose` 与 `firstFrame` 两种 reference 模式。
+      - 最小 SMD：新增一个多帧 skeleton 样本，验证第 0 帧清零、后续帧产生 delta curve。
+      - 真实宿主：用 `Ellis/DMX/animation/c1m1_intro_mechanic.dmx` 和 `ctm_fbi_anims/rom_skin.smd` 做 `importMode=update + forceDeltaAnimationLayer=1`，检查不会覆写 base curve，且删除动画层后宿主恢复静态姿态。
+    - 当前优先级建议：
+      - 这是一个合理的下一阶段动画导入增强项，但优先级建议暂列为中，排在 “SMD rename 前缀复用” 和 “skin influence 增量 update” 完整收口之后；原因是 delta 层高度依赖现有 update/目标匹配链路稳定，否则会把问题叠到更难排查的宿主层行为里。
+  - 2026-04-12：已继续推进两条高优先级主线，但当前只完成了第一轮稳健性修补，还不能标记为完全关闭：
+    - SMD rename 前缀复用：
+      - [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 当前已把“顶层 parent 为空时的现有节点查找”从只看 `depth == 1` 放宽到扫描整棵 DAG。
+      - 这样做的目的不是放大匹配范围本身，而是兼容 Maya 在 `file -import -ra true` 下把首次导入结果包进额外前缀层级或让可复用目标不再停留在 assembly 深度的情况；此前这类场景会让复用逻辑在根节点阶段就完全找不到旧 joint / mesh group。
+    - DMX/SMD skin influence 增量 update：
+      - [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 当前已把 `bindPreMatrix` 回写从“直接使用 `influenceObjects()` 返回数组的位置索引”改成“先解析匹配到的 influence DAG path，再调用 `MFnSkinCluster::indexForInfluenceObject()` 取得真实 logical index”。
+      - 这轮修补的核心原因是：在 influence 被手工删除、再通过 `skinCluster -e -addInfluence` 补回后，`influenceObjects()` 的返回顺序不应再被假定与 `bindPreMatrix[]` / `matrix[]` 的逻辑索引一一相同；继续按数组顺序写回有较大概率把矩阵写错槽位，从而触发后续 `update` 失败或权重/绑定漂移。
+      - 同时已补一层 influence 路径匹配 fallback：当 full path 精确比较失败时，会继续按当前 `append/update` 的节点名匹配策略尝试用 leaf name 对齐，降低 rename 前缀或 namespace 变化对 influence 复用的影响。
+    - 已通过：
+      - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+      - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
+    - 当前仍未关闭的验证缺口：
+      - 还没有重新在真实 `mayapy` 宿主下复跑 `ctm_fbi` / `chr_mesh.smd` 的 `append/update` gate，SMD rename 前缀复用是否已完全收口仍待宿主验证。
+      - 还没有重新在真实 `mayapy` 宿主下复跑 `complex_chr_mesh.dmx` 的 skin influence update gate，因此 DMX 那条“补 influence 后仍报 Error reading file”的宿主级问题是否已被这轮 logical index 修补彻底消除，仍需实测确认。
+  - 2026-04-12：已把上面的两条高优先级验证缺口继续收口，当前结果如下：
+    - SMD `append/update` 真实样本 gate：
+      - [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 已继续收紧 joint 命名清洗，当前 `SanitizeNodeName()` 改为把所有非字母数字且非 `_` 的字符统一转成 `_`，因此 `ctm_fbi` 样本中的 `ValveBiped.weapon_bone` 在复用匹配时不再和 Maya 实际生成的 `ValveBiped_weapon_bone` 脱节。
+      - 在真实 `mayapy` 宿主下重新执行 `ctm_fbi/ctm_fbi.smd` 全 case 后，`append/update` gate 已通过，不再出现之前那条 `ctm_fbi_ValveBiped_weapon_bone1` 重复支链。
+    - SMD 材质 set exclusivity：
+      - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 的 `AddDagPathToSet()` 已开始补 `forceElement` 语义：当目标是 mesh shape 时，先从已连接的 renderable shadingEngine 集合中移除该 shape，再加入目标集合，避免重复赋材时直接触发 Maya 的 set exclusivity 错误。
+      - `ctm_fbi/ctm_fbi.smd` 当前在 gate 层已不再因 shading set exclusivity 阻塞，但宿主仍会输出一批旧材质节点/`materialInfo` rename warning；这说明“门槛通过”和“材质节点复用体验完全收口”仍不是一回事，后者可作为中低优先级体验优化继续跟踪。
+    - DMX `skin influence` 增量 update：
+      - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已把 DMX 的 `SKIN_INFLUENCE_UPDATE_GATE_EXPECTATIONS` 从单 influence 的 `simple_skinned_mesh` 改到真实多 influence 的 `complex_chr_mesh`，避免原 gate 选样本身不成立。
+      - 继续宿主复现后确认，`complex_chr_mesh.dmx` 的失败并不只发生在“删 influence 后”，而是第二次普通 `importMode=update` 就会先在 UV 赋值阶段报错，并因此提前退出 [CreateMeshShape()](dcc_plugin/src/importer/DmxImportMesh.cpp)，导致后续 `ApplySkinning()` 根本没机会运行。
+      - 当前已把 [DmxImportMesh.cpp](dcc_plugin/src/importer/DmxImportMesh.cpp) 中一批“非关键但会提前中止 update 主路径”的点改成 warning 后继续：
+        - UV set 回写失败
+        - face-vertex normal 回写失败
+        - face set 材质恢复失败
+        - 切线 metadata 回写失败
+      - 同时保留了 [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 中更细粒度的 skin update warning，便于后续继续定位真正的 deformer 边界。
+      - 在真实 `mayapy` 宿主下重新执行 `complex_chr_mesh` 全 case 后，当前 `skin influence update gate` 已通过；也就是说，“先手工删除一个 influence，再做第二次 `importMode=update` 导入”不再直接失败。
+    - 当前仍需继续跟踪的残余 warning：
+      - 同一样本在 `skin update` 时仍会出现 `The bind pose for the skin is missing. This may cause weighting problems with new influences.` 与 `setWeights failed during skin update for |:smdimport|:smdimportShape` 这类 warning；由于 case 级 gate 已通过，说明问题目前收敛为“某些 mesh/cluster 的局部更新质量或告警噪音”，而不再是整个 `update` 主路径失败。
+    - 已通过：
+      - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+      - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
+      - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases ctm_fbi/ctm_fbi.smd`
+      - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases complex_chr_mesh`
+  - 2026-04-12：已继续清理 `complex_chr_mesh.dmx` 在 `importMode=update` 下的剩余 warning，当前结果如下：
+    - DMX face set 材质 exclusivity：
+      - [DmxImportMeshMaterial.cpp](dcc_plugin/src/importer/DmxImportMeshMaterial.cpp) 当前不再直接对 polygon component 调 `MFnSet::addMember()`，而是改走 [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 新增的 `AddComponentToSet()` helper。
+      - 该 helper 会先从 mesh 已连接的其他 renderable shadingEngine 中移除同一批 polygon component，再加入目标 shadingEngine，补齐与 `sets -forceElement` 更接近的 per-face 语义。
+      - 在真实 `mayapy` 宿主下重新执行 `complex_chr_mesh` 全 case 后，之前那批 `Cannot add the following items to the set since they would break the exclusivity constraint` face set warning 已不再出现。
+    - DMX UV set 覆写：
+      - [DmxImportMesh.cpp](dcc_plugin/src/importer/DmxImportMesh.cpp) 当前在回写每个 UV set 前，会先显式 `clearUVs()` 清空旧 UV 数据，再执行 `setUVs()` / `assignUVs()`。
+      - 在真实 `mayapy` 宿主下重新执行 `complex_chr_mesh` 全 case 后，之前那批 `failed to assign UV set for ... (map1)` warning 已清除，说明复杂 mesh 的 UV 覆写路径已经从“warning 后继续”进一步收口到“直接稳定通过”。
+    - 当前剩余的高优先级后续点：
+      - `complex_chr_mesh` 仍会在 `smdimport` 这条 skin update 路径上报 `The bind pose for the skin is missing. This may cause weighting problems with new influences.`，随后出现 `setWeights failed during skin update for |:smdimport|:smdimportShape` 与 `failed to apply skinning for smdimport`。
+      - 由于 `complex_chr_mesh` 全 case 与 `skin influence update gate` 目前都已通过，这条问题已从“主路径失败”收敛为“局部 skinCluster / dagPose 更新噪音”；下一步应优先检查已有 `skinCluster` 在增量补 influence 后是否需要显式恢复/重建 `dagPose`，再决定是否进一步调整 `setWeights()` 前的绑定状态准备逻辑。
+    - 已通过：
+      - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+      - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases complex_chr_mesh`
+  - 2026-04-12：继续追 `complex_chr_mesh` 的 `smdimport` skin update warning，当前已证伪与收敛的信息如下：
+    - 已确认 `smdimport` 并非完全没有 bind pose：
+      - 在真实 `mayapy` 宿主下做“首次导入 + 第二次 `importMode=update`”后，`|smdimport|smdimportShape` 的 history 里虽然没有直接列出 `dagPose`，但场景中存在 `bindPose1`，且其 members 已包含 `smdimport` transform 及整套相关 joint。
+      - 这说明当前 warning 不能再简单归因为“场景里不存在 bind pose 节点”。
+    - 已尝试但未消除 warning 的修补：
+      - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 当前已新增 `EnsureSkinClusterBindPose()`，在复用现有 skinCluster 的 DMX update 路径里会尝试补一个 bind pose；宿主复跑后，这条 warning 仍然存在，说明根因不是“只要补一个 `dagPose -save -bindPose` 就能解决”。
+      - [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 当前也已把“是否需要补 influence”的判定从 full path 精确比较收紧为与后续权重回写一致的 fallback 匹配策略，避免把已存在但路径形式不同的 influence 误判成缺失；宿主复跑后，`smdimport` 这条 warning 仍然存在，说明根因也不只是“误补 influence”。
+    - 之后继续深入诊断后，当前又确认并修正了一个真正的实现错误：
+      - [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 之前把 `MFnSkinCluster::indexForInfluenceObject()` 返回的 logical index 直接传给 `setWeights()`；这对 `bindPreMatrix[]` 是正确索引，但对 `setWeights()` 不是正确语义。
+      - 在真实 `mayapy` 宿主下把 `setWeights()` 失败细化输出后，`|:smdimport|:smdimportShape` 的报错已经明确为 `kInvalidParameter: Object is incompatible with this method`。这进一步证明了：`setWeights()` 需要的是当前 influence 列表的 physical order，而不是 sparse logical index。
+      - 当前 [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已把这两类索引语义拆开：`bindPreMatrix` 仍走 logical index，`setWeights()` 改回按 `influenceObjects()` 当前 physical 顺序传参。
+      - 修正后，`complex_chr_mesh` 的 `smdimport` 已不再出现 `setWeights failed during skin update` / `failed to apply skinning for smdimport`，说明 DMX/SMD 这条 skin update 主路径已经从“有 warning 继续”进一步收口为“真实权重回写通过”。
+    - 当前仍剩的唯一相关 warning：
+      - 在 `complex_chr_mesh` 的 `skin influence update gate` 中，脚本会先手工移除 `|smdimport` 上的一个 influence（当前复现为 `xzpd6`），再做第二次 `importMode=update`。在这一步中，Maya 仍会输出一条原生命令 warning：`The bind pose for the skin is missing. This may cause weighting problems with new influences.`。
+      - 进一步宿主内省与 debug log 已确认，这条 warning 出现在“删 influence 后再补回 influence”的路径；当前 plugin 自己的 `setWeights` 与 skin 主路径已经通过，残余问题主要是 Maya 在 `addInfluence` 命令阶段输出的 bind pose 噪音。
+      - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 当前已尝试为 `skinCluster -e -addInfluence` 增加 `-ignoreBindPose`，但这条 warning 仍未完全消失，说明后续如果要继续清掉它，需要进一步评估是否改成完全绕开命令层的 influence 扩展实现，或接受其为低优先级宿主噪音。
+    - 当前最合理的下一步：
+      - 若继续追求“零 warning”宿主体验，下一阶段应单独评估“用 API/连接图方式替代 `skinCluster -e -addInfluence`”的可行性，因为当前剩下的噪音已经明确不在权重回写主路径本身。
+      - 若以功能可用性和主路径稳定性为优先，则这条问题现在可以降级为低优先级体验项，不再阻塞 delta animation layer 等后续功能。
+    - 已通过：
+      - `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd -- /m:1`
+      - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases complex_chr_mesh`
+  - 2026-04-12：已开始把“强制导入为 delta 动画层”从计划项推进到第一阶段实现，当前状态如下：
+    - 选项与策略层：
+      - [ImportPolicy.h](dcc_plugin/src/common/ImportPolicy.h) 已新增 `forceDeltaAnimationLayer`、`deltaReferenceMode=bindPose|firstFrame` 与 `animationLayerName` 解析。
+      - 当 `forceDeltaAnimationLayer=1` 时，会自动把 `importAnimationToLayer` 视作开启；`animationLayerMode=replace` 也会继续生效。
+      - [DmxImportSession.cpp](dcc_plugin/src/importer/DmxImportSession.cpp) 与 [SmdImportSession.cpp](dcc_plugin/src/importer_smd/SmdImportSession.cpp) 当前会在未显式传入 `animationLayerName` 时，用源文件名自动生成默认层名，例如 `rom_skin_smd_delta`。
+    - Maya helper：
+      - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) / [MayaCommandUtils.h](dcc_plugin/src/common/MayaCommandUtils.h) 已新增最小 animation layer helper：
+        - `EnsureAnimationLayer()`
+        - `AddPlugToAnimationLayer()`
+        - `ClearAnimationLayerCurve()`
+        - `SetKeyframesOnAnimationLayer()`
+      - 当前实现走 Maya 命令层：`animLayer` 负责建层/挂 plug，`setKeyframe -animLayer` 负责写 key；第一阶段优先求稳，不手工拼 layer blend graph。
+    - SMD 第一阶段：
+      - [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 当前已把 transform 动画写入拆成两种模式：
+        - 默认仍写 base animCurve
+        - `forceDeltaAnimationLayer=1` 时，对 translation / rotation 计算 delta 后写入指定 animation layer
+      - `deltaReferenceMode=firstFrame` 时，第 0 帧会作为参考帧；`bindPose` 路径当前会读取导入后对象的当前 local TR 作为参考。
+      - 旋转 delta 已改成 quaternion delta，再按当前 joint rotate order 展开回欧拉。
+      - 宿主最小验证已通过：
+        - `ctm_fbi/ctm_fbi.smd` 先导静态骨架，再导 `ctm_fbi_anims/rom_skin.smd`，使用 `useSceneRoot=1;importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=firstFrame`
+        - 已确认会创建 `rom_skin_smd_delta`
+        - 已确认 base `|pelvis.translateX` 不会被覆写
+        - 已确认 layer 上存在对应 transform animCurve
+      - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已新增 `DELTA_LAYER_GATE_EXPECTATIONS`，当前先固化了 `ctm_fbi/ctm_fbi_anims/rom_skin.smd` 这条 gate：
+        - 先导 `ctm_fbi/ctm_fbi.smd`
+        - 再用 `useSceneRoot=1;importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=firstFrame` 导 `rom_skin.smd`
+        - 检查 `rom_skin_smd_delta` 存在
+        - 检查 layer 上至少存在一批 transform animCurve
+        - 检查 base `|pelvis.translateX` 未被直接覆写
+      - 真实批回归已通过：
+        - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases ctm_fbi/ctm_fbi_anims/rom_skin.smd`
+    - DMX 第一阶段：
+      - [DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 当前也已接入同样的 delta-layer 逻辑，只覆盖 `position` / `orientation` 两类 transform channel；float / facial channel 仍保持写 base scene，不进入 layer。
+      - 编译层面已通过：
+        - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+      - 宿主验证当前还不够稳定：
+        - 使用 `Ellis/DMX/animation/c1m1_intro_mechanic.dmx` 与 `MostComplexSampleSet/vcaanim_VertexAnim.dmx` 做手工 `mayapy` 验证时，当前还没有拿到像 SMD 那样稳定、可重复的正向 gate 输出。
+        - 2026-04-12 继续尝试把 `Ellis/DMX/animation/c1m1_intro_mechanic.dmx` 接入 `DELTA_LAYER_GATE_EXPECTATIONS`，并用真实 `mayapy` 复跑 `MostComplexSampleSet/vcaanim_VertexAnim` 与 `Ellis/DMX/mechanic_model.dmx`：
+          - 两条样本当前都会在 `cmds.file(... type='Valve DMX Import' ...)` 阶段直接中断 `mayapy` 进程，只留下 case 起始日志，不会回到 Python 层抛出可捕获异常。
+          - 这说明当前阻塞点已经不是 delta-layer gate 脚本本身，而是更底层的 DMX 宿主导入稳定性或当前二进制/环境兼容性。
+          - 为避免把仓库留在明确失败的 gate 上，已回退本轮临时添加的 `Ellis` delta-layer gate；当前仍只保留 SMD 的正式 delta-layer 批回归。
+          - 下一步应优先补更早期的 DMX 导入诊断：
+            - 在 importer/session 更早阶段加可持久化 debug log
+            - 或直接用 PDB/宿主调试器定位 `cmds.file` 中断点
+            - 在确认 DMX 基础 transform 动画样本重新稳定前，不再继续扩展 DMX delta-layer gate
+        - 现阶段已经确认 DMX 代码可编译接入，但还没有正式批回归 gate；后续需要优先补“最小 transform 动画 DMX 样本 + delta layer”这条单独宿主验证链路。
+    - 当前范围与已知边界：
+      - 第一阶段只覆盖 transform 通道；`flexWeight` / facial / blendShape control 动画仍不进 layer。
+      - `deltaReferenceMode=bindPose` 当前优先使用目标对象导入后的当前 local pose 作为参考；更严格区分“静态骨架 pose”与“第一帧 pose”的宿主 gate 还要继续补。
+      - DMX 这条功能当前更接近“代码已接入、SMD 已验证、DMX 宿主 gate 待补”，还不能宣告整个 DMX/SMD delta-layer 需求完全关闭。
 
 ## 环境与工具链说明
 
