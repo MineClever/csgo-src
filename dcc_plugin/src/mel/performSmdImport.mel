@@ -1,150 +1,123 @@
 global proc MayaSmdImport_setOptionVars(int $forceFactorySettings)
 {
-    if ($forceFactorySettings || !`optionVar -exists MayaSmd_rotateX`) {
-        optionVar -floatValue MayaSmd_rotateX 0;
-    }
-
-    if ($forceFactorySettings || !`optionVar -exists MayaSmd_rotateY`) {
-        optionVar -floatValue MayaSmd_rotateY 0;
-    }
-
-    if ($forceFactorySettings || !`optionVar -exists MayaSmd_rotateZ`) {
-        optionVar -floatValue MayaSmd_rotateZ 0;
-    }
-
-    if ($forceFactorySettings || !`optionVar -exists MayaSmd_useSceneRoot`) {
-        optionVar -intValue MayaSmd_useSceneRoot 0;
-    }
-
-    if ($forceFactorySettings || !`optionVar -exists MayaSmd_readNamespaceFromScene`) {
-        optionVar -intValue MayaSmd_readNamespaceFromScene 1;
-    }
-
-    if ($forceFactorySettings || !`optionVar -exists MayaSmd_importMode`) {
-        optionVar -stringValue MayaSmd_importMode "create";
-    }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_useSceneRoot`) { optionVar -intValue MayaSmd_useSceneRoot 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_importMode`) { optionVar -stringValue MayaSmd_importMode "create"; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_translateX`) { optionVar -floatValue MayaSmd_translateX 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_translateY`) { optionVar -floatValue MayaSmd_translateY 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_translateZ`) { optionVar -floatValue MayaSmd_translateZ 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_rotateX`) { optionVar -floatValue MayaSmd_rotateX 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_rotateY`) { optionVar -floatValue MayaSmd_rotateY 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_rotateZ`) { optionVar -floatValue MayaSmd_rotateZ 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_scaleX`) { optionVar -floatValue MayaSmd_scaleX 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_scaleY`) { optionVar -floatValue MayaSmd_scaleY 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_scaleZ`) { optionVar -floatValue MayaSmd_scaleZ 1; }
 }
 
 global proc string MayaSmdImport_defaultOptionsString()
 {
-    return "rotateX=0;rotateY=0;rotateZ=0;useSceneRoot=0;readNamespaceFromScene=1;importMode=create";
+    return "useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
 }
 
 global proc string MayaSmdImport_collectOptionVarString()
 {
     MayaSmdImport_setOptionVars(0);
-
-    float $rotateX = `optionVar -q MayaSmd_rotateX`;
-    float $rotateY = `optionVar -q MayaSmd_rotateY`;
-    float $rotateZ = `optionVar -q MayaSmd_rotateZ`;
-    int $useSceneRoot = `optionVar -q MayaSmd_useSceneRoot`;
-    int $readNamespaceFromScene = `optionVar -q MayaSmd_readNamespaceFromScene`;
-    string $importMode = `optionVar -q MayaSmd_importMode`;
-
-    return ("rotateX=" + $rotateX
-        + ";rotateY=" + $rotateY
-        + ";rotateZ=" + $rotateZ
-        + ";useSceneRoot=" + $useSceneRoot
-        + ";readNamespaceFromScene=" + $readNamespaceFromScene
-        + ";importMode=" + $importMode);
+    return ("useSceneRoot=" + `optionVar -q MayaSmd_useSceneRoot`
+        + ";importMode=" + `optionVar -q MayaSmd_importMode`
+        + ";translateX=" + `optionVar -q MayaSmd_translateX`
+        + ";translateY=" + `optionVar -q MayaSmd_translateY`
+        + ";translateZ=" + `optionVar -q MayaSmd_translateZ`
+        + ";rotateX=" + `optionVar -q MayaSmd_rotateX`
+        + ";rotateY=" + `optionVar -q MayaSmd_rotateY`
+        + ";rotateZ=" + `optionVar -q MayaSmd_rotateZ`
+        + ";scaleX=" + `optionVar -q MayaSmd_scaleX`
+        + ";scaleY=" + `optionVar -q MayaSmd_scaleY`
+        + ";scaleZ=" + `optionVar -q MayaSmd_scaleZ`);
 }
 
 global proc MayaSmdImport_applyOptionsString(string $options)
 {
     string $effectiveOptions = $options;
-    if (size($effectiveOptions) == 0) {
-        $effectiveOptions = MayaSmdImport_defaultOptionsString();
-    }
-
-    float $rotateX = 0;
-    float $rotateY = 0;
-    float $rotateZ = 0;
+    if (size($effectiveOptions) == 0) { $effectiveOptions = MayaSmdImport_defaultOptionsString(); }
     int $useSceneRoot = 0;
-    int $readNamespaceFromScene = 1;
     string $importMode = "create";
+    float $translateX = 0; float $translateY = 0; float $translateZ = 0;
+    float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
+    float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
 
-    string $optionList[];
-    tokenize($effectiveOptions, ";", $optionList);
+    string $optionList[]; tokenize($effectiveOptions, ";", $optionList);
     for ($option in $optionList) {
-        string $parts[];
-        tokenize($option, "=", $parts);
-        if (size($parts) < 2) {
-            continue;
-        }
-
-        if ($parts[0] == "rotateX") {
-            $rotateX = $parts[1];
-        } else if ($parts[0] == "rotateY") {
-            $rotateY = $parts[1];
-        } else if ($parts[0] == "rotateZ") {
-            $rotateZ = $parts[1];
-        } else if ($parts[0] == "useSceneRoot") {
-            $useSceneRoot = $parts[1];
-        } else if ($parts[0] == "readNamespaceFromScene") {
-            $readNamespaceFromScene = $parts[1];
-        } else if ($parts[0] == "importMode") {
-            $importMode = $parts[1];
-        }
+        string $parts[]; tokenize($option, "=", $parts);
+        if (size($parts) < 2) { continue; }
+        if ($parts[0] == "useSceneRoot") { $useSceneRoot = $parts[1]; }
+        else if ($parts[0] == "importMode") { $importMode = $parts[1]; }
+        else if ($parts[0] == "translateX") { $translateX = $parts[1]; }
+        else if ($parts[0] == "translateY") { $translateY = $parts[1]; }
+        else if ($parts[0] == "translateZ") { $translateZ = $parts[1]; }
+        else if ($parts[0] == "rotateX") { $rotateX = $parts[1]; }
+        else if ($parts[0] == "rotateY") { $rotateY = $parts[1]; }
+        else if ($parts[0] == "rotateZ") { $rotateZ = $parts[1]; }
+        else if ($parts[0] == "scaleX") { $scaleX = $parts[1]; }
+        else if ($parts[0] == "scaleY") { $scaleY = $parts[1]; }
+        else if ($parts[0] == "scaleZ") { $scaleZ = $parts[1]; }
     }
 
-    if (`floatFieldGrp -exists smdImportEulerRotation`) {
-        floatFieldGrp -e -value1 $rotateX -value2 $rotateY -value3 $rotateZ smdImportEulerRotation;
-    }
-    if (`checkBoxGrp -exists smdImportUseSceneRoot`) {
-        checkBoxGrp -e -value1 $useSceneRoot smdImportUseSceneRoot;
-    }
-    if (`checkBoxGrp -exists smdImportReadNamespaceFromScene`) {
-        checkBoxGrp -e -value1 $readNamespaceFromScene smdImportReadNamespaceFromScene;
-    }
+    if (`checkBoxGrp -exists smdImportUseSceneRoot`) { checkBoxGrp -e -value1 $useSceneRoot smdImportUseSceneRoot; }
     if (`optionMenuGrp -exists smdImportMode`) {
-        if ($importMode == "update") {
-            optionMenuGrp -e -select 2 smdImportMode;
-        } else if ($importMode == "append") {
-            optionMenuGrp -e -select 3 smdImportMode;
-        } else {
-            optionMenuGrp -e -select 1 smdImportMode;
-        }
+        if ($importMode == "update") { optionMenuGrp -e -select 2 smdImportMode; }
+        else if ($importMode == "append") { optionMenuGrp -e -select 3 smdImportMode; }
+        else { optionMenuGrp -e -select 1 smdImportMode; }
     }
+    if (`floatFieldGrp -exists smdImportTranslation`) { floatFieldGrp -e -value1 $translateX -value2 $translateY -value3 $translateZ smdImportTranslation; }
+    if (`floatFieldGrp -exists smdImportRotation`) { floatFieldGrp -e -value1 $rotateX -value2 $rotateY -value3 $rotateZ smdImportRotation; }
+    if (`floatFieldGrp -exists smdImportScale`) { floatFieldGrp -e -value1 $scaleX -value2 $scaleY -value3 $scaleZ smdImportScale; }
 }
 
 global proc string MayaSmdImport_collectOptionsString()
 {
-    float $rotateX = 0;
-    float $rotateY = 0;
-    float $rotateZ = 0;
-
-    if (`floatFieldGrp -exists smdImportEulerRotation`) {
-        $rotateX = `floatFieldGrp -q -value1 smdImportEulerRotation`;
-        $rotateY = `floatFieldGrp -q -value2 smdImportEulerRotation`;
-        $rotateZ = `floatFieldGrp -q -value3 smdImportEulerRotation`;
-    }
-
     int $useSceneRoot = 0;
-    if (`checkBoxGrp -exists smdImportUseSceneRoot`) {
-        $useSceneRoot = `checkBoxGrp -q -value1 smdImportUseSceneRoot`;
-    }
-
-    int $readNamespaceFromScene = 1;
-    if (`checkBoxGrp -exists smdImportReadNamespaceFromScene`) {
-        $readNamespaceFromScene = `checkBoxGrp -q -value1 smdImportReadNamespaceFromScene`;
-    }
-
+    if (`checkBoxGrp -exists smdImportUseSceneRoot`) { $useSceneRoot = `checkBoxGrp -q -value1 smdImportUseSceneRoot`; }
     string $importMode = "create";
     if (`optionMenuGrp -exists smdImportMode`) {
         int $modeSelect = `optionMenuGrp -q -select smdImportMode`;
-        if ($modeSelect == 2) {
-            $importMode = "update";
-        } else if ($modeSelect == 3) {
-            $importMode = "append";
-        }
+        if ($modeSelect == 2) { $importMode = "update"; }
+        else if ($modeSelect == 3) { $importMode = "append"; }
+    }
+    float $translateX = 0;
+    float $translateY = 0;
+    float $translateZ = 0;
+    float $rotateX = 0;
+    float $rotateY = 0;
+    float $rotateZ = 0;
+    float $scaleX = 1;
+    float $scaleY = 1;
+    float $scaleZ = 1;
+    if (`floatFieldGrp -exists smdImportTranslation`) {
+        $translateX = `floatFieldGrp -q -value1 smdImportTranslation`;
+        $translateY = `floatFieldGrp -q -value2 smdImportTranslation`;
+        $translateZ = `floatFieldGrp -q -value3 smdImportTranslation`;
+    }
+    if (`floatFieldGrp -exists smdImportRotation`) {
+        $rotateX = `floatFieldGrp -q -value1 smdImportRotation`;
+        $rotateY = `floatFieldGrp -q -value2 smdImportRotation`;
+        $rotateZ = `floatFieldGrp -q -value3 smdImportRotation`;
+    }
+    if (`floatFieldGrp -exists smdImportScale`) {
+        $scaleX = `floatFieldGrp -q -value1 smdImportScale`;
+        $scaleY = `floatFieldGrp -q -value2 smdImportScale`;
+        $scaleZ = `floatFieldGrp -q -value3 smdImportScale`;
     }
 
-    return ("rotateX=" + $rotateX
+    return ("useSceneRoot=" + $useSceneRoot
+        + ";importMode=" + $importMode
+        + ";translateX=" + $translateX
+        + ";translateY=" + $translateY
+        + ";translateZ=" + $translateZ
+        + ";rotateX=" + $rotateX
         + ";rotateY=" + $rotateY
         + ";rotateZ=" + $rotateZ
-        + ";useSceneRoot=" + $useSceneRoot
-        + ";readNamespaceFromScene=" + $readNamespaceFromScene
-        + ";importMode=" + $importMode);
+        + ";scaleX=" + $scaleX
+        + ";scaleY=" + $scaleY
+        + ";scaleZ=" + $scaleZ);
 }
 
 global proc string SmdImportOptionsUI(string $parent)
@@ -152,79 +125,47 @@ global proc string SmdImportOptionsUI(string $parent)
     setParent $parent;
     setUITemplate -pushTemplate DefaultTemplate;
     waitCursor -state 1;
-
     string $optionLayout = `scrollLayout`;
         columnLayout -adjustableColumn true;
-            text -align "left" -label "Apply an extra XYZ Euler rotation to the imported SMD root.";
-            floatFieldGrp
-                -numberOfFields 3
-                -label "Root Rotation"
-                -annotation "Degrees. Applied as an extra XYZ Euler rotation on the SMD import root."
-                smdImportEulerRotation;
-            checkBoxGrp
-                -numberOfCheckBoxes 1
-                -label "Root Target"
-                -label1 "Import Directly Into Scene Root"
-                -annotation "When enabled, import skips the dedicated wrapper root and places content directly in the Maya scene."
-                smdImportUseSceneRoot;
-            checkBoxGrp
-                -numberOfCheckBoxes 1
-                -label "Namespace"
-                -label1 "Match Current Maya Namespace"
-                -annotation "When enabled, append/update tries to reuse nodes under the current Maya namespace."
-                smdImportReadNamespaceFromScene;
-            optionMenuGrp
-                -label "Merge Mode"
-                -annotation "Create creates new nodes. Update reuses matching hierarchy, mesh groups and supported skin data. Append only fills missing nodes."
-                smdImportMode;
+            checkBoxGrp -numberOfCheckBoxes 1 -label "Root Target" -label1 "Import Directly Into Scene Root" -annotation "When enabled, import skips the dedicated wrapper root and places content directly in the Maya scene." smdImportUseSceneRoot;
+            optionMenuGrp -label "Merge Mode" -annotation "Create creates new nodes. Update reuses matching hierarchy, mesh groups and supported skin data. Append only fills missing nodes." smdImportMode;
                 menuItem -label "Create New";
                 menuItem -label "Update Existing";
                 menuItem -label "Append Missing";
+            separator -style "in";
+            text -align "left" -label "Transform Correction";
+            text -align "left" -label "Applied directly during import as translation, rotation and scale correction. Namespace options use Maya's native Import file panel.";
+            floatFieldGrp -numberOfFields 3 -label "Translation" -annotation "Applied directly during import before nodes are written into the Maya scene." smdImportTranslation;
+            floatFieldGrp -numberOfFields 3 -label "Rotation" -annotation "Degrees. Applied directly during import instead of creating a correction wrapper node." smdImportRotation;
+            floatFieldGrp -numberOfFields 3 -label "Scale" -annotation "Scale correction applied directly during import. Animated roots are best used with uniform scale." smdImportScale;
         setParent ..;
     setParent ..;
-
     waitCursor -state 0;
     setUITemplate -popTemplate;
     return $optionLayout;
 }
 
-global proc MayaSmd_importFileOptionsUICreate(string $parent)
-{
-    SmdImportOptionsUI($parent);
-}
-
-global proc MayaSmd_importFileOptionsUIInit(string $parent, string $filter)
-{
-    MayaSmdImport_setOptionVars(0);
-    MayaSmdImport_applyOptionsString(MayaSmdImport_collectOptionVarString());
-}
+global proc MayaSmd_importFileOptionsUICreate(string $parent) { SmdImportOptionsUI($parent); }
+global proc MayaSmd_importFileOptionsUIInit(string $parent, string $filter) { MayaSmdImport_setOptionVars(0); MayaSmdImport_applyOptionsString(MayaSmdImport_collectOptionVarString()); }
 
 global proc MayaSmd_importFileOptionsUICommit(string $parent)
 {
     string $optionString = MayaSmdImport_collectOptionsString();
     MayaSmdImport_applyOptionsString($optionString);
-
-    string $optionList[];
-    tokenize($optionString, ";", $optionList);
+    string $optionList[]; tokenize($optionString, ";", $optionList);
     for ($option in $optionList) {
-        string $parts[];
-        tokenize($option, "=", $parts);
-        if (size($parts) < 2) {
-            continue;
-        }
-
-        if ($parts[0] == "rotateX") {
-            optionVar -floatValue MayaSmd_rotateX $parts[1];
-        } else if ($parts[0] == "rotateY") {
-            optionVar -floatValue MayaSmd_rotateY $parts[1];
-        } else if ($parts[0] == "rotateZ") {
-            optionVar -floatValue MayaSmd_rotateZ $parts[1];
-        } else if ($parts[0] == "useSceneRoot") {
-            optionVar -intValue MayaSmd_useSceneRoot $parts[1];
-        } else if ($parts[0] == "readNamespaceFromScene") {
-            optionVar -intValue MayaSmd_readNamespaceFromScene $parts[1];
-        } else if ($parts[0] == "importMode") {
-            optionVar -stringValue MayaSmd_importMode $parts[1];
-        }
+        string $parts[]; tokenize($option, "=", $parts);
+        if (size($parts) < 2) { continue; }
+        if ($parts[0] == "useSceneRoot") { optionVar -intValue MayaSmd_useSceneRoot $parts[1]; }
+        else if ($parts[0] == "importMode") { optionVar -stringValue MayaSmd_importMode $parts[1]; }
+        else if ($parts[0] == "translateX") { optionVar -floatValue MayaSmd_translateX $parts[1]; }
+        else if ($parts[0] == "translateY") { optionVar -floatValue MayaSmd_translateY $parts[1]; }
+        else if ($parts[0] == "translateZ") { optionVar -floatValue MayaSmd_translateZ $parts[1]; }
+        else if ($parts[0] == "rotateX") { optionVar -floatValue MayaSmd_rotateX $parts[1]; }
+        else if ($parts[0] == "rotateY") { optionVar -floatValue MayaSmd_rotateY $parts[1]; }
+        else if ($parts[0] == "rotateZ") { optionVar -floatValue MayaSmd_rotateZ $parts[1]; }
+        else if ($parts[0] == "scaleX") { optionVar -floatValue MayaSmd_scaleX $parts[1]; }
+        else if ($parts[0] == "scaleY") { optionVar -floatValue MayaSmd_scaleY $parts[1]; }
+        else if ($parts[0] == "scaleZ") { optionVar -floatValue MayaSmd_scaleZ $parts[1]; }
     }
 }

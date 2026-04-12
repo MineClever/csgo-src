@@ -13,7 +13,6 @@
 #include <vector>
 
 #include <maya/MDagPath.h>
-#include <maya/MEulerRotation.h>
 #include <maya/MMatrix.h>
 #include <maya/MObject.h>
 #include <maya/MPlug.h>
@@ -50,9 +49,9 @@ bool ParseBoolOption(const std::unordered_map<std::string, std::string> &optionM
 ImportOptions ParseImportOptions(const MString &options);
 std::string ReadTextFile(const MString &filePath);
 std::string NormalizeAxisName(std::string axisName);
-bool ComputeRootAxisCorrection(const std::string &sourceUpAxis, MEulerRotation &outRotation, MString &outWarning);
 bool ParseMatrixString(const std::string &text, MMatrix &matrix);
 bool ParseFloat3(const std::string &text, float (&components)[3]);
+MMatrix BuildDmxTransformMatrix(const simple_dmx::Document &document, const simple_dmx::Element *dagElement, bool *hasTransform = nullptr);
 
 // --- Material / node helpers ---
 MStatus SetVector3Plug(const MPlug &plug, const std::string &value);

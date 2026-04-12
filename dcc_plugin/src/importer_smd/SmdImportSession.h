@@ -1,6 +1,7 @@
 #pragma once
 
 #include <common/ImportPolicy.h>
+#include <common/ImportTransformCorrection.h>
 
 #include <maya/MFileObject.h>
 #include <maya/MStatus.h>
@@ -8,9 +9,7 @@
 
 struct SmdImportOptions
 {
-    double rotateXDegrees = 0.0;
-    double rotateYDegrees = 0.0;
-    double rotateZDegrees = 0.0;
+    dcc_import_transform::TransformCorrection transformCorrection;
     dcc_import_policy::SceneImportPolicy scenePolicy;
 };
 

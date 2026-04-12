@@ -2,6 +2,8 @@
 
 #include "DmxImportMesh.h"
 
+#include <common/ImportTransformCorrection.h>
+
 #include <string>
 
 #include <maya/MDagPath.h>
@@ -9,9 +11,8 @@
 #include <maya/MFnIkJoint.h>
 #include <maya/MFnTransform.h>
 #include <maya/MItDag.h>
-#include <maya/MQuaternion.h>
 #include <maya/MStatus.h>
-#include <maya/MVector.h>
+#include <maya/MTransformationMatrix.h>
 
 namespace dmx_import_impl
 {
@@ -109,16 +110,24 @@ MObject FindAppendTargetChild(
 }
 
 
-MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::Element *dagElement, MObject object)
+MStatus ApplyTransform(
+    const simple_dmx::Document &document,
+    const simple_dmx::Element *dagElement,
+    MObject object,
+    const MMatrix &preTransform)
 {
-    const simple_dmx::Element *transformElement = FindAttributeElement(document, dagElement, "transform");
-    if (!transformElement)
+    bool hasTransform = false;
+    const MMatrix localMatrix = BuildDmxTransformMatrix(document, dagElement, &hasTransform);
+    if (!hasTransform && preTransform.isEquivalent(MMatrix::identity))
     {
         return MS::kSuccess;
     }
 
-    const std::vector<double> positionValues = ParseNumberList(FindAttributeString(transformElement, "position"));
-    const std::vector<double> orientationValues = ParseNumberList(FindAttributeString(transformElement, "orientation"));
+    const MTransformationMatrix correctedTransform(preTransform * localMatrix);
+    const MVector translation = correctedTransform.getTranslation(MSpace::kTransform);
+    MQuaternion rotation = correctedTransform.rotation();
+    double scale[3] = {1.0, 1.0, 1.0};
+    correctedTransform.getScale(scale, MSpace::kTransform);
 
     MStatus status;
     MFnTransform transformFn(object, &status);
@@ -127,29 +136,20 @@ MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::E
         return MStatus::kFailure;
     }
 
-    if (positionValues.size() >= 3)
+    status = transformFn.setTranslation(translation, MSpace::kTransform);
+    if (!status)
     {
-        status = transformFn.setTranslation(MVector(positionValues[0], positionValues[1], positionValues[2]), MSpace::kTransform);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
+        return MStatus::kFailure;
     }
 
-    if (orientationValues.size() >= 4)
+    status = transformFn.setRotation(rotation);
+    if (!status)
     {
-        status = transformFn.setRotation(MQuaternion(
-            orientationValues[0],
-            orientationValues[1],
-            orientationValues[2],
-            orientationValues[3]));
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
+        return MStatus::kFailure;
     }
 
-    return MS::kSuccess;
+    status = transformFn.setScale(scale);
+    return status ? MS::kSuccess : MS::kFailure;
 }
 
 MObject CreateDagNode(const std::string &name, bool isJoint, MObject parent, MStatus &status)
@@ -247,7 +247,12 @@ MStatus ImportDagHierarchyRecursive(
 
     if (!reusedExistingNode || !appendMissingMode)
     {
-        status = ApplyTransform(context.document, dagElement, nodeObject);
+        const bool topLevelNode = parent == context.sceneRoot;
+        status = ApplyTransform(
+            context.document,
+            dagElement,
+            nodeObject,
+            topLevelNode ? context.topLevelPreTransform : MMatrix::identity);
         if (!status)
         {
             return MStatus::kFailure;

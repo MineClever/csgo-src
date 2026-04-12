@@ -1,6 +1,7 @@
 #include "SmdMeshImporter.h"
 
 #include <common/MayaCommandUtils.h>
+#include <common/ImportTransformCorrection.h>
 #include <common_smd/MayaSmdCommon.h>
 
 #include <cctype>
@@ -260,10 +261,12 @@ MObject FindNodeByName(const MString &nodeName)
 SmdMeshImporter::SmdMeshImporter(
     std::shared_ptr<const simple_smd::Document> document,
     std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone,
-    dcc_import_policy::SceneImportPolicy scenePolicy)
+    dcc_import_policy::SceneImportPolicy scenePolicy,
+    dcc_import_transform::TransformCorrection transformCorrection)
     : document_(document)
     , jointPathsByBone_(jointPathsByBone)
     , scenePolicy_(std::move(scenePolicy))
+    , transformCorrection_(std::move(transformCorrection))
 {
 }
 
@@ -360,6 +363,33 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
             return maya_smd::ReportError(MString("maya_smd: failed to create mesh transform for material group ") + materialName.c_str(), status);
         }
         transformFn.setName((smd_mesh_import_impl::SanitizeMeshName(materialName) + "_grp#").c_str());
+    }
+
+    if (!dcc_import_policy::UsesAppendMissingObjects(scenePolicy_) && !transformCorrection_.IsIdentity())
+    {
+        MFnTransform transformFn(transformObject, &status);
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to access mesh group transform for ") + materialName.c_str(), status);
+        }
+
+        status = transformFn.setTranslation(transformCorrection_.translation, MSpace::kTransform);
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to set mesh group translation for ") + materialName.c_str(), status);
+        }
+
+        status = transformFn.setRotation(transformCorrection_.RotationQuaternion());
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to set mesh group rotation for ") + materialName.c_str(), status);
+        }
+
+        status = transformFn.setScale(const_cast<double *>(transformCorrection_.scale));
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to apply import correction to mesh group ") + materialName.c_str(), status);
+        }
     }
 
     const MObject existingMeshObject = reusedExistingGroup ? findPrimaryMeshChild(transformObject) : MObject::kNullObj;

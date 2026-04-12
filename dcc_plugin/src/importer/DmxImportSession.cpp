@@ -4,6 +4,7 @@
 #include "DmxImportDag.h"
 #include "DmxImportInternals.h"
 
+#include <common/ImportTransformCorrection.h>
 #include <common/MayaDmxCommon.h>
 #include <common/SimpleDmxText.h>
 
@@ -11,11 +12,54 @@
 #include <vector>
 
 #include <maya/MFnTransform.h>
-#include <maya/MQuaternion.h>
+#include <maya/MGlobal.h>
 using simple_dmx::FindAttributeElementArray;
 using simple_dmx::FindAttributeString;
 using dmx_import_translator::ImportContext;
 using namespace dmx_import_impl;
+
+namespace
+{
+MMatrix ComputeLegacyAxisCorrectionMatrix(const std::string &sourceUpAxis, MString &warning)
+{
+    const std::string normalizedSourceUpAxis = NormalizeAxisName(sourceUpAxis);
+    if (normalizedSourceUpAxis.empty())
+    {
+        return MMatrix::identity;
+    }
+
+    MStatus status;
+    const bool mayaYAxisUp = MGlobal::isYAxisUp(&status);
+    if (!status)
+    {
+        return MMatrix::identity;
+    }
+
+    const bool mayaZAxisUp = MGlobal::isZAxisUp(&status);
+    if (!status)
+    {
+        return MMatrix::identity;
+    }
+
+    if (normalizedSourceUpAxis == "Z" && mayaYAxisUp)
+    {
+        dcc_import_transform::TransformCorrection correction;
+        correction.rotation.x = -1.57079632679;
+        warning = "maya_dmx: applied legacy Z-up to Y-up import correction.";
+        return correction.Matrix();
+    }
+
+    if (normalizedSourceUpAxis == "Y" && mayaZAxisUp)
+    {
+        dcc_import_transform::TransformCorrection correction;
+        correction.rotation.x = 1.57079632679;
+        warning = "maya_dmx: applied legacy Y-up to Z-up import correction.";
+        return correction.Matrix();
+    }
+
+    return MMatrix::identity;
+}
+}
 
 DmxImportSession::DmxImportSession(const MFileObject &fileObject, const MString &options)
     : filePath_(fileObject.rawFullName())
@@ -37,7 +81,7 @@ MStatus DmxImportSession::Run()
     context.importSkin = importOptions_.importSkin;
     context.importMaterials = importOptions_.importMaterials;
     context.importDeltaStates = importOptions_.importDeltaStates;
-    context.applyAxisCorrection = importOptions_.applyAxisCorrection;
+    context.transformCorrection = importOptions_.transformCorrection;
     if (context.modelRoot)
     {
         CollectJointInfo(document_, context.modelRoot, context);
@@ -111,13 +155,26 @@ MStatus DmxImportSession::LoadDocument()
 
 MStatus DmxImportSession::CreateSceneRoot(ImportContext &context, MObject &sceneRoot) const
 {
+    const MMatrix rootImportMatrix = BuildDmxTransformMatrix(document_, importRoot_);
+    MMatrix correctionMatrix = context.transformCorrection.Matrix();
+
+    if (importOptions_.applyLegacyAxisCorrection)
+    {
+        MString axisWarning;
+        const MMatrix legacyAxisMatrix = ComputeLegacyAxisCorrectionMatrix(FindAttributeString(importRoot_, "upAxis"), axisWarning);
+        if (!legacyAxisMatrix.isEquivalent(MMatrix::identity))
+        {
+            correctionMatrix = legacyAxisMatrix * correctionMatrix;
+            maya_dmx::ReportWarning(axisWarning);
+        }
+    }
+
+    context.topLevelPreTransform = correctionMatrix;
     if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy))
     {
         sceneRoot = MObject::kNullObj;
-        if (context.applyAxisCorrection)
-        {
-            maya_dmx::ReportWarning("maya_dmx: skipped root axis correction because useSceneRoot=1 imports directly into the Maya scene.");
-        }
+        context.sceneRoot = sceneRoot;
+        context.topLevelPreTransform = rootImportMatrix * correctionMatrix;
         return MS::kSuccess;
     }
 
@@ -131,28 +188,12 @@ MStatus DmxImportSession::CreateSceneRoot(ImportContext &context, MObject &scene
 
     rootTransformFn.setName(importRoot_->name.empty() ? "dmx_import" : importRoot_->name.c_str());
 
-    const std::string upAxis = FindAttributeString(importRoot_, "upAxis");
-    MEulerRotation rootAxisCorrection;
-    MString rootAxisWarning;
-    const bool needsAxisCorrection =
-        context.applyAxisCorrection &&
-        ComputeRootAxisCorrection(upAxis, rootAxisCorrection, rootAxisWarning);
-
     status = ApplyTransform(document_, importRoot_, sceneRoot);
     if (!status)
     {
         return MStatus::kFailure;
     }
-
-    if (needsAxisCorrection)
-    {
-        status = rootTransformFn.setRotation(rootAxisCorrection.asQuaternion());
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        maya_dmx::ReportWarning(rootAxisWarning);
-    }
+    context.sceneRoot = sceneRoot;
 
     return MStatus::kSuccess;
 }

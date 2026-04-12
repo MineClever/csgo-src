@@ -18,6 +18,11 @@ bool DmxImportTranslator::haveWriteMethod() const
     return false;
 }
 
+bool DmxImportTranslator::haveNamespaceSupport() const
+{
+    return true;
+}
+
 bool DmxImportTranslator::canBeOpened() const
 {
     return true;

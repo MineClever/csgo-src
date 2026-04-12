@@ -3,18 +3,17 @@ global proc MayaDmxImport_syncOptionVars(string $version, string $args[])
     optionVar -intValue MayaDmx_importMaterials $args[0];
     optionVar -intValue MayaDmx_importSkin $args[1];
     optionVar -intValue MayaDmx_importDeltaStates $args[2];
-    if (size($args) > 3) {
-        optionVar -intValue MayaDmx_applyAxisCorrection $args[3];
-    }
-    if (size($args) > 4) {
-        optionVar -intValue MayaDmx_useSceneRoot $args[4];
-    }
-    if (size($args) > 5) {
-        optionVar -intValue MayaDmx_readNamespaceFromScene $args[5];
-    }
-    if (size($args) > 6) {
-        optionVar -stringValue MayaDmx_importMode $args[6];
-    }
+    if (size($args) > 3) { optionVar -intValue MayaDmx_useSceneRoot $args[3]; }
+    if (size($args) > 4) { optionVar -stringValue MayaDmx_importMode $args[4]; }
+    if (size($args) > 5) { optionVar -floatValue MayaDmx_translateX $args[5]; }
+    if (size($args) > 6) { optionVar -floatValue MayaDmx_translateY $args[6]; }
+    if (size($args) > 7) { optionVar -floatValue MayaDmx_translateZ $args[7]; }
+    if (size($args) > 8) { optionVar -floatValue MayaDmx_rotateX $args[8]; }
+    if (size($args) > 9) { optionVar -floatValue MayaDmx_rotateY $args[9]; }
+    if (size($args) > 10) { optionVar -floatValue MayaDmx_rotateZ $args[10]; }
+    if (size($args) > 11) { optionVar -floatValue MayaDmx_scaleX $args[11]; }
+    if (size($args) > 12) { optionVar -floatValue MayaDmx_scaleY $args[12]; }
+    if (size($args) > 13) { optionVar -floatValue MayaDmx_scaleZ $args[13]; }
 }
 
 global proc doDmxImportArgList(string $version, string $args[])
@@ -59,17 +58,23 @@ global proc doDmxImportArgList(string $version, string $args[])
     string $options = ("importMaterials=" + `optionVar -q MayaDmx_importMaterials`
         + ";importSkin=" + `optionVar -q MayaDmx_importSkin`
         + ";importDeltaStates=" + `optionVar -q MayaDmx_importDeltaStates`
-        + ";applyAxisCorrection=" + `optionVar -q MayaDmx_applyAxisCorrection`
         + ";useSceneRoot=" + `optionVar -q MayaDmx_useSceneRoot`
-        + ";readNamespaceFromScene=" + `optionVar -q MayaDmx_readNamespaceFromScene`
-        + ";importMode=" + `optionVar -q MayaDmx_importMode`);
+        + ";importMode=" + `optionVar -q MayaDmx_importMode`
+        + ";translateX=" + `optionVar -q MayaDmx_translateX`
+        + ";translateY=" + `optionVar -q MayaDmx_translateY`
+        + ";translateZ=" + `optionVar -q MayaDmx_translateZ`
+        + ";rotateX=" + `optionVar -q MayaDmx_rotateX`
+        + ";rotateY=" + `optionVar -q MayaDmx_rotateY`
+        + ";rotateZ=" + `optionVar -q MayaDmx_rotateZ`
+        + ";scaleX=" + `optionVar -q MayaDmx_scaleX`
+        + ";scaleY=" + `optionVar -q MayaDmx_scaleY`
+        + ";scaleZ=" + `optionVar -q MayaDmx_scaleZ`);
 
     file
         -import
         -type "Valve DMX Import"
         -ignoreVersion
         -ra true
-        -mergeNamespacesOnClash false
         -options $options
         $result[0];
 }

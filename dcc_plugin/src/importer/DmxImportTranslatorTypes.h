@@ -1,9 +1,11 @@
 #pragma once
 
 #include <common/ImportPolicy.h>
+#include <common/ImportTransformCorrection.h>
 #include <common/SimpleDmxDocument.h>
 
 #include <maya/MDagPath.h>
+#include <maya/MMatrix.h>
 #include <maya/MObject.h>
 
 #include <string>
@@ -38,14 +40,12 @@ struct ImportContext
     std::unordered_map<std::string, std::vector<BlendShapeTargetBinding>> importedBlendShapeTargets;
     std::unordered_map<std::string, std::vector<ScalarAttributeBinding>> importedScalarTargets;
     std::vector<MDagPath> importedControlPaths;
+    MObject sceneRoot = MObject::kNullObj;
+    MMatrix topLevelPreTransform;
     bool importSkin = true;
     bool importMaterials = true;
     bool importDeltaStates = true;
-    // When true, a root axis correction rotation is applied to the scene root node if the DMX
-    // upAxis differs from the current Maya scene axis. Disable for round-trip Maya→DMX→Maya
-    // workflows where the data is already in the correct coordinate space, or when the skinned
-    // mesh over-correction (DAG inheritance double-applying the rotation) is undesirable.
-    bool applyAxisCorrection = true;
+    dcc_import_transform::TransformCorrection transformCorrection;
 };
 
 struct ImportOptions
@@ -53,7 +53,8 @@ struct ImportOptions
     bool importSkin = true;
     bool importMaterials = true;
     bool importDeltaStates = true;
-    bool applyAxisCorrection = true;
+    bool applyLegacyAxisCorrection = false;
+    dcc_import_transform::TransformCorrection transformCorrection;
     dcc_import_policy::SceneImportPolicy scenePolicy;
 };
 }

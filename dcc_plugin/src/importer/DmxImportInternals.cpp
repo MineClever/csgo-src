@@ -1,6 +1,7 @@
 #include "DmxImportInternals.h"
 
 #include <common/ImportPolicy.h>
+#include <common/ImportTransformCorrection.h>
 
 #include <cstdint>
 #include <algorithm>
@@ -12,6 +13,7 @@
 
 #include <Windows.h>
 
+#include <maya/MEulerRotation.h>
 #include <maya/MDGModifier.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnSet.h>
@@ -21,6 +23,7 @@
 #include <maya/MPlugArray.h>
 #include <maya/MSelectionList.h>
 #include <maya/MStatus.h>
+#include <maya/MTransformationMatrix.h>
 
 namespace dmx_import_impl
 {
@@ -138,8 +141,9 @@ ImportOptions ParseImportOptions(const MString &options)
     importOptions.importSkin = dcc_import_policy::ParseBoolOption(optionMap, "importskin", true);
     importOptions.importMaterials = dcc_import_policy::ParseBoolOption(optionMap, "importmaterials", true);
     importOptions.importDeltaStates = dcc_import_policy::ParseBoolOption(optionMap, "importdeltastates", true);
-    importOptions.applyAxisCorrection = dcc_import_policy::ParseBoolOption(optionMap, "applyaxiscorrection", true);
+    importOptions.applyLegacyAxisCorrection = dcc_import_policy::ParseBoolOption(optionMap, "applyaxiscorrection", false);
     importOptions.scenePolicy = dcc_import_policy::ParseSceneImportPolicy(optionMap);
+    importOptions.transformCorrection = dcc_import_transform::ParseTransformCorrection(optionMap);
     return importOptions;
 }
 
@@ -157,44 +161,6 @@ std::string NormalizeAxisName(std::string axisName)
         return static_cast<char>(std::toupper(ch));
     });
     return axisName;
-}
-
-bool ComputeRootAxisCorrection(const std::string &sourceUpAxis, MEulerRotation &outRotation, MString &outWarning)
-{
-    const std::string normalizedSourceUpAxis = NormalizeAxisName(sourceUpAxis);
-    if (normalizedSourceUpAxis.empty())
-    {
-        return false;
-    }
-
-    MStatus status;
-    const bool mayaYAxisUp = MGlobal::isYAxisUp(&status);
-    if (!status)
-    {
-        return false;
-    }
-
-    const bool mayaZAxisUp = MGlobal::isZAxisUp(&status);
-    if (!status)
-    {
-        return false;
-    }
-
-    if (normalizedSourceUpAxis == "Z" && mayaYAxisUp)
-    {
-        outRotation = MEulerRotation(-1.57079632679, 0.0, 0.0);
-        outWarning = "maya_dmx: imported Z-up model into a Y-up Maya scene with a -90deg X correction group.";
-        return true;
-    }
-
-    if (normalizedSourceUpAxis == "Y" && mayaZAxisUp)
-    {
-        outRotation = MEulerRotation(1.57079632679, 0.0, 0.0);
-        outWarning = "maya_dmx: imported Y-up model into a Z-up Maya scene with a +90deg X correction group.";
-        return true;
-    }
-
-    return false;
 }
 
 bool ParseMatrixString(const std::string &text, MMatrix &matrix)
@@ -228,6 +194,46 @@ bool ParseFloat3(const std::string &text, float (&components)[3])
     components[1] = static_cast<float>(values[1]);
     components[2] = static_cast<float>(values[2]);
     return true;
+}
+
+MMatrix BuildDmxTransformMatrix(const simple_dmx::Document &document, const simple_dmx::Element *dagElement, bool *hasTransform)
+{
+    if (hasTransform)
+    {
+        *hasTransform = false;
+    }
+
+    const simple_dmx::Element *transformElement = FindAttributeElement(document, dagElement, "transform");
+    if (!transformElement)
+    {
+        return MMatrix::identity;
+    }
+
+    if (hasTransform)
+    {
+        *hasTransform = true;
+    }
+
+    const std::vector<double> positionValues = ParseNumberList(FindAttributeString(transformElement, "position"));
+    const std::vector<double> orientationValues = ParseNumberList(FindAttributeString(transformElement, "orientation"));
+
+    MTransformationMatrix transformMatrix;
+    if (positionValues.size() >= 3)
+    {
+        transformMatrix.setTranslation(MVector(positionValues[0], positionValues[1], positionValues[2]), MSpace::kTransform);
+    }
+
+    if (orientationValues.size() >= 4)
+    {
+        const MQuaternion rotation(
+            orientationValues[0],
+            orientationValues[1],
+            orientationValues[2],
+            orientationValues[3]);
+        transformMatrix.setRotationQuaternion(rotation.x, rotation.y, rotation.z, rotation.w);
+    }
+
+    return transformMatrix.asMatrix();
 }
 
 // --- Material / node helpers ---

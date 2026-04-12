@@ -77,28 +77,6 @@ SmdImportOptions SmdImportSession::parseOptions() const
     const std::unordered_map<std::string, std::string> optionMap = dcc_import_policy::ParseOptionMap(options_);
     parsedOptions.scenePolicy = dcc_import_policy::ParseSceneImportPolicy(optionMap);
     dcc_import_policy::CaptureCurrentNamespace(parsedOptions.scenePolicy);
-    for (const auto &entry : optionMap)
-    {
-        try
-        {
-            const double numericValue = std::stod(entry.second);
-            if (entry.first == "rotatex")
-            {
-                parsedOptions.rotateXDegrees = numericValue;
-            }
-            else if (entry.first == "rotatey")
-            {
-                parsedOptions.rotateYDegrees = numericValue;
-            }
-            else if (entry.first == "rotatez")
-            {
-                parsedOptions.rotateZDegrees = numericValue;
-            }
-        }
-        catch (...)
-        {
-        }
-    }
-
+    parsedOptions.transformCorrection = dcc_import_transform::ParseTransformCorrection(optionMap);
     return parsedOptions;
 }

@@ -20,6 +20,11 @@ bool SmdImportTranslator::haveWriteMethod() const
     return false;
 }
 
+bool SmdImportTranslator::haveNamespaceSupport() const
+{
+    return true;
+}
+
 bool SmdImportTranslator::canBeOpened() const
 {
     return true;

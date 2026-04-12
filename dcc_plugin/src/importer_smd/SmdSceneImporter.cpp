@@ -1,13 +1,13 @@
 #include "SmdSceneImporter.h"
 #include "SmdMeshImporter.h"
 
+#include <common/ImportTransformCorrection.h>
 #include <common_smd/MayaSmdCommon.h>
 
 #include <algorithm>
 #include <string>
 
 #include <maya/MAnimControl.h>
-#include <maya/MAngle.h>
 #include <maya/MEulerRotation.h>
 #include <maya/MFnAnimCurve.h>
 #include <maya/MFnDagNode.h>
@@ -16,6 +16,7 @@
 #include <maya/MFnTransform.h>
 #include <maya/MItDag.h>
 #include <maya/MPlug.h>
+#include <maya/MQuaternion.h>
 #include <maya/MTime.h>
 #include <maya/MVector.h>
 
@@ -34,7 +35,10 @@ std::string SanitizeNodeName(std::string value)
     return value.empty() ? std::string("smd_node") : value;
 }
 
-MStatus SetPoseOnObject(MObject object, const simple_smd::SkeletonPose &pose)
+MStatus SetPoseOnObject(
+    MObject object,
+    const simple_smd::SkeletonPose &pose,
+    const dcc_import_transform::TransformCorrection *correction)
 {
     MStatus status;
     MFnTransform transformFn(object, &status);
@@ -53,6 +57,15 @@ MStatus SetPoseOnObject(MObject object, const simple_smd::SkeletonPose &pose)
     if (!status)
     {
         return maya_smd::ReportError("maya_smd: failed to apply skeleton rotation.", status);
+    }
+
+    if (correction && !correction->IsIdentity())
+    {
+        status = dcc_import_transform::ApplyPreTransformToObject(object, correction->Matrix());
+        if (!status)
+        {
+            return maya_smd::ReportError("maya_smd: failed to apply top-level import correction to skeleton pose.", status);
+        }
     }
 
     return MS::kSuccess;
@@ -111,12 +124,6 @@ MStatus SmdSceneImporter::Import()
         return MStatus::kFailure;
     }
 
-    status = applyImportRotation();
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
     status = createJointHierarchy();
     if (!status)
     {
@@ -138,7 +145,7 @@ MStatus SmdSceneImporter::Import()
     auto jointPathsByBonePtr = std::shared_ptr<const std::unordered_map<int, MDagPath>>(
         &jointPathsByBone_,
         [](const std::unordered_map<int, MDagPath> *) {});
-    SmdMeshImporter meshImporter(document_, jointPathsByBonePtr, importOptions_.scenePolicy);
+    SmdMeshImporter meshImporter(document_, jointPathsByBonePtr, importOptions_.scenePolicy, importOptions_.transformCorrection);
     status = meshImporter.Import(importRoot_);
     if (!status)
     {
@@ -170,41 +177,6 @@ MStatus SmdSceneImporter::createImportRoot()
     }
 
     rootTransformFn.setName("smd_import_root#");
-
-    return MS::kSuccess;
-}
-
-MStatus SmdSceneImporter::applyImportRotation()
-{
-    if (importOptions_.rotateXDegrees == 0.0
-        && importOptions_.rotateYDegrees == 0.0
-        && importOptions_.rotateZDegrees == 0.0)
-    {
-        return MS::kSuccess;
-    }
-
-    if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy))
-    {
-        return maya_smd::ReportWarning("maya_smd: skipped custom import rotation because useSceneRoot=1 imports directly into the Maya scene.");
-    }
-
-    MStatus status;
-    MFnTransform rootTransformFn(importRoot_, &status);
-    if (!status)
-    {
-        return maya_smd::ReportError("maya_smd: failed to access SMD import root for custom rotation.", status);
-    }
-
-    const MEulerRotation importRotation(
-        MAngle(importOptions_.rotateXDegrees, MAngle::kDegrees).asRadians(),
-        MAngle(importOptions_.rotateYDegrees, MAngle::kDegrees).asRadians(),
-        MAngle(importOptions_.rotateZDegrees, MAngle::kDegrees).asRadians(),
-        MEulerRotation::kXYZ);
-    status = rootTransformFn.setRotation(importRotation);
-    if (!status)
-    {
-        return maya_smd::ReportError("maya_smd: failed to apply custom import rotation to SMD root.", status);
-    }
 
     return MS::kSuccess;
 }
@@ -345,6 +317,11 @@ const simple_smd::SkeletonPose *SmdSceneImporter::findPose(const simple_smd::Ske
     return poseIt == frame.poses.end() ? nullptr : &(*poseIt);
 }
 
+bool SmdSceneImporter::isTopLevelNode(const simple_smd::Node &node) const
+{
+    return jointPathsByBone_.find(node.parentIndex) == jointPathsByBone_.end();
+}
+
 MStatus SmdSceneImporter::applyBindPose()
 {
     if (document_->skeletonFrames.empty())
@@ -373,7 +350,9 @@ MStatus SmdSceneImporter::applyBindPose()
             continue;
         }
 
-        const MStatus status = SetPoseOnObject(pathIt->second.node(), *pose);
+        const dcc_import_transform::TransformCorrection *correction =
+            isTopLevelNode(node) ? &importOptions_.transformCorrection : nullptr;
+        const MStatus status = SetPoseOnObject(pathIt->second.node(), *pose, correction);
         if (!status)
         {
             return MStatus::kFailure;
@@ -418,6 +397,9 @@ MStatus SmdSceneImporter::applyAnimation()
         std::vector<double> rxValues;
         std::vector<double> ryValues;
         std::vector<double> rzValues;
+        const bool applyTopLevelCorrection =
+            isTopLevelNode(node) && !importOptions_.transformCorrection.IsIdentity();
+        const MQuaternion correctionRotation = importOptions_.transformCorrection.RotationQuaternion();
 
         for (const simple_smd::SkeletonFrame &frame : document_->skeletonFrames)
         {
@@ -427,13 +409,26 @@ MStatus SmdSceneImporter::applyAnimation()
                 continue;
             }
 
+            MVector correctedTranslation(pose->tx, pose->ty, pose->tz);
+            if (applyTopLevelCorrection)
+            {
+                correctedTranslation = dcc_import_transform::ApplyToPoint(importOptions_.transformCorrection, correctedTranslation);
+            }
+
+            MQuaternion correctedRotation = MEulerRotation(pose->rx, pose->ry, pose->rz).asQuaternion();
+            if (applyTopLevelCorrection)
+            {
+                correctedRotation = correctionRotation * correctedRotation;
+            }
+            const MEulerRotation correctedEuler = correctedRotation.asEulerRotation();
+
             times.push_back(static_cast<double>(frame.time));
-            txValues.push_back(pose->tx);
-            tyValues.push_back(pose->ty);
-            tzValues.push_back(pose->tz);
-            rxValues.push_back(pose->rx);
-            ryValues.push_back(pose->ry);
-            rzValues.push_back(pose->rz);
+            txValues.push_back(correctedTranslation.x);
+            tyValues.push_back(correctedTranslation.y);
+            tzValues.push_back(correctedTranslation.z);
+            rxValues.push_back(correctedEuler.x);
+            ryValues.push_back(correctedEuler.y);
+            rzValues.push_back(correctedEuler.z);
         }
 
         if (times.size() <= 1)

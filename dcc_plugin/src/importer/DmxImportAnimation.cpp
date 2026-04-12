@@ -1,6 +1,8 @@
 #include "DmxImportAnimation.h"
 #include "DmxImportInternals.h"
 
+#include <common/ImportTransformCorrection.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -15,8 +17,10 @@
 #include <maya/MGlobal.h>
 #include <maya/MItDag.h>
 #include <maya/MObject.h>
+#include <maya/MPoint.h>
 #include <maya/MQuaternion.h>
 #include <maya/MTime.h>
+#include <maya/MTransformationMatrix.h>
 
 namespace dmx_import_impl
 {
@@ -199,6 +203,9 @@ MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, con
     std::vector<double> xValues;
     std::vector<double> yValues;
     std::vector<double> zValues;
+    const bool applyTopLevelCorrection =
+        isTopLevelImportedPath(targetPath) &&
+        !context_->topLevelPreTransform.isEquivalent(MMatrix::identity);
     for (size_t keyIndex = 0; keyIndex < timeStrings.size(); ++keyIndex)
     {
         const std::vector<double> timeValues = ParseNumberList(timeStrings[keyIndex]);
@@ -208,10 +215,17 @@ MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, con
             continue;
         }
 
+        MVector correctedValue(vectorValues[0], vectorValues[1], vectorValues[2]);
+        if (applyTopLevelCorrection)
+        {
+            const MPoint transformed = MPoint(correctedValue) * context_->topLevelPreTransform;
+            correctedValue = MVector(transformed.x, transformed.y, transformed.z);
+        }
+
         times.push_back(timeValues[0]);
-        xValues.push_back(vectorValues[0]);
-        yValues.push_back(vectorValues[1]);
-        zValues.push_back(vectorValues[2]);
+        xValues.push_back(correctedValue.x);
+        yValues.push_back(correctedValue.y);
+        zValues.push_back(correctedValue.z);
     }
 
     if (times.empty())
@@ -273,6 +287,15 @@ MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, 
     std::vector<double> xValues;
     std::vector<double> yValues;
     std::vector<double> zValues;
+    const bool applyTopLevelCorrection =
+        isTopLevelImportedPath(targetPath) &&
+        !context_->topLevelPreTransform.isEquivalent(MMatrix::identity);
+    MQuaternion correctionRotation;
+    if (applyTopLevelCorrection)
+    {
+        MTransformationMatrix correctionTransform(context_->topLevelPreTransform);
+        correctionRotation = correctionTransform.rotation();
+    }
     for (size_t keyIndex = 0; keyIndex < timeStrings.size(); ++keyIndex)
     {
         const std::vector<double> timeValues = ParseNumberList(timeStrings[keyIndex]);
@@ -282,11 +305,17 @@ MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, 
             continue;
         }
 
-        const MEulerRotation eulerRotation = MQuaternion(
+        MQuaternion correctedRotation(
             quaternionValues[0],
             quaternionValues[1],
             quaternionValues[2],
-            quaternionValues[3]).asEulerRotation();
+            quaternionValues[3]);
+        if (applyTopLevelCorrection)
+        {
+            correctedRotation = correctionRotation * correctedRotation;
+        }
+
+        const MEulerRotation eulerRotation = correctedRotation.asEulerRotation();
 
         times.push_back(timeValues[0]);
         xValues.push_back(eulerRotation.x);
@@ -589,6 +618,27 @@ bool AnimationImporter::shouldSkipAppendScalarAnimation(const MPlug &targetPlug)
     MStatus status;
     const bool hasConnections = targetPlug.connectedTo(sourceConnections, true, false, &status);
     return status && hasConnections && sourceConnections.length() > 0;
+}
+
+bool AnimationImporter::isTopLevelImportedPath(const MDagPath &targetPath) const
+{
+    if (context_->sceneRoot.isNull())
+    {
+        return targetPath.length() == 1;
+    }
+
+    if (targetPath.length() < 2)
+    {
+        return false;
+    }
+
+    MDagPath parentPath(targetPath);
+    if (parentPath.pop() != MS::kSuccess)
+    {
+        return false;
+    }
+
+    return parentPath.node() == context_->sceneRoot;
 }
 
 MObject AnimationImporter::findExistingControlNode(const std::string &controlNodeName, const MObject &sceneRoot) const

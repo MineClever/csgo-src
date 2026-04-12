@@ -11,7 +11,11 @@
 namespace dmx_import_impl
 {
 
-MStatus ApplyTransform(const simple_dmx::Document &document, const simple_dmx::Element *dagElement, MObject object);
+MStatus ApplyTransform(
+    const simple_dmx::Document &document,
+    const simple_dmx::Element *dagElement,
+    MObject object,
+    const MMatrix &preTransform = MMatrix::identity);
 MObject CreateDagNode(const std::string &name, bool isJoint, MObject parent, MStatus &status);
 void CollectJointInfo(
     const simple_dmx::Document &document,

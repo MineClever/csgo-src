@@ -22,7 +22,6 @@ public:
 
 private:
     MStatus createImportRoot();
-    MStatus applyImportRotation();
     MStatus createJointHierarchy();
     MStatus applyBindPose();
     MStatus applyAnimation();
@@ -32,6 +31,7 @@ private:
 
     MObject findParentObject(const simple_smd::Node &node) const;
     const simple_smd::SkeletonPose *findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const;
+    bool isTopLevelNode(const simple_smd::Node &node) const;
 
     std::shared_ptr<const simple_smd::Document> document_;
     SmdImportOptions importOptions_;

@@ -62,6 +62,7 @@ private:
     bool shouldSkipAppendScalarAnimation(const MPlug &targetPlug) const;
     MObject findExistingControlNode(const std::string &controlNodeName, const MObject &sceneRoot) const;
     MStatus registerImportedControlPath(const MObject &controlNodeObject);
+    bool isTopLevelImportedPath(const MDagPath &targetPath) const;
     void registerScalarTargetBinding(
         const std::string &targetName,
         const dmx_import_translator::ScalarAttributeBinding &binding);

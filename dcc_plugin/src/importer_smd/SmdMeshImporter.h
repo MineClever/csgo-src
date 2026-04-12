@@ -2,6 +2,7 @@
 
 #include <common_smd/SimpleSmdDocument.h>
 #include <common/ImportPolicy.h>
+#include <common/ImportTransformCorrection.h>
 
 #include <memory>
 
@@ -17,7 +18,8 @@ public:
     SmdMeshImporter(
         std::shared_ptr<const simple_smd::Document> document,
         std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone,
-        dcc_import_policy::SceneImportPolicy scenePolicy);
+        dcc_import_policy::SceneImportPolicy scenePolicy,
+        dcc_import_transform::TransformCorrection transformCorrection);
 
     MStatus Import(MObject parent) const;
 
@@ -47,4 +49,5 @@ private:
     std::shared_ptr<const simple_smd::Document> document_;
     std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone_;
     dcc_import_policy::SceneImportPolicy scenePolicy_;
+    dcc_import_transform::TransformCorrection transformCorrection_;
 };
