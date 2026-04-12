@@ -595,6 +595,10 @@ MStatus DmxImportSession::LoadDocument()
     {
         maya_dmx::ReportWarning("maya_dmx: animation layer import options are parsed but not implemented yet; imported animation will still target the base scene.");
     }
+    else if (importOptions_.scenePolicy.forceDeltaAnimationLayer)
+    {
+        maya_dmx::ReportWarning("maya_dmx: forceDeltaAnimationLayer currently means a Maya-side relative animation layer built from absolute transform channels. It does not implement Source CDmeSequence delta/pre-delta or subtract/splinedelta semantics.");
+    }
 
     AppendImportDebugLog("session: load document end success");
     return MStatus::kSuccess;

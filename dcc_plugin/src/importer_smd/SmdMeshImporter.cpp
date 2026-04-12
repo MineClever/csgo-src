@@ -663,6 +663,13 @@ MStatus SmdMeshImporter::assignMaterial(const std::string &materialName, const M
         }
     }
 
+    status = maya_cmd::EnsureShaderRegisteredInDefaultShaderList(shaderObject);
+    if (!status)
+    {
+        maya_smd::ReportWarning(MString("maya_smd: failed to register shader in defaultShaderList for material group ") + materialName.c_str());
+        status = MS::kSuccess;
+    }
+
     MObject shadingGroupObject = smd_mesh_import_impl::FindNodeByName(shadingGroupName);
     if (shadingGroupObject.isNull())
     {

@@ -166,6 +166,10 @@ MStatus SmdImportSession::Run()
     {
         maya_smd::ReportWarning("maya_smd: animation layer import options are parsed but not implemented yet; imported animation will still target the base scene.");
     }
+    else if (importOptions.scenePolicy.forceDeltaAnimationLayer)
+    {
+        maya_smd::ReportWarning("maya_smd: forceDeltaAnimationLayer currently means a Maya-side relative animation layer built from absolute local TR keys. It does not implement Source delta-sequence subtraction semantics.");
+    }
 
     SmdSceneImporter importer(document, normalizedImportOptions);
     return importer.Import();

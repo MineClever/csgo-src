@@ -170,6 +170,13 @@ MStatus AssignFaceSetMaterials(
             return MStatus::kFailure;
         }
 
+        status = maya_cmd::EnsureShaderRegisteredInDefaultShaderList(shaderObject);
+        if (!status)
+        {
+            maya_dmx::ReportWarning(MString("maya_dmx: failed to register shader in defaultShaderList for ") + shaderName.c_str());
+            status = MS::kSuccess;
+        }
+
         MFnDependencyNode shaderNodeFn(shaderObject, &status);
         if (!status)
         {

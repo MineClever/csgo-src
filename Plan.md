@@ -220,6 +220,74 @@
     - 更大范围的 Valve 历史 DMX 兼容、未知字段保真、通用 DOM/codec。
     - UFE、USD、代理节点等非 DAG 混合场景对象的完整支持。
 
+- DMX 动画 importer/exporter 单独路线图（2026-04-13 整理）：
+  - 目标：
+    - 把 DMX 动画能力从“附着在 mesh / skin 主计划里的子项”改成单独演进的子域，避免骨骼动画、标量动画、facial 与更高层 clip/sequence 语义相互混淆。
+    - 明确当前代码已经稳定承诺的最小语义，以及中后期才会进入范围的高层语义，避免后续把宿主问题、几何问题和动画语义问题混写在同一条任务里。
+  - 当前 importer 边界：
+    - 骨骼动画：
+      - 已支持 `DmeVector3Log` -> Maya transform translate，`DmeQuaternionLog` -> Maya transform rotate。
+      - 当前目标是“把 DMX channel 映射成 Maya base animCurve 或 delta animation layer”，而不是恢复更高层 clip stack、非线性混合或约束求值。
+      - 当前稳定入口样例：`MostComplexSampleSet/vcaanim_VertexAnim.dmx`、`Ellis/DMX/animation/c1m1_intro_mechanic.dmx`。
+    - 标量动画：
+      - 已支持 `DmeFloatLog` -> 单一 Maya scalar plug，现阶段主要覆盖 transform scalar（如 `scaleX`）和最小控制器属性。
+      - 当前不承诺恢复表达式、utility graph 驱动或任意 dependency graph 重新布线；只承诺“明确目标 plug 已存在时”的 keyframe 写入。
+      - 当前稳定入口样例：`simple_float_animation.dmx`。
+    - facial 动画：
+      - 已支持最小 `flexWeight` 通道，同时驱动 blendShape weight 与最小 `DmeCombinationOperator` 控制器节点属性。
+      - 当前 facial importer 的承诺边界是“单条 control 值与单条 blendShape weight 的可见关键帧恢复”，不是完整 facial rig 图还原。
+      - 当前不承诺恢复 controls/controlValues 到更高层 rig 控制网络、pose solver、 corrective stack 或组合驱动规则。
+      - 当前稳定入口样例：`simple_blendshape_animation.dmx`。
+    - clip / sequence 语义：
+      - 当前 importer 只消费单个 `DmeChannelsClip` 的 channel/timeFrame 语义，把它视为一段可直接落到 Maya 时间轴的动画片段。
+      - `DmeAnimationList` 当前只是 clip 容器，不承担 Source 工具链里更高层 sequence、take、shot、track stack 的还原责任。
+      - 因此现阶段 importer 的稳定承诺是“clip 内 channel/timeFrame 正确落地”，而不是“多 clip 调度 / clip 切换 / sequence 编排”。
+  - 当前 exporter 边界：
+    - 骨骼动画：
+      - 已支持从 DAG transform 采样 position/orientation，导出最小 `DmeVector3Log / DmeQuaternionLog`。
+      - 当前导出模型是“单一 bake 后 clip”，不是多 clip、多 layer、非线性混合或约束语义导出。
+    - 标量动画：
+      - 已支持导出 transform scalar 与最小控制器/weight 标量通道，对应 `DmeFloatLog`。
+      - 当前 exporter 只负责“已有可读 plug 的 keyframe 序列”，不负责自动推断复杂 driver graph 的上游意图。
+    - facial 动画：
+      - 已支持最小 `flexWeight` 通道导出，服务于 blendShape weight 与最小 facial 控制器 roundtrip。
+      - 当前不承诺把 Maya 侧完整 blendShape rig、组合控制器网络或修正 shape 关系提升为更高层 Valve facial 语义。
+    - clip / sequence 语义：
+      - 当前 exporter 固定输出单个 `DmeAnimationList` + 单个 `DmeChannelsClip` + 单个 `DmeTimeFrame`。
+      - 这意味着当前导出结果语义是“一个 bake 后片段”，不包含 shot 切分、sequence 元数据、多个 clip 的命名/编排约定。
+  - 域边界约定：
+    - 骨骼动画域：
+      - 只讨论 transform TR 与其 delta-layer 行为，不把 skin、mesh、材质或 facial 控制器问题混入该域。
+      - 该域的主要 gate 继续使用 `vcaanim_VertexAnim`、`c1m1_intro_mechanic`、`ctm_fbi_anims/rom_skin.smd` 一类样例。
+    - 标量动画域：
+      - 只讨论 `DmeFloatLog <-> scalar plug` 的通道发现、覆盖策略、append/update 行为与 layer 边界。
+      - 该域不负责解决 blendShape 几何保真或 rig 拓扑恢复。
+    - facial 动画域：
+      - 只讨论 `flexWeight`、`DmeCombinationOperator`、blendShape weight、controlValues 与对应 Maya 控制目标的映射。
+      - blendShape target 几何正确性仍归 deformer / geometry 域；facial 动画域只关注“动画通道是否正确驱动目标”。
+    - clip / sequence 域：
+      - 只讨论 `DmeAnimationList / DmeChannelsClip / DmeTimeFrame` 的结构约束、命名约定和多 clip 扩展。
+      - 不把单个 channel 的数值正确性问题放到这一层处理。
+  - 下一阶段实施顺序：
+    - 第一阶段：巩固现有最小闭环。
+      - 保持 importer/exporter 对“单 animationList + 单 channelsClip”模型的稳定支持，不在这一阶段引入多 clip 导出。
+      - 把现有 gate 明确分组为骨骼、标量、facial 三类，避免回归报告继续以“动画总开关”混合失败。
+    - 第二阶段：把 facial 与标量彻底拆分。
+      - 在代码结构上把 `flexWeight` 特判与通用 `DmeFloatLog` 标量通道继续解耦，形成“通用 scalar 通道层 + facial target 解析层”。
+      - 让 `simple_float_animation` 与 `simple_blendshape_animation` 的失败归因不再共用一套逻辑。
+    - 第三阶段：补 clip/sequence 显式边界。
+      - 先在 common / animation 子域里增加显式数据模型，区分“channel sample”“clip container”“sequence metadata”三层。
+      - 在 importer/exporter 都还未准备好多 clip roundtrip 之前，继续把 sequence/take 语义标记为未承诺能力，而不是隐式缺失。
+    - 第四阶段：在 clip 层稳定后再评估更高层扩展。
+      - 只有当单 clip 骨骼/标量/facial 回归和 delta-layer 目标匹配都稳定后，才评估多 `DmeChannelsClip`、sequence 命名约定、shot/take 元数据等更高层导入导出。
+  - 对应回归分层建议：
+    - 骨骼动画 gate：`MostComplexSampleSet/vcaanim_VertexAnim.dmx`、`Ellis/DMX/animation/c1m1_intro_mechanic.dmx`。
+    - 标量动画 gate：`simple_float_animation.dmx`。
+    - facial 动画 gate：`simple_blendshape_animation.dmx`。
+    - clip / sequence 结构 gate：
+      - 短期：继续校验“单 animationList / 单 channelsClip / 单 timeFrame”结构稳定。
+      - 中期：若引入多 clip 样例，再新增独立 gate；在此之前不把多 clip 失败记到骨骼/标量/facial 域里。
+
 - 已修复问题（2026-04-09 本轮完成）：
   - **Maya 2022 API 兼容性**：`getAlias` → `plugsAlias`；`MFn::kSkinCluster` → `MFn::kSkinClusterFilter`；补充 `#include <maya/MDoubleArray.h>`；`setAlias` 参数类型错误修正。受影响文件：`DmxExportAnimation.cpp`、`DmxExportDeformers.cpp`、`DmxImportDeformers.cpp`。
   - **MDGModifier 崩溃**：将 blendShape target 临时节点删除从 `MDGModifier::deleteNode`（析构时触发回调崩溃）回退为 MEL `delete` 命令。受影响文件：`DmxExportDeformers.cpp`、`DmxImportDeformers.cpp`。
@@ -871,6 +939,253 @@
       - `simple_blendshape_animation` 二次 append 后仍只有一个 `*combinationOperator_controls` 与一个 `*blendshapeAnimMeshShape_blendShape`，且手工改写的 `smile=0.75` 保持不变；
       - `MostComplexSampleSet/chr_mesh.smd` 二次 append 后 `*pelvis` 与 `*tex_d_bmp_grp1` 仍各只有一个实例。
   - 2026-04-13：任务盘点同步（DMX/SMD 剩余事项核对）。本次已关闭“SMD/DMX append 挂起问题”这一项；当前剩余任务收敛为 `simple_blendshape_animation` 几何保真、复杂复合动画样例补强、材质网络补全、facial/rig 语义扩展，以及中期的 translator/common 层继续收口。
+  - 2026-04-13：已复核 SourceEngine / studiomdl 对 delta animation 的真实处理方式，并据此修正插件当前语义表述：
+    - Source 侧结论：
+      - 原始 DMX `DmeAnimationList / DmeChannelsClip / DmeChannel / Dme*Log` 在 `studiomdl` 读入阶段先被当作绝对通道求值得到逐帧骨骼 pose；见 [dmxsupport.cpp](src/utils/studiomdl/dmxsupport.cpp) 的 `LoadAnimations()` / `ComputeFramePose()`。
+      - 真正的“delta animation”不是在读取 channel 时直接拿 bind pose 做减法，而是在 sequence / animcmd 层通过 `subtract`、`presubtract`、`lineardelta`、`splinedelta` 等命令，把一段动画转换成相对参考动画或相对插值参考的差值动画；见 [simplify.cpp](src/utils/studiomdl/simplify.cpp) 的 `subtractBaseAnimations()` / `linearDelta()`，以及 [studiomdl.cpp](src/utils/studiomdl/studiomdl.cpp) 对这些 animcmd 的解析。
+      - `CDmeSequence::m_bDelta / m_bPreDelta` 与 `STUDIO_DELTA` 属于编译期 sequence 语义，不等价于宿主里“把绝对 key 写进 Maya animation layer 时先减一个参考姿势”。
+      - 对 DMX/SMD 源动画到 MDL 的坐标变换，Source 还区分 `src bone transforms`；注释明确为 `pretransform * bone transform * posttransform`，并且 `studiomdl` 对 delta animation 有“不要再额外 re-orient”这一层处理。
+    - 对当前插件的评估：
+      - 现有 `forceDeltaAnimationLayer` 实现本质上是 Maya 宿主侧的“relative animation layer”工作流：把绝对 transform channel 相对当前宿主 pose 或首帧做差，再写入 animation layer。
+      - 它适合解决 update 导入不覆写 base animCurve 的宿主工作流问题，但不应继续宣称为 Source `delta animation` 语义本身。
+      - 当前插件也还没有解析 `CDmeSequence`、`m_bDelta`、`m_bPreDelta` 或 `AnimCmd subtract/presubtract/splinedelta`，因此不能把这条 Maya relative-layer 路径当成 Valve delta sequence 支持已完成。
+    - 本轮已做的修正：
+      - [performDmxImport.mel](dcc_plugin/src/mel/performDmxImport.mel) 已把 UI 文案从“Delta Layer / Bind Pose”收紧为“Relative Layer / Current Pose”，并在注释里明确这是 Maya 侧相对层，不是 Source 编译期 delta sequence。
+      - [DmxImportSession.cpp](dcc_plugin/src/importer/DmxImportSession.cpp) 与 [SmdImportSession.cpp](dcc_plugin/src/importer_smd/SmdImportSession.cpp) 已新增 warning，显式说明 `forceDeltaAnimationLayer` 目前只代表宿主相对层语义。
+    - 后续影响：
+      - 若后续要真正支持 Valve delta animation，应新增独立任务，围绕 `CDmeSequence` / `AnimCmd` / sequence-level delta-preDelta 语义实现，而不是继续在当前 `forceDeltaAnimationLayer` 开关上叠加 Source delta 语义。
+  - 2026-04-13：已完成“在 Maya 中实现 Source Engine 相对参考动画差值模式”的实现路径评估，结论如下：
+    - 目标重新定义：
+      - 这里真正要实现的不是“把绝对 key 减去当前宿主 pose 后写入 animation layer”，而是尽量在 Maya 侧复现 Source `studiomdl` 对 `subtract / presubtract / lineardelta / splinedelta` 的差值动画计算语义。
+      - 其本质是：先有一组可求值的绝对动画 clip，再按 sequence / animcmd 指定的参考动画、参考帧或首末帧插值，计算逐骨骼相对差值。
+    - 当前代码与目标之间的缺口：
+      - [DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 目前只直接消费 `animationList -> channels -> log`，并把 `position/orientation/float` 直接写到 Maya plug 或 animation layer；它没有 `CDmeSequence`、`AnimCmd`、参考 clip、参考帧、`m_bDelta/m_bPreDelta` 的任何上下文。
+      - 当前 `forceDeltaAnimationLayer` 只对 transform 通道做：
+        - `translationDelta = sampledTranslation - referenceTranslation`
+        - `rotationDelta = sampledRotation * inverse(referenceRotation)`
+      - 其中 reference 仅有“当前宿主 pose”或“首帧”两种来源；这与 Source `subtractBaseAnimations()` / `linearDelta()` 所依赖的“参考动画 clip + 指定 frame / 首末帧插值 + pre/post 语义”不是同一层问题。
+      - 当前 importer 也没有 `src bone transforms`、`sequence flags`、`animcmd` 解释层，因此即便继续扩展 `forceDeltaAnimationLayer`，也无法自然收敛到真正的 Source delta 语义。
+    - 推荐实现路径：
+      - 第 1 步：在插件侧补一层显式动画中间表示，不直接把 `DmeChannel` 写进 Maya。
+        - 这层至少要有：
+          - clip 名称
+          - 目标骨骼 / 目标属性
+          - 逐帧绝对值采样结果
+          - 骨骼层级与 rotate order
+          - 参考 clip / 参考 frame / pre-post 标志
+        - 没有这层，就无法把 Source sequence-level delta 计算和 Maya 写入层分离。
+      - 第 2 步：只做 DMX 绝对 clip 求值，不碰 Maya scene。
+        - 参考 Source [dmxsupport.cpp](src/utils/studiomdl/dmxsupport.cpp) 的思路，先把 `DmeChannelsClip` 求值成逐帧骨骼 pose 缓冲。
+        - 这一阶段的目标不是导入，而是离线得到“每帧每骨骼的绝对 TR / quaternion”。
+      - 第 3 步：在中间表示层实现 Source delta 运算。
+        - 参考 [simplify.cpp](src/utils/studiomdl/simplify.cpp)：
+          - `subtractBaseAnimations()`：按参考动画指定 frame 做差；
+          - `linearDelta()`：按首末帧插值得到参考 pose 后做差；
+          - 需要保留 pre/post 语义，而不是只有单一“当前 pose 减法”。
+        - 这一步建议先只覆盖骨骼 transform，不把 facial / float channel 一起拉进来。
+      - 第 4 步：把“差值后的绝对结果”决定如何落地到 Maya。
+        - 路线 A：直接 bake 到 base animCurve。
+        - 路线 B：写入 Maya animation layer，作为宿主编辑体验层。
+        - 关键点：animation layer 只是 Maya 端的落地形式，不应再承担“定义 delta 语义”的职责。
+      - 第 5 步：等骨骼通道稳定后，再评估标量 / facial。
+        - `flexWeight`、controlValues、blendShape weight 是否需要 Source 风格相对差值，应单独定义；不能默认沿用骨骼 delta 公式。
+    - 风险评估：
+      - 高风险点不在数学公式本身，而在数据入口缺失：
+        - 需要解析 `CDmeSequence` / `AnimCmd` / reference clip 关系；
+        - 需要把仅有 `animationList` 的“裸 clip 文件”和带 sequence 语义的“资产级文件”区分开；
+        - 需要定义“当 DMX 文件没有 sequence / animcmd 时，插件是否仍允许 host-relative layer 工作流”。
+      - 如果在现有 `forceDeltaAnimationLayer` 上继续叠 Source 语义，会把：
+        - Maya 宿主编辑层
+        - Source sequence 编译层
+        - update import 合并层
+        三件事混在一起，后续很难验证正确性。
+    - 是否移除 `forceDeltaAnimationLayer` 的建议：
+      - 结论：建议把它从“Source delta 主线”中剥离，不建议继续把它当作 Source delta 支持来扩展。
+      - 短期更稳的做法：
+        - 保留底层实现，明确改称“host-relative animation layer”；
+        - 从后续 Source delta 任务、文档和 gate 命名中移出，不再把它计作 delta animation 支持。
+      - 如果后续团队希望彻底消除语义混淆，也可以直接删除该功能；但删除前应先确认：
+        - 当前 `ctm_fbi_anims/rom_skin.smd`、`vcaanim_VertexAnim.dmx`、`c1m1_intro_mechanic.dmx` 这几条宿主 layer gate 是否还需要保留为“编辑体验功能”。
+      - 当前更推荐的是“保留实现、降级定位、停止拿它代表 Source delta”，而不是立刻删代码。
+  - 2026-04-13：已评估“外部导入动画时可选导入为 additive / override 动画层，并与现有/计划功能正确组合”的实现路径，结论如下：
+    - 目标拆分：
+      - 需求 A：把导入动画写入 Maya animation layer，并支持用户明确选择 additive 或 override。
+      - 需求 B：这条 animation layer 工作流要能与 `importMode=create/update/append`、现有 `forceDeltaAnimationLayer`、以及后续真正的 Source delta sequence 语义正确共存。
+      - 这两件事不应混成一个布尔开关；当前 `importAnimationToLayer` / `animationLayerMode` / `forceDeltaAnimationLayer` 仍然不够清晰。
+    - 当前代码现状：
+      - 选项层已经预留了：
+        - `importAnimationToLayer`
+        - `animationLayerMode = new | replace`
+        - `forceDeltaAnimationLayer`
+      - 但当前真正落地到 Maya layer 的只有 `forceDeltaAnimationLayer` 这条 transform-only 路径；普通 “导入到 layer” 仍只会 warning 后回退到 base scene。
+      - 公共 helper 已有 [EnsureAnimationLayer](dcc_plugin/src/common/MayaCommandUtils.cpp)、[AddPlugToAnimationLayer](dcc_plugin/src/common/MayaCommandUtils.cpp)、[SetKeyframesOnAnimationLayer](dcc_plugin/src/common/MayaCommandUtils.cpp)；但还没有把 layer 的“additive / override 模式”建模进 import policy，也没有在创建 layer 时设置 `animLayer -override`。
+    - Maya 语义核对：
+      - Autodesk `animLayer` 命令原生支持 `-override`；layer 默认是 additive，开启 override 后变成覆盖层。
+      - 因此“导入到 additive 层 / 导入到 override 层”是 Maya 原生能力，不需要额外手工搭 graph。官方命令文档与 Layer Mode 说明已确认这点。
+    - 推荐实现方式：
+      - 第 1 步：把“是否导入到 layer”和“layer 的数学模式”拆成两个独立概念。
+        - 建议新增：
+          - `animationTarget = base | layer`
+          - `animationLayerBlendMode = additive | override`
+          - `animationLayerWriteMode = absolute | relative`
+        - 其中：
+          - `base` = 直接写 base scene animCurve
+          - `layer + additive + absolute` = 把原始绝对值 key 写进 additive layer（只在本身适合 additive 的通道上可靠）
+          - `layer + additive + relative` = 先算相对参考差值，再写 additive layer；这才是当前 `forceDeltaAnimationLayer` 的真实定位
+          - `layer + override + absolute` = 最适合大多数“外部导入动画但不覆写 base curve”的工作流
+      - 第 2 步：优先实现 `override layer + absolute`，不要先做 additive。
+        - 原因：
+          - 当前 importer 本来拿到的就是绝对 transform / float / facial channel。
+          - 把绝对值写入 override layer，和当前数据形态最匹配，不需要额外参考姿势。
+          - 它与 `update` 语义最容易组合：base scene 保持不变，新导入动画完全落到 layer 上，用户可以开关/混合/替换。
+        - 这应成为第一个正式支持的 layer 工作流。
+      - 第 3 步：把当前 `forceDeltaAnimationLayer` 重命名并降级为 `relative additive layer`。
+        - 它不应再作为“导入到 layer”的总代表。
+        - 更合理的定位是：
+          - 仅在 transform 通道上可用
+          - 仅作为 additive layer 的一种写入模式
+          - 默认隐藏在“高级选项”里，避免普通用户误选
+      - 第 4 步：只有在参考模型与通道边界清楚后，才开放 `additive + relative` 给 float / facial。
+        - 当前骨骼 transform 的相对差值公式已经存在。
+        - 但对 `flexWeight`、controlValues、blendShape weight，是否适合 additive 叠加，需要单独定义，不能直接沿用 transform 处理。
+        - 所以第一阶段 additive layer 建议只开放 transform 通道。
+    - 与现有 `importMode` 的组合建议：
+      - `create + layer`：
+        - 可支持，但实用价值次于 `update + layer`；更像“导入一个新角色并把动画直接放进 layer”。
+      - `update + override layer`：
+        - 应作为首选主线。复用已有 hierarchy / mesh / skin，同时把新动画导入独立 layer，不覆写 base animCurve。
+      - `update + additive(relative) layer`：
+        - 可保留给 transform-only 高级工作流；当前 `forceDeltaAnimationLayer` 最适合被收拢到这一档。
+      - `append + layer`：
+        - 不建议第一阶段支持。append 的对象匹配、缺失节点补建、已有 control/blendShape 复用本来就复杂，再叠 layer 会明显增加排障面。
+      - `animationOnly + layer`：
+        - 中期可做，但前提是“只匹配已有目标、不创建新对象”的语义先明确；否则 layer 会和对象导入路径纠缠。
+    - 与计划中的 “Source delta sequence” 的关系：
+      - `override/additive animation layer` 是 Maya 宿主侧编辑/合成工作流。
+      - Source `delta / predelta / subtract / splinedelta` 是 sequence 编译语义。
+      - 这两条线应保持独立：
+        - 前者决定导入结果如何落到 Maya layer 栈里；
+        - 后者决定若要复现 Source 相对参考动画，导入前应如何计算出差值通道。
+      - 因此：
+        - 先实现 `override layer + absolute`
+        - 再把当前 `forceDeltaAnimationLayer` 收敛为 `additive(relative)` 特殊模式
+        - 最后再评估是否把未来的 Source delta 计算结果也允许输出到 additive layer
+    - UI / 选项层建议：
+      - DMX / SMD 都应统一成同一套选项：
+        - `Animation Target`: `Base Scene` / `Animation Layer`
+        - `Layer Mode`: `Override` / `Additive`
+        - `Write Mode`: `Absolute` / `Relative (Transform Only, Experimental)`
+        - `Reference Mode`: `Current Pose` / `First Frame`（仅 `Relative` 时启用）
+      - 现有 `forceDeltaAnimationLayer` 建议逐步废弃为内部兼容选项，避免继续暴露成主要 UI 开关。
+    - 实施优先级：
+      - 第一优先级：`update + override layer + absolute`
+      - 第二优先级：DMX/SMD 统一 UI 与 option string
+      - 第三优先级：把当前 relative transform layer 收口成“Additive + Relative”
+      - 第四优先级：再评估 float / facial layer 与 Source delta 计算的组合
+  - 2026-04-13：已按 Maya 官方文档复核 [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 里的命令层入口，得到以下替换评估：
+    - 已确认适合保留 API 写法、无需再回退命令层的部分：
+      - `DeleteNodeByName`：继续使用 `MGlobal::deleteNode()`，官方 C++ API 已直接支持。
+      - `CreateNamedDependencyNode`：继续使用 `MFnDependencyNode::create()`。
+      - `GetPrunedHistory`：继续使用 `MItDependencyGraph`，官方 C++ API 已直接覆盖 DG 遍历。
+      - `EnsureRenderableShadingGroup` / `AddDagPathToSet` / `AddComponentToSet`：继续使用 `MFnSet` / `MFnMesh`，这部分已经是正确的 API 路径。
+    - 已确认“可部分 API 化，但很难彻底脱离命令层”的部分：
+      - `EnsureAnimationLayer`：
+        - `exists` 查询与创建节点本身可以尝试改为 `TryGetNodeByName` + `MFnDependencyNode::create("animLayer")`；
+        - 但 animation layer 的真正行为仍依赖 `animLayer` 命令的 `-attribute`、`-override`、`-findCurveForPlug`、`-writeBlendnodeDestinations` 等命令级语义。
+        - 结论：最多能做“部分 API 化”，不能承诺完全无命令层。
+      - `ClearAnimationLayerCurve` / `SetKeyframesOnAnimationLayer`：
+        - 单纯建 animCurve 可以用 API；
+        - 但“某个 plug 在某个 layer 上对应哪条 curve / 哪个 blend node / layered plug”是 `animLayer` 命令显式暴露、而 C++ API 没有同等高层 helper 的语义。
+        - 结论：在不手工重建整套 layer blend graph 前，不建议贸然移除命令层。
+    - 已确认当前仍应保留命令层的部分：
+      - `RegenerateBlendShapeTarget`：
+        - 官方文档表明 `sculptTarget -regenerate` 是命令级操作；当前没有等价且低风险的 C++ API helper 能返回相同行为。
+      - `AddSkinClusterInfluence`：
+        - 官方文档表明 `skinCluster -e -addInfluence` 负责在已有 skinCluster 上扩 influence，并维护 bind/bindPose 相关内部状态。
+        - 虽然可以手工改连接与数组，但风险明显高于当前命令封装。
+      - `EnsureSkinClusterBindPose`：
+        - 官方文档表明 `dagPose -save -selection -bindPose` 是显式命令语义；当前没有同等层级的 public C++ convenience API。
+      - `GetMayaUserPrefDirectory`：
+        - 官方文档里的 `internalVar -userPrefDir` 仍是专门的命令入口；未查到与之等价的 public C++ API。
+      - `ListOptionVarNames`：
+        - `MGlobal` 提供了 optionVar 的读写/exists/remove API，但“枚举全部 optionVar 名称”仍是 `optionVar -list` 的命令语义。
+    - 推荐落地顺序：
+      - 第一批：只处理“纯包装型 animLayer exists/create”这类低风险点，前提是保持行为与现有命令路径一致。
+      - 第二批：若后续 animation layer 体系继续扩展，再评估是否重构为“命令层只保留 layer graph 相关操作，其余全部 API 化”。
+      - 暂不建议动：
+        - `sculptTarget`
+        - `skinCluster -addInfluence`
+        - `dagPose`
+        - `internalVar -userPrefDir`
+        - `optionVar -list`
+    - 当前结论：
+      - `MayaCommandUtils.cpp` 不适合以“把所有 MEL 语法都换成 API”为目标推进。
+      - 更合理的目标是：优先替换掉那些已有稳定 public API 对等物的命令包装；涉及 Maya 高层工作流语义（animation layer / skinCluster / dagPose / sculptTarget / internalVar / optionVar list）的部分保留命令层。
+  - 2026-04-13：已执行 `MayaCommandUtils.cpp` 第一批低风险 API 化。
+    - 本轮改动：
+      - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 的 `EnsureAnimationLayer()` 已把 layer existence 检查与节点创建从 `animLayer -q -ex` / `animLayer "<name>"` 改为 API 路径：
+        - existence：复用 `TryGetNodeByName()` + `MFnDependencyNode` 类型校验
+        - create：复用 `CreateNamedDependencyNode("animLayer", ...)`
+      - `replaceExisting` 时仍沿用 `DeleteNodeByName()`。
+    - 本轮刻意未动：
+      - `animLayer -e -attribute`
+      - `animLayer -q -findCurveForPlug`
+      - `setKeyframe -animLayer`
+      - `skinCluster -e -addInfluence`
+      - `dagPose -save -selection -bindPose`
+      - `sculptTarget -regenerate`
+      - `internalVar -userPrefDir`
+      - `optionVar -list`
+    - 验证：
+      - `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd -- /m:1` 通过。
+      - `python -m py_compile dcc_plugin\tools\MayaBatchRegression.py` 通过。
+    - 当前状态：
+      - `MayaCommandUtils` 的 animation layer 入口已开始“exists/create 走 API、graph/edit/query 仍走命令层”的混合模式；这是当前风险最可控的收口边界。
+  - 2026-04-13：已继续评估 `animLayer -attribute` 是否能在“不接管整个 layer graph”的前提下再收窄一点，结论如下：
+    - 官方文档与 API 现状：
+      - `animLayer` 命令文档明确把 `-attribute`、`-findCurveForPlug`、`-layeredPlug`、`-writeBlendnodeDestinations` 暴露为 animation layer 的高层工作流入口，说明这一步不仅仅是“把 plug 放进一个 set”。
+      - `animLayer` 节点本身确实是 `kAnimLayer / kSet`，理论上可通过 `MFnSet` 看到 set 成员；但文档同时说明 layer 还维护 `blendNodes`、pairBlend/层混合关系等额外结构。
+      - Maya C++ API 里，`MAnimUtil::findAnimationLayers( plug, layers, plugs )` 可以查询“某个 plug 当前属于哪些 animation layer”，但没有对应的“把 plug 安全加入某 layer 并补齐内部 blend graph”的对等 public API。
+      - Maya 2027 新增了 `MAnimUtil::createAnimCurve/findAnimCurve/findBlendNodeInputPlug` 一类 layer-aware helper，但当前项目锁定 Maya 2022.5，不能依赖这批新 API。
+    - 评估结论：
+      - `animLayer -attribute` 在 Maya 2022 下不适合直接替换成纯 API。
+      - 如果只调用 `MFnSet::addMember(MPlug)`，大概率只能完成“集合归属”，无法保证 layer 的 blend node / curve 目的端 / layered plug 元数据被正确建立，因此风险高于收益。
+    - 可接受的“再收一点”方案：
+      - 先用 `MAnimUtil::findAnimationLayers()` 做前置查询：
+        - 若目标 plug 已经属于目标 layer，则直接跳过 `animLayer -attribute`；
+        - 只有当 plug 尚未加入该 layer 时，才调用命令层。
+      - 这样可以把 `animLayer -attribute` 从“每次写 key 前都盲调”收窄到“仅在首次挂接 layer 成员关系时才调一次”，但不需要自己接管整套 layer graph。
+      - 同时可补一个 layer 节点级 API 路径：
+        - 创建 layer 后，`override` / `weight` / `mute` 这类 animLayer 节点自身属性可以考虑直接走 `MFnDependencyNode` / `MPlug` 写值，而不是都留给命令层。
+    - 当前建议：
+      - 可以做：
+        - `findAnimationLayers()` 前置查询
+        - layer 节点自身属性的 API 写入
+      - 暂不建议做：
+        - 用 `MFnSet::addMember(MPlug)` 直接替代 `animLayer -attribute`
+        - 在 Maya 2022 上手工重建 `findCurveForPlug / layeredPlug / blendNodes` 图结构
+  - 2026-04-13：修复 DMX/SMD 导入材质未出现在 `defaultShaderList` 的问题。
+    - 原因确认：
+      - 现有导入路径会创建 shader 与 shadingEngine，并完成材质指派，但没有像 Maya 原生命令或外部脚本那样，把 `shader.message` 挂到 `defaultShaderList1.shaders[*]`，因此不会出现在 Hypershade 的默认 shader 列表里。
+      - 参考外部脚本 [LL_ReadMeshData.py](D:/_Code_Here/Git/MayaTools/vaccineKiller/scripts/Menu_Script/Pipeline/Python/LL_ReadMeshData.py) 的 `mayaApiCreateMat` 处理，核心补充动作就是把 shader 注册进 `defaultShaderList1`。
+    - 本次实现：
+      - 在 [MayaCommandUtils.h](dcc_plugin/src/common/MayaCommandUtils.h) / [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 新增 `EnsureShaderRegisteredInDefaultShaderList()`。
+      - 该 helper 走 Maya API 实现：
+        - 通过 `MFnDependencyNode::classification()` 只处理 `shader/surface` 节点；
+        - 查找 `defaultShaderList1`（并兼容 `:defaultShaderList1`）；
+        - 检查 shader 的 `message` 是否已经连到 `defaultShaderList1.shaders[*]`；
+        - 若未连接，则用 `MDGModifier::connect()` 追加到下一个可用逻辑索引。
+      - DMX 与 SMD 两条材质创建路径都已接入该 helper：
+        - [DmxImportMeshMaterial.cpp](dcc_plugin/src/importer/DmxImportMeshMaterial.cpp)
+        - [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp)
+      - 若注册失败，当前只报 warning，不中断导入，以免把“Hypershade 列表展示问题”升级成导入失败。
+    - 验证：
+      - `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd -- /m:1` 通过。
+      - `mayapy` 导入 [MostComplexSampleSet/chr_mesh.smd](dcc_plugin/samples/MostComplexSampleSet/chr_mesh.smd) 验证通过，生成材质已连接到 `defaultShaderList1.shaders[5/6]`。
+      - `mayapy` 导入 [MostComplexSampleSet/chr_mesh.dmx](dcc_plugin/samples/MostComplexSampleSet/chr_mesh.dmx) 验证通过，生成材质已连接到 `defaultShaderList1.shaders[5/6]`。
+    - 结论：
+      - “材质已创建但不出现在 `defaultShaderList`”这一项已关闭。
+      - 后续材质主线仍是更完整的材质网络恢复，不再是 shader list 注册问题。
 
 ## 环境与工具链说明
 

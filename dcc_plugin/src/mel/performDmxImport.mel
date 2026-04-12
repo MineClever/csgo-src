@@ -241,16 +241,16 @@ global proc string DmxImportOptionsUI(string $parent)
             separator -style "in";
             text -align "left" -label "Animation Layer  (Update mode only)";
             checkBoxGrp -numberOfCheckBoxes 1
-                -label "Delta Layer"
-                -label1 "Force Into Animation Layer as Deltas"
-                -annotation "When importing with Update mode, routes all animation into a Maya animation layer using delta encoding instead of writing directly to base channels."
+                -label "Relative Layer"
+                -label1 "Force Into Animation Layer as Relative Keys"
+                -annotation "When importing with Update mode, routes transform animation into a Maya animation layer by subtracting a host-side reference pose instead of writing directly to base channels. This is not Source's compiled delta-sequence semantics."
                 -changeCommand "MayaDmxImport_updateDeltaUI"
                 dmxImportForceDeltaLayer;
             optionMenuGrp
                 -label "Reference Mode"
-                -annotation "Bind Pose: uses current joint transforms as the zero-delta reference. First Frame: uses the first animation frame as the reference."
+                -annotation "Current Pose: uses the current local transforms on reused Maya nodes as the zero-reference pose. First Frame: uses the first imported animation frame as the reference. Both modes are Maya-side relative layering, not Source delta/pre-delta sequence evaluation."
                 dmxImportDeltaRefMode;
-                menuItem -label "Bind Pose";
+                menuItem -label "Current Pose";
                 menuItem -label "First Frame";
             separator -style "in";
             text -align "left" -label "Transform Correction";

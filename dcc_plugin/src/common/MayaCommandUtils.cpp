@@ -144,6 +144,133 @@ MStatus EnsureRenderableShadingGroup(const MString &nodeName, MObject &setObject
     return status ? MS::kSuccess : MS::kFailure;
 }
 
+MStatus EnsureShaderRegisteredInDefaultShaderList(const MObject &shaderObject)
+{
+    if (shaderObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status;
+    MFnDependencyNode shaderFn(shaderObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    const MString classification = MFnDependencyNode::classification(shaderFn.typeName());
+
+    if (classification.indexW("shader/surface") < 0)
+    {
+        return MS::kSuccess;
+    }
+
+    MObject defaultShaderListObject;
+    if ((!TryGetNodeByName("defaultShaderList1", defaultShaderListObject) || defaultShaderListObject.isNull()) &&
+        (!TryGetNodeByName(":defaultShaderList1", defaultShaderListObject) || defaultShaderListObject.isNull()))
+    {
+        return MS::kFailure;
+    }
+
+    MFnDependencyNode defaultShaderListFn(defaultShaderListObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug shadersPlug = defaultShaderListFn.findPlug("shaders", true, &status);
+    if (!status || !shadersPlug.isArray())
+    {
+        return MS::kFailure;
+    }
+    const MString shadersPlugName = shadersPlug.name();
+
+    MPlug messagePlug = shaderFn.findPlug("message", true, &status);
+    if (!status || messagePlug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MPlugArray destinationConnections;
+    messagePlug.connectedTo(destinationConnections, false, true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (unsigned int connectionIndex = 0; connectionIndex < destinationConnections.length(); ++connectionIndex)
+    {
+        const MPlug destinationPlug = destinationConnections[connectionIndex];
+        if (destinationPlug.isNull() || destinationPlug.node() != defaultShaderListObject)
+        {
+            continue;
+        }
+
+        const MPlug owningArrayPlug = destinationPlug.isElement() ? destinationPlug.array() :
+            (destinationPlug.isChild() ? destinationPlug.parent() : destinationPlug);
+        if (owningArrayPlug.name() == shadersPlugName)
+        {
+            return MS::kSuccess;
+        }
+    }
+
+    unsigned int nextLogicalIndex = 0;
+    const unsigned int existingElementCount = shadersPlug.evaluateNumElements();
+    for (unsigned int elementIndex = 0; elementIndex < existingElementCount; ++elementIndex)
+    {
+        const MPlug existingElement = shadersPlug.elementByPhysicalIndex(elementIndex, &status);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        nextLogicalIndex = std::max(nextLogicalIndex, existingElement.logicalIndex() + 1);
+    }
+
+    MPlug targetElementPlug = shadersPlug.elementByLogicalIndex(nextLogicalIndex, &status);
+    if (!status || targetElementPlug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MDGModifier modifier;
+    status = modifier.connect(messagePlug, targetElementPlug);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    status = modifier.doIt();
+    if (status)
+    {
+        return MS::kSuccess;
+    }
+
+    destinationConnections.clear();
+    messagePlug.connectedTo(destinationConnections, false, true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (unsigned int connectionIndex = 0; connectionIndex < destinationConnections.length(); ++connectionIndex)
+    {
+        const MPlug destinationPlug = destinationConnections[connectionIndex];
+        if (destinationPlug.isNull() || destinationPlug.node() != defaultShaderListObject)
+        {
+            continue;
+        }
+
+        const MPlug owningArrayPlug = destinationPlug.isElement() ? destinationPlug.array() :
+            (destinationPlug.isChild() ? destinationPlug.parent() : destinationPlug);
+        if (owningArrayPlug.name() == shadersPlugName)
+        {
+            return MS::kSuccess;
+        }
+    }
+
+    return MS::kFailure;
+}
+
 MStatus ConnectPlugsForce(const MPlug &sourcePlug, const MPlug &destinationPlug)
 {
     if (sourcePlug.isNull() || destinationPlug.isNull())
@@ -504,41 +631,47 @@ MStatus EnsureAnimationLayer(
         return MS::kFailure;
     }
 
-    int layerExists = 0;
-    MString existsCommand("animLayer -q -ex \"");
-    existsCommand += layerName;
-    existsCommand += "\"";
-    MStatus status = MGlobal::executeCommand(existsCommand, layerExists, false, false);
-    if (!status)
+    MObject existingLayerObject;
+    const bool layerExists = TryGetNodeByName(layerName, existingLayerObject) &&
+        !existingLayerObject.isNull() &&
+        existingLayerObject.hasFn(MFn::kDependencyNode);
+
+    MStatus status = MS::kSuccess;
+    if (layerExists)
     {
-        return MS::kFailure;
+        MFnDependencyNode existingLayerFn(existingLayerObject, &status);
+        if (!status || existingLayerFn.typeName() != "animLayer")
+        {
+            return MS::kFailure;
+        }
     }
 
-    if (layerExists != 0 && replaceExisting)
+    if (layerExists && replaceExisting)
     {
         status = DeleteNodeByName(layerName);
         if (!status)
         {
             return MS::kFailure;
         }
-        layerExists = 0;
     }
 
-    if (layerExists == 0)
+    if (!layerExists || replaceExisting)
     {
-        MString createCommand("animLayer \"");
-        createCommand += layerName;
-        createCommand += "\"";
-        MString createdLayerName;
-        status = MGlobal::executeCommand(createCommand, createdLayerName, false, false);
-        if (!status)
+        MObject createdLayerObject;
+        status = CreateNamedDependencyNode("animLayer", layerName, createdLayerObject);
+        if (!status || createdLayerObject.isNull())
         {
             return MS::kFailure;
         }
 
         if (resolvedLayerName)
         {
-            *resolvedLayerName = createdLayerName;
+            MFnDependencyNode createdLayerFn(createdLayerObject, &status);
+            if (!status)
+            {
+                return MS::kFailure;
+            }
+            *resolvedLayerName = createdLayerFn.name();
         }
         return MS::kSuccess;
     }
