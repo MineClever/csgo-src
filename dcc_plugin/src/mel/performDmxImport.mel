@@ -15,11 +15,23 @@ global proc MayaDmxImport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_applyAxisCorrection`) {
         optionVar -intValue MayaDmx_applyAxisCorrection 1;
     }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_useSceneRoot`) {
+        optionVar -intValue MayaDmx_useSceneRoot 0;
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_readNamespaceFromScene`) {
+        optionVar -intValue MayaDmx_readNamespaceFromScene 1;
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_importMode`) {
+        optionVar -stringValue MayaDmx_importMode "create";
+    }
 }
 
 global proc string MayaDmxImport_defaultOptionsString()
 {
-    return "importMaterials=1;importSkin=1;importDeltaStates=1;applyAxisCorrection=1";
+    return "importMaterials=1;importSkin=1;importDeltaStates=1;applyAxisCorrection=1;useSceneRoot=0;readNamespaceFromScene=1;importMode=create";
 }
 
 global proc string MayaDmxImport_collectOptionVarString()
@@ -29,11 +41,17 @@ global proc string MayaDmxImport_collectOptionVarString()
     int $importSkin = `optionVar -q MayaDmx_importSkin`;
     int $importDeltaStates = `optionVar -q MayaDmx_importDeltaStates`;
     int $applyAxisCorrection = `optionVar -q MayaDmx_applyAxisCorrection`;
+    int $useSceneRoot = `optionVar -q MayaDmx_useSceneRoot`;
+    int $readNamespaceFromScene = `optionVar -q MayaDmx_readNamespaceFromScene`;
+    string $importMode = `optionVar -q MayaDmx_importMode`;
 
     return ("importMaterials=" + $importMaterials
         + ";importSkin=" + $importSkin
         + ";importDeltaStates=" + $importDeltaStates
-        + ";applyAxisCorrection=" + $applyAxisCorrection);
+        + ";applyAxisCorrection=" + $applyAxisCorrection
+        + ";useSceneRoot=" + $useSceneRoot
+        + ";readNamespaceFromScene=" + $readNamespaceFromScene
+        + ";importMode=" + $importMode);
 }
 
 global proc MayaDmxImport_applyOptionsString(string $options)
@@ -47,6 +65,9 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     int $importSkin = 1;
     int $importDeltaStates = 1;
     int $applyAxisCorrection = 1;
+    int $useSceneRoot = 0;
+    int $readNamespaceFromScene = 1;
+    string $importMode = "create";
 
     string $optionList[];
     tokenize($effectiveOptions, ";", $optionList);
@@ -65,6 +86,12 @@ global proc MayaDmxImport_applyOptionsString(string $options)
             $importDeltaStates = $parts[1];
         } else if ($parts[0] == "applyAxisCorrection") {
             $applyAxisCorrection = $parts[1];
+        } else if ($parts[0] == "useSceneRoot") {
+            $useSceneRoot = $parts[1];
+        } else if ($parts[0] == "readNamespaceFromScene") {
+            $readNamespaceFromScene = $parts[1];
+        } else if ($parts[0] == "importMode") {
+            $importMode = $parts[1];
         }
     }
 
@@ -79,6 +106,21 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     }
     if (`checkBoxGrp -exists dmxImportApplyAxisCorrection`) {
         checkBoxGrp -e -value1 $applyAxisCorrection dmxImportApplyAxisCorrection;
+    }
+    if (`checkBoxGrp -exists dmxImportUseSceneRoot`) {
+        checkBoxGrp -e -value1 $useSceneRoot dmxImportUseSceneRoot;
+    }
+    if (`checkBoxGrp -exists dmxImportReadNamespaceFromScene`) {
+        checkBoxGrp -e -value1 $readNamespaceFromScene dmxImportReadNamespaceFromScene;
+    }
+    if (`optionMenuGrp -exists dmxImportMode`) {
+        if ($importMode == "update") {
+            optionMenuGrp -e -select 2 dmxImportMode;
+        } else if ($importMode == "append") {
+            optionMenuGrp -e -select 3 dmxImportMode;
+        } else {
+            optionMenuGrp -e -select 1 dmxImportMode;
+        }
     }
 }
 
@@ -104,10 +146,33 @@ global proc string MayaDmxImport_collectOptionsString()
         $applyAxisCorrection = `checkBoxGrp -q -value1 dmxImportApplyAxisCorrection`;
     }
 
+    int $useSceneRoot = 0;
+    if (`checkBoxGrp -exists dmxImportUseSceneRoot`) {
+        $useSceneRoot = `checkBoxGrp -q -value1 dmxImportUseSceneRoot`;
+    }
+
+    int $readNamespaceFromScene = 1;
+    if (`checkBoxGrp -exists dmxImportReadNamespaceFromScene`) {
+        $readNamespaceFromScene = `checkBoxGrp -q -value1 dmxImportReadNamespaceFromScene`;
+    }
+
+    string $importMode = "create";
+    if (`optionMenuGrp -exists dmxImportMode`) {
+        int $modeSelect = `optionMenuGrp -q -select dmxImportMode`;
+        if ($modeSelect == 2) {
+            $importMode = "update";
+        } else if ($modeSelect == 3) {
+            $importMode = "append";
+        }
+    }
+
     return ("importMaterials=" + $importMaterials
         + ";importSkin=" + $importSkin
         + ";importDeltaStates=" + $importDeltaStates
-        + ";applyAxisCorrection=" + $applyAxisCorrection);
+        + ";applyAxisCorrection=" + $applyAxisCorrection
+        + ";useSceneRoot=" + $useSceneRoot
+        + ";readNamespaceFromScene=" + $readNamespaceFromScene
+        + ";importMode=" + $importMode);
 }
 
 global proc MayaDmx_importSetup(string $parent, int $forceFactorySettings)
@@ -142,6 +207,12 @@ global proc MayaDmx_importCallback(string $parent, int $doIt)
             optionVar -intValue MayaDmx_importDeltaStates $parts[1];
         } else if ($parts[0] == "applyAxisCorrection") {
             optionVar -intValue MayaDmx_applyAxisCorrection $parts[1];
+        } else if ($parts[0] == "useSceneRoot") {
+            optionVar -intValue MayaDmx_useSceneRoot $parts[1];
+        } else if ($parts[0] == "readNamespaceFromScene") {
+            optionVar -intValue MayaDmx_readNamespaceFromScene $parts[1];
+        } else if ($parts[0] == "importMode") {
+            optionVar -stringValue MayaDmx_importMode $parts[1];
         }
     }
 
@@ -182,6 +253,28 @@ global proc string DmxImportOptionsUI(string $parent)
                 -label1 "Apply Axis Correction (Z-up to Y-up)"
                 -annotation "Rotate the scene root to match Maya's scene up-axis. Disable for round-trip Maya->DMX->Maya workflows where data is already in the correct space."
                 dmxImportApplyAxisCorrection;
+
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Root Target"
+                -label1 "Import Directly Into Scene Root"
+                -annotation "When enabled, import skips the dedicated wrapper root and places content directly in the Maya scene."
+                dmxImportUseSceneRoot;
+
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Namespace"
+                -label1 "Match Current Maya Namespace"
+                -annotation "When enabled, append/update tries to reuse nodes under the current Maya namespace."
+                dmxImportReadNamespaceFromScene;
+
+            optionMenuGrp
+                -label "Merge Mode"
+                -annotation "Create creates new nodes. Update reuses matching nodes and overwrites supported mesh/deformer/animation data. Append only fills missing nodes and preserves existing values."
+                dmxImportMode;
+                menuItem -label "Create New";
+                menuItem -label "Update Existing";
+                menuItem -label "Append Missing";
         setParent ..;
     setParent ..;
 
@@ -223,6 +316,9 @@ global proc string[] captureDmxImportOptionVars(string $version)
     $args[1] = `optionVar -q MayaDmx_importSkin`;
     $args[2] = `optionVar -q MayaDmx_importDeltaStates`;
     $args[3] = `optionVar -q MayaDmx_applyAxisCorrection`;
+    $args[4] = `optionVar -q MayaDmx_useSceneRoot`;
+    $args[5] = `optionVar -q MayaDmx_readNamespaceFromScene`;
+    $args[6] = `optionVar -q MayaDmx_importMode`;
     return $args;
 }
 

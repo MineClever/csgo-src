@@ -11,11 +11,23 @@ global proc MayaSmdImport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_rotateZ`) {
         optionVar -floatValue MayaSmd_rotateZ 0;
     }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_useSceneRoot`) {
+        optionVar -intValue MayaSmd_useSceneRoot 0;
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_readNamespaceFromScene`) {
+        optionVar -intValue MayaSmd_readNamespaceFromScene 1;
+    }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_importMode`) {
+        optionVar -stringValue MayaSmd_importMode "create";
+    }
 }
 
 global proc string MayaSmdImport_defaultOptionsString()
 {
-    return "rotateX=0;rotateY=0;rotateZ=0";
+    return "rotateX=0;rotateY=0;rotateZ=0;useSceneRoot=0;readNamespaceFromScene=1;importMode=create";
 }
 
 global proc string MayaSmdImport_collectOptionVarString()
@@ -25,10 +37,16 @@ global proc string MayaSmdImport_collectOptionVarString()
     float $rotateX = `optionVar -q MayaSmd_rotateX`;
     float $rotateY = `optionVar -q MayaSmd_rotateY`;
     float $rotateZ = `optionVar -q MayaSmd_rotateZ`;
+    int $useSceneRoot = `optionVar -q MayaSmd_useSceneRoot`;
+    int $readNamespaceFromScene = `optionVar -q MayaSmd_readNamespaceFromScene`;
+    string $importMode = `optionVar -q MayaSmd_importMode`;
 
     return ("rotateX=" + $rotateX
         + ";rotateY=" + $rotateY
-        + ";rotateZ=" + $rotateZ);
+        + ";rotateZ=" + $rotateZ
+        + ";useSceneRoot=" + $useSceneRoot
+        + ";readNamespaceFromScene=" + $readNamespaceFromScene
+        + ";importMode=" + $importMode);
 }
 
 global proc MayaSmdImport_applyOptionsString(string $options)
@@ -41,6 +59,9 @@ global proc MayaSmdImport_applyOptionsString(string $options)
     float $rotateX = 0;
     float $rotateY = 0;
     float $rotateZ = 0;
+    int $useSceneRoot = 0;
+    int $readNamespaceFromScene = 1;
+    string $importMode = "create";
 
     string $optionList[];
     tokenize($effectiveOptions, ";", $optionList);
@@ -57,11 +78,32 @@ global proc MayaSmdImport_applyOptionsString(string $options)
             $rotateY = $parts[1];
         } else if ($parts[0] == "rotateZ") {
             $rotateZ = $parts[1];
+        } else if ($parts[0] == "useSceneRoot") {
+            $useSceneRoot = $parts[1];
+        } else if ($parts[0] == "readNamespaceFromScene") {
+            $readNamespaceFromScene = $parts[1];
+        } else if ($parts[0] == "importMode") {
+            $importMode = $parts[1];
         }
     }
 
     if (`floatFieldGrp -exists smdImportEulerRotation`) {
         floatFieldGrp -e -value1 $rotateX -value2 $rotateY -value3 $rotateZ smdImportEulerRotation;
+    }
+    if (`checkBoxGrp -exists smdImportUseSceneRoot`) {
+        checkBoxGrp -e -value1 $useSceneRoot smdImportUseSceneRoot;
+    }
+    if (`checkBoxGrp -exists smdImportReadNamespaceFromScene`) {
+        checkBoxGrp -e -value1 $readNamespaceFromScene smdImportReadNamespaceFromScene;
+    }
+    if (`optionMenuGrp -exists smdImportMode`) {
+        if ($importMode == "update") {
+            optionMenuGrp -e -select 2 smdImportMode;
+        } else if ($importMode == "append") {
+            optionMenuGrp -e -select 3 smdImportMode;
+        } else {
+            optionMenuGrp -e -select 1 smdImportMode;
+        }
     }
 }
 
@@ -77,9 +119,32 @@ global proc string MayaSmdImport_collectOptionsString()
         $rotateZ = `floatFieldGrp -q -value3 smdImportEulerRotation`;
     }
 
+    int $useSceneRoot = 0;
+    if (`checkBoxGrp -exists smdImportUseSceneRoot`) {
+        $useSceneRoot = `checkBoxGrp -q -value1 smdImportUseSceneRoot`;
+    }
+
+    int $readNamespaceFromScene = 1;
+    if (`checkBoxGrp -exists smdImportReadNamespaceFromScene`) {
+        $readNamespaceFromScene = `checkBoxGrp -q -value1 smdImportReadNamespaceFromScene`;
+    }
+
+    string $importMode = "create";
+    if (`optionMenuGrp -exists smdImportMode`) {
+        int $modeSelect = `optionMenuGrp -q -select smdImportMode`;
+        if ($modeSelect == 2) {
+            $importMode = "update";
+        } else if ($modeSelect == 3) {
+            $importMode = "append";
+        }
+    }
+
     return ("rotateX=" + $rotateX
         + ";rotateY=" + $rotateY
-        + ";rotateZ=" + $rotateZ);
+        + ";rotateZ=" + $rotateZ
+        + ";useSceneRoot=" + $useSceneRoot
+        + ";readNamespaceFromScene=" + $readNamespaceFromScene
+        + ";importMode=" + $importMode);
 }
 
 global proc string SmdImportOptionsUI(string $parent)
@@ -96,6 +161,25 @@ global proc string SmdImportOptionsUI(string $parent)
                 -label "Root Rotation"
                 -annotation "Degrees. Applied as an extra XYZ Euler rotation on the SMD import root."
                 smdImportEulerRotation;
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Root Target"
+                -label1 "Import Directly Into Scene Root"
+                -annotation "When enabled, import skips the dedicated wrapper root and places content directly in the Maya scene."
+                smdImportUseSceneRoot;
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Namespace"
+                -label1 "Match Current Maya Namespace"
+                -annotation "When enabled, append/update tries to reuse nodes under the current Maya namespace."
+                smdImportReadNamespaceFromScene;
+            optionMenuGrp
+                -label "Merge Mode"
+                -annotation "Create creates new nodes. Update reuses matching hierarchy, mesh groups and supported skin data. Append only fills missing nodes."
+                smdImportMode;
+                menuItem -label "Create New";
+                menuItem -label "Update Existing";
+                menuItem -label "Append Missing";
         setParent ..;
     setParent ..;
 
@@ -135,6 +219,12 @@ global proc MayaSmd_importFileOptionsUICommit(string $parent)
             optionVar -floatValue MayaSmd_rotateY $parts[1];
         } else if ($parts[0] == "rotateZ") {
             optionVar -floatValue MayaSmd_rotateZ $parts[1];
+        } else if ($parts[0] == "useSceneRoot") {
+            optionVar -intValue MayaSmd_useSceneRoot $parts[1];
+        } else if ($parts[0] == "readNamespaceFromScene") {
+            optionVar -intValue MayaSmd_readNamespaceFromScene $parts[1];
+        } else if ($parts[0] == "importMode") {
+            optionVar -stringValue MayaSmd_importMode $parts[1];
         }
     }
 }

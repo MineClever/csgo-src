@@ -571,6 +571,14 @@
     当前剩余边界：
     - SMD `update` 在拓扑不一致时仍会退回当前的旧 mesh/history 清理后重建路径。
     - SMD `skinCluster` 与 DMX 一样，对 influence 集合变化场景当前仍只 warning 跳过 overwrite，尚未支持增量 influence 调整。
+  - 2026-04-12：已把 Import UI 层同步到当前的共用导入工作流语义。当前 [performDmxImport.mel](dcc_plugin/src/mel/performDmxImport.mel) / [performSmdImport.mel](dcc_plugin/src/mel/performSmdImport.mel) 以及对应 module 脚本 [dcc_plugin/maya_module/scripts/performDmxImport.mel](dcc_plugin/maya_module/scripts/performDmxImport.mel)、[dcc_plugin/maya_module/scripts/performSmdImport.mel](dcc_plugin/maya_module/scripts/performSmdImport.mel)、[dcc_plugin/maya_module/scripts/doDmxImportArgList.mel](dcc_plugin/maya_module/scripts/doDmxImportArgList.mel) 已补上并持久化这些已有真实行为的选项：
+    - `useSceneRoot`
+    - `readNamespaceFromScene`
+    - `importMode=create/update/append`
+    - SMD 继续保留原有 `rotateX / rotateY / rotateZ`
+    同时已更新 UI annotation 与 SMD session warning，使界面和宿主 warning 都不再停留在“update 只会重建 mesh group”的旧描述。额外确认的一点是：Maya 实际优先加载的是 `dcc_plugin/maya_module/scripts` 下的 MEL 脚本，而不是 `src/mel`；本轮已把两处脚本同步，避免“源码已改但 Maya 实际 UI 仍跑旧脚本”的错位。已通过：
+    - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
+    - `mayapy` 直接 `source` module 脚本，确认 `MayaDmxImport_defaultOptionsString()` 与 `MayaSmdImport_defaultOptionsString()` 已返回包含 `useSceneRoot / readNamespaceFromScene / importMode` 的新 options 串
 
 ## 环境与工具链说明
 

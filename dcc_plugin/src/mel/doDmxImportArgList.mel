@@ -6,6 +6,15 @@ global proc MayaDmxImport_syncOptionVars(string $version, string $args[])
     if (size($args) > 3) {
         optionVar -intValue MayaDmx_applyAxisCorrection $args[3];
     }
+    if (size($args) > 4) {
+        optionVar -intValue MayaDmx_useSceneRoot $args[4];
+    }
+    if (size($args) > 5) {
+        optionVar -intValue MayaDmx_readNamespaceFromScene $args[5];
+    }
+    if (size($args) > 6) {
+        optionVar -stringValue MayaDmx_importMode $args[6];
+    }
 }
 
 global proc doDmxImportArgList(string $version, string $args[])
@@ -50,7 +59,10 @@ global proc doDmxImportArgList(string $version, string $args[])
     string $options = ("importMaterials=" + `optionVar -q MayaDmx_importMaterials`
         + ";importSkin=" + `optionVar -q MayaDmx_importSkin`
         + ";importDeltaStates=" + `optionVar -q MayaDmx_importDeltaStates`
-        + ";applyAxisCorrection=" + `optionVar -q MayaDmx_applyAxisCorrection`);
+        + ";applyAxisCorrection=" + `optionVar -q MayaDmx_applyAxisCorrection`
+        + ";useSceneRoot=" + `optionVar -q MayaDmx_useSceneRoot`
+        + ";readNamespaceFromScene=" + `optionVar -q MayaDmx_readNamespaceFromScene`
+        + ";importMode=" + `optionVar -q MayaDmx_importMode`);
 
     file
         -import
