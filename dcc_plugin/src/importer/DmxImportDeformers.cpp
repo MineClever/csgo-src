@@ -37,6 +37,67 @@
 namespace dmx_import_impl
 {
 
+std::unordered_map<std::string, unsigned int> BuildInfluenceIndexByPath(const MDagPathArray &influencePaths)
+{
+    std::unordered_map<std::string, unsigned int> influenceByPath;
+    for (unsigned int index = 0; index < influencePaths.length(); ++index)
+    {
+        influenceByPath[influencePaths[index].fullPathName().asChar()] = index;
+    }
+    return influenceByPath;
+}
+
+MStatus EnsureSkinClusterContainsInfluences(
+    const MObject &skinClusterObject,
+    const MDagPathArray &requiredInfluencePaths,
+    MDagPathArray &resolvedInfluencePaths)
+{
+    resolvedInfluencePaths.clear();
+    if (skinClusterObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status;
+    MFnSkinCluster skinClusterFn(skinClusterObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    skinClusterFn.influenceObjects(resolvedInfluencePaths, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    std::unordered_map<std::string, unsigned int> existingInfluenceByPath = BuildInfluenceIndexByPath(resolvedInfluencePaths);
+    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (unsigned int influenceIndex = 0; influenceIndex < requiredInfluencePaths.length(); ++influenceIndex)
+    {
+        const std::string fullPath = requiredInfluencePaths[influenceIndex].fullPathName().asChar();
+        if (existingInfluenceByPath.find(fullPath) != existingInfluenceByPath.end())
+        {
+            continue;
+        }
+
+        status = maya_cmd::AddSkinClusterInfluence(skinClusterNode.name(), requiredInfluencePaths[influenceIndex]);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+    }
+
+    resolvedInfluencePaths.clear();
+    skinClusterFn.influenceObjects(resolvedInfluencePaths, &status);
+    return status ? MS::kSuccess : MS::kFailure;
+}
+
 
 DeformerImporter::DeformerImporter(std::shared_ptr<ImportContext> context)
     : context_(context)
@@ -143,24 +204,13 @@ MStatus DeformerImporter::updateExistingSkinClusterBindings(
     }
 
     MDagPathArray existingInfluencePaths;
-    skinClusterFn.influenceObjects(existingInfluencePaths, &status);
+    status = EnsureSkinClusterContainsInfluences(skinClusterObject, influencePaths, existingInfluencePaths);
     if (!status)
     {
         return MS::kFailure;
     }
 
-    if (existingInfluencePaths.length() != influencePaths.length())
-    {
-        return maya_dmx::ReportWarning(
-            MString("maya_dmx: update skipped skinCluster overwrite because influence count did not match for ")
-            + meshDagPath_.fullPathName());
-    }
-
-    std::unordered_map<std::string, unsigned int> existingInfluenceByPath;
-    for (unsigned int index = 0; index < existingInfluencePaths.length(); ++index)
-    {
-        existingInfluenceByPath[existingInfluencePaths[index].fullPathName().asChar()] = index;
-    }
+    std::unordered_map<std::string, unsigned int> existingInfluenceByPath = BuildInfluenceIndexByPath(existingInfluencePaths);
 
     MFnDependencyNode skinClusterNode(skinClusterObject, &status);
     if (!status)
@@ -919,16 +969,44 @@ MStatus DeformerImporter::ApplySkinning(
         return MStatus::kFailure;
     }
 
+    MDagPathArray influencePaths;
+    skinClusterFn.influenceObjects(influencePaths, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     MIntArray influenceIndices;
     std::unordered_map<int, unsigned int> dmxJointToInfluenceSlot;
     for (unsigned int influencePathIndex = 0; influencePathIndex < activeInfluencePaths.length(); ++influencePathIndex)
     {
-        const unsigned int influenceIndex = skinClusterFn.indexForInfluenceObject(activeInfluencePaths[influencePathIndex], &status);
+        const std::string activeInfluencePath = activeInfluencePaths[influencePathIndex].fullPathName().asChar();
+        bool matchedInfluence = false;
+        for (unsigned int clusterInfluenceIndex = 0; clusterInfluenceIndex < influencePaths.length(); ++clusterInfluenceIndex)
+        {
+            if (activeInfluencePath != influencePaths[clusterInfluenceIndex].fullPathName().asChar())
+            {
+                continue;
+            }
+
+            dmxJointToInfluenceSlot[activeDmxJointIndices[influencePathIndex]] = clusterInfluenceIndex;
+            matchedInfluence = true;
+            break;
+        }
+
+        if (!matchedInfluence)
+        {
+            return MStatus::kFailure;
+        }
+    }
+
+    for (unsigned int influencePathIndex = 0; influencePathIndex < influencePaths.length(); ++influencePathIndex)
+    {
+        const unsigned int influenceIndex = skinClusterFn.indexForInfluenceObject(influencePaths[influencePathIndex], &status);
         if (!status)
         {
             return MStatus::kFailure;
         }
-        dmxJointToInfluenceSlot[activeDmxJointIndices[influencePathIndex]] = influenceIndices.length();
         influenceIndices.append(static_cast<int>(influenceIndex));
     }
 

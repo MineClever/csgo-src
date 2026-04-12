@@ -287,4 +287,24 @@ MStatus RegenerateBlendShapeTarget(
     return MGlobal::executeCommand(command, result, false, false);
 }
 
+MStatus AddSkinClusterInfluence(
+    const MString &skinClusterNodeName,
+    const MDagPath &influencePath)
+{
+    if (skinClusterNodeName.length() == 0 || !influencePath.isValid())
+    {
+        return MS::kFailure;
+    }
+
+    // Keep the MEL command wrapped here for now. Maya does not expose a small
+    // direct C++ helper for `skinCluster -e -addInfluence`, and the command keeps
+    // the node's internal matrix/bind arrays consistent when expanding influences.
+    MString command("skinCluster -e -lw true -wt 0.0 -ai \"");
+    command += influencePath.fullPathName();
+    command += "\" \"";
+    command += skinClusterNodeName;
+    command += "\"";
+    return MGlobal::executeCommand(command, false, false);
+}
+
 } // namespace maya_cmd

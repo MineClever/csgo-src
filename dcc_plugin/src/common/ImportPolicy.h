@@ -174,6 +174,33 @@ inline std::string StripNamespace(std::string nodeName)
     return nodeName.substr(lastNamespaceSeparator + 1);
 }
 
+inline bool MatchesImportedRenameSuffix(const std::string &sceneNodeName, const std::string &targetNodeName)
+{
+    if (sceneNodeName.size() <= targetNodeName.size())
+    {
+        return false;
+    }
+
+    if (sceneNodeName.compare(sceneNodeName.size() - targetNodeName.size(), targetNodeName.size(), targetNodeName) != 0)
+    {
+        return false;
+    }
+
+    const size_t separatorIndex = sceneNodeName.size() - targetNodeName.size() - 1;
+    const char separator = sceneNodeName[separatorIndex];
+    return separator == '_';
+}
+
+inline std::string TrimTrailingDigits(std::string nodeName)
+{
+    while (!nodeName.empty() && std::isdigit(static_cast<unsigned char>(nodeName.back())))
+    {
+        nodeName.pop_back();
+    }
+
+    return nodeName;
+}
+
 inline std::string ComposeNamespacedName(const SceneImportPolicy &policy, const std::string &nodeName)
 {
     if (policy.currentNamespace.empty())
@@ -205,7 +232,15 @@ inline bool MatchesNodeNameForAppend(
         return true;
     }
 
-    return StripNamespace(sceneNodeName) == StripNamespace(namespacedTargetName);
+    const std::string strippedSceneNodeName = StripNamespace(sceneNodeName);
+    const std::string strippedTargetName = StripNamespace(namespacedTargetName);
+    if (strippedSceneNodeName == strippedTargetName)
+    {
+        return true;
+    }
+
+    return MatchesImportedRenameSuffix(strippedSceneNodeName, strippedTargetName) ||
+        MatchesImportedRenameSuffix(strippedTargetName, strippedSceneNodeName);
 }
 
 inline bool MatchesNodePrefixForAppend(
@@ -213,14 +248,21 @@ inline bool MatchesNodePrefixForAppend(
     const std::string &sceneNodeName,
     const std::string &targetNodePrefix)
 {
-    const std::string strippedSceneNodeName = StripNamespace(sceneNodeName);
+    const std::string strippedSceneNodeName = TrimTrailingDigits(StripNamespace(sceneNodeName));
     if (strippedSceneNodeName.rfind(targetNodePrefix, 0) == 0)
     {
         return true;
     }
 
     const std::string namespacedTargetName = ComposeNamespacedName(policy, targetNodePrefix);
-    return sceneNodeName.rfind(namespacedTargetName, 0) == 0;
+    const std::string strippedTargetNodePrefix = TrimTrailingDigits(StripNamespace(namespacedTargetName));
+    if (sceneNodeName.rfind(namespacedTargetName, 0) == 0)
+    {
+        return true;
+    }
+
+    return MatchesImportedRenameSuffix(strippedSceneNodeName, strippedTargetNodePrefix) ||
+        MatchesImportedRenameSuffix(strippedTargetNodePrefix, strippedSceneNodeName);
 }
 
 inline bool UsesDedicatedRoot(const SceneImportPolicy &policy)

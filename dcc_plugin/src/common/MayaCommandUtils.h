@@ -26,5 +26,8 @@ MStatus RegenerateBlendShapeTarget(
     const MString &blendShapeNodeName,
     unsigned int weightIndex,
     MStringArray &result);
+MStatus AddSkinClusterInfluence(
+    const MString &skinClusterNodeName,
+    const MDagPath &influencePath);
 
 } // namespace maya_cmd

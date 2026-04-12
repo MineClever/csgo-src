@@ -114,6 +114,12 @@ APPEND_GATE_EXPECTATIONS = {
             {"pattern": "|tex_d_bmp_grp1", "type": "transform"},
         ],
     },
+    "ctm_fbi/ctm_fbi.smd": {
+        "import_options": "useSceneRoot=1;importMode=append",
+        "single_nodes": [
+            {"pattern": "|ctm_fbi_pelvis", "type": "joint"},
+        ],
+    },
 }
 
 UPDATE_GATE_EXPECTATIONS = {
@@ -139,6 +145,12 @@ UPDATE_GATE_EXPECTATIONS = {
             {"pattern": "|tex_d_bmp_grp1", "type": "transform"},
         ],
     },
+    "ctm_fbi/ctm_fbi.smd": {
+        "import_options": "useSceneRoot=1;importMode=update",
+        "single_nodes": [
+            {"pattern": "|ctm_fbi_pelvis", "type": "joint"},
+        ],
+    },
 }
 
 TOPOLOGY_UPDATE_GATE_EXPECTATIONS = {
@@ -160,6 +172,15 @@ PAIRED_UPDATE_GATE_EXPECTATIONS = {
             "|ValveBiped_Bip01_Pelvis.translateX",
             "|ValveBiped_Bip01_Pelvis.rotateX",
         ],
+    },
+}
+
+SKIN_INFLUENCE_UPDATE_GATE_EXPECTATIONS = {
+    "simple_skinned_mesh": {
+        "import_options": "useSceneRoot=1;importMode=update",
+    },
+    "MostComplexSampleSet/chr_mesh.smd": {
+        "import_options": "useSceneRoot=1;importMode=update",
     },
 }
 
@@ -215,6 +236,7 @@ def snapshot_skin_bindings(cmds, root_paths):
             skin_snapshots[mesh_key] = {
                 "skin_cluster": skin_clusters[0],
                 "influence_count": len(influences),
+                "influences": sorted(influences),
             }
 
     return skin_snapshots
@@ -475,6 +497,19 @@ def compare_skin_snapshots(reference_skins, candidate_skins):
             missing = sorted(set(lhs_skins.keys()) - set(rhs_skins.keys()))
             extra = sorted(set(rhs_skins.keys()) - set(lhs_skins.keys()))
             raise RuntimeError(f"Skin set mismatch. Missing={missing} Extra={extra}")
+
+        for mesh_key in sorted(lhs_skins.keys()):
+            if lhs_skins[mesh_key]["influence_count"] != rhs_skins[mesh_key]["influence_count"]:
+                raise RuntimeError(
+                    f"Skin influence count mismatch for {mesh_key}. "
+                    f"expected={lhs_skins[mesh_key]['influence_count']} actual={rhs_skins[mesh_key]['influence_count']}"
+                )
+
+            if lhs_skins[mesh_key].get("influences") != rhs_skins[mesh_key].get("influences"):
+                raise RuntimeError(
+                    f"Skin influence set mismatch for {mesh_key}. "
+                    f"expected={lhs_skins[mesh_key].get('influences')} actual={rhs_skins[mesh_key].get('influences')}"
+                )
 
     candidate_variants = [candidate_skins]
     stripped_candidate = strip_single_wrapper_snapshot(candidate_skins)
@@ -895,6 +930,57 @@ def validate_paired_update_gate(cmds, plugin_paths_by_format, sample_dir, case_n
             )
 
 
+def validate_skin_influence_update_gate(cmds, plugin_paths, format_config, input_path, case_name):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = SKIN_INFLUENCE_UPDATE_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, plugin_paths)
+
+    import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        defaultNamespace=True,
+        options=expectation["import_options"],
+    )
+
+    before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+    cmds.file(input_path, **import_kwargs)
+    imported_roots = collect_imported_roots(cmds, before_assemblies)
+    reference_skins = snapshot_skin_bindings(cmds, imported_roots)
+    if not reference_skins:
+        raise RuntimeError(
+            f"Skin influence update gate failed for {normalized_case_name}. "
+            f"initial import produced no skinCluster"
+        )
+
+    target_skin = next(iter(reference_skins.values()))
+    if target_skin["influence_count"] <= 1:
+        raise RuntimeError(
+            f"Skin influence update gate failed for {normalized_case_name}. "
+            f"need at least two influences, got {target_skin['influence_count']}"
+        )
+
+    removed_influence = target_skin["influences"][-1]
+    cmds.skinCluster(target_skin["skin_cluster"], edit=True, removeInfluence=removed_influence)
+
+    mutated_skins = snapshot_skin_bindings(cmds, imported_roots)
+    mutated_target_skin = next(iter(mutated_skins.values()))
+    if removed_influence in mutated_target_skin.get("influences", []):
+        raise RuntimeError(
+            f"Skin influence update gate failed for {normalized_case_name}. "
+            f"failed to remove influence before update: {removed_influence}"
+        )
+
+    cmds.file(input_path, **import_kwargs)
+    compare_skin_snapshots(reference_skins, snapshot_skin_bindings(cmds, imported_roots))
+
+
 def verify_roundtrip(
     cmds,
     plugin_paths,
@@ -1013,6 +1099,7 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     append_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.append_gate.txt")
     update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.update_gate.txt")
     topology_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.topology_update_gate.txt")
+    skin_influence_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.skin_influence_update_gate.txt")
 
     import_kwargs = dict(
         i=True,
@@ -1097,6 +1184,9 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
             marker_file.write("ok\n")
 
         validate_paired_update_gate(cmds, plugin_paths_by_format, sample_dir, case_name)
+        validate_skin_influence_update_gate(cmds, [plugin_path], format_config, input_path, case_name)
+        with open(skin_influence_update_gate_marker, "w", encoding="utf-8") as marker_file:
+            marker_file.write("ok\n")
 
     # For samples that contain skinned meshes, automatically run a second pass with
     # applyAxisCorrection=0 to verify that roundtrip is consistent regardless of the

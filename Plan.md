@@ -665,6 +665,20 @@
     已通过：
     - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
     - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases Ellis/DMX/animation/c1m1_intro_mechanic.dmx`
+  - 2026-04-12：已继续处理 “SMD 真实样本 rename 前缀复用” 与 “DMX/SMD skin influence 集合变化时的 update” 两条剩余主线，当前状态如下：
+    - 已落地的代码侧改动：
+      - [ImportPolicy.h](dcc_plugin/src/common/ImportPolicy.h) 已扩展 `MatchesNodeNameForAppend()` / `MatchesNodePrefixForAppend()`，开始显式兼容 Maya `file -import -ra true` 下常见的“文件名前缀 + 原节点名”重命名形式，并对 `*_grp1` 这类尾部数字做了匹配归一化。
+      - [MayaCommandUtils.h](dcc_plugin/src/common/MayaCommandUtils.h) / [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 新增 `AddSkinClusterInfluence()`，把 `skinCluster -e -addInfluence` 这类仍需命令层的行为继续统一收口到 helper。
+      - [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已把 `update` 下的 skinCluster 复用从“influence 数或集合不一致就直接 warning 跳过”改成“先尝试补齐缺失 influence，再继续回写 bindPreMatrix / geomMatrix / weights”；同时 `setWeights()` 阶段不再只覆盖 incoming active influences，而是改成面向 skinCluster 当前全部 influences 写权重，以便把未再使用的旧 influence 权重真正清零。
+      - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已新增一类 `SKIN_INFLUENCE_UPDATE_GATE_EXPECTATIONS`，用于后续把“先手工删掉一个 influence，再做 update 导入，应恢复原 influence 集合”收成独立门槛。
+    - 当前已确认通过：
+      - `python -m py_compile dcc_plugin\tools\MayaBatchRegression.py`
+      - `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd -- /m:1`
+    - 当前新暴露的宿主级剩余问题：
+      - SMD：`ctm_fbi/ctm_fbi.smd` 与 `MostComplexSampleSet/chr_mesh.smd` 在 `importMode=append/update` 下，Maya 真实宿主会把第二次导入创建的新节点整体改写成 `ctm_fbi_*` / `chr_mesh_*` 这类 rename-all 前缀形式；现有匹配扩展仍不足以让这两组真实样本稳定复用已有根 joint / mesh group，因此它们暂时仍不能重新纳入 SMD 的 append/update gate。也就是说，之前计划里的“兼容 Maya import rename 前缀”问题仍未关闭，只是已把匹配逻辑从纯精确名推进到更接近宿主行为的一步。
+      - DMX：对 `complex_chr_mesh.dmx` 这类多 influence 样本，手工先移除一个已存在的 skin influence 后，再做第二次 `importMode=update` 导入，当前会在 Maya 宿主里直接报 `Error reading file`；批处理输出没有带出更细的插件错误文本，说明剩余失败点已经从“不会尝试补 influence”收窄到“补 influence 后某个更后续的 deformer/update 步骤仍在返回 failure”。这条根因还需要继续补更细粒度的错误上报后再推进。
+    - 结论：
+      - “节点名 rename 前缀复用” 与 “skin influence 增量 update” 这两条主线都已开始落地到真实代码路径，但截至当前回合，宿主回归还没有完全收口，不能把这两项标记为已完成。
 
 ## 环境与工具链说明
 
