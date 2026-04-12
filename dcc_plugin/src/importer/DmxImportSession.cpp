@@ -453,11 +453,14 @@ DmxImportSession::DmxImportSession(const MFileObject &fileObject, const MString 
 
 MStatus DmxImportSession::Run()
 {
+    AppendImportDebugLog("session: run begin");
     MStatus status = LoadDocument();
     if (!status)
     {
+        AppendImportDebugLog("session: load document failed");
         return MStatus::kFailure;
     }
+    AppendImportDebugLog("session: load document ok");
 
     ImportContext context{document_};
     context.modelRoot = importRoot_->type == "DmeModel" ? importRoot_ : nullptr;
@@ -469,48 +472,63 @@ MStatus DmxImportSession::Run()
     {
         CollectJointInfo(document_, context.modelRoot, context);
     }
+    AppendImportDebugLog((std::string("session: context modelRoot=") + (context.modelRoot ? context.modelRoot->name : "<null>")).c_str());
 
     MObject sceneRoot;
     status = CreateSceneRoot(context, sceneRoot);
     if (!status)
     {
+        AppendImportDebugLog("session: create scene root failed");
         return MStatus::kFailure;
     }
+    AppendImportDebugLog("session: create scene root ok");
 
     status = ImportHierarchy(context, sceneRoot);
     if (!status)
     {
+        AppendImportDebugLog("session: import hierarchy failed");
         return MStatus::kFailure;
     }
+    AppendImportDebugLog("session: import hierarchy ok");
 
     status = ImportAnimation(context, sceneRoot);
     if (!status)
     {
+        AppendImportDebugLog("session: import animation failed");
         return MStatus::kFailure;
     }
+    AppendImportDebugLog("session: import animation ok");
 
+    AppendImportDebugLog("session: run end success");
     return maya_dmx::ReportInfo(MString("maya_dmx: imported hierarchy from ") + filePath_);
 }
 
 MStatus DmxImportSession::LoadDocument()
 {
+    AppendImportDebugLog("session: load document begin");
     const std::string fileText = ReadTextFile(filePath_);
     if (fileText.empty())
     {
+        AppendImportDebugLog("session: read text file returned empty");
         return maya_dmx::ReportError(MString("maya_dmx: failed to read file ") + filePath_);
     }
+    AppendImportDebugLog((std::string("session: read text bytes=") + std::to_string(fileText.size())).c_str());
 
     std::string parseError;
     if (!simple_dmx::ParseDocument(fileText, document_, parseError))
     {
+        AppendImportDebugLog((std::string("session: parse failed error=") + parseError).c_str());
         return maya_dmx::ReportError(MString("maya_dmx: parse error: ") + parseError.c_str());
     }
+    AppendImportDebugLog("session: parse document ok");
 
     importRoot_ = FindImportRoot(document_);
     if (!importRoot_)
     {
+        AppendImportDebugLog("session: import root missing");
         return maya_dmx::ReportError("maya_dmx: no importable DMX root element found.");
     }
+    AppendImportDebugLog((std::string("session: import root type=") + importRoot_->type + " name=" + importRoot_->name).c_str());
 
     importOptions_ = ParseImportOptions(optionsText_);
     dcc_import_policy::CaptureCurrentNamespace(importOptions_.scenePolicy);
@@ -520,6 +538,21 @@ MStatus DmxImportSession::LoadDocument()
         const size_t lastSeparator = resolvedPath.find_last_of("/\\");
         const std::string baseName = lastSeparator == std::string::npos ? resolvedPath : resolvedPath.substr(lastSeparator + 1);
         importOptions_.scenePolicy.animationLayerName = SanitizeLayerName(baseName) + "_delta";
+    }
+    {
+        std::ostringstream optionsSummary;
+        optionsSummary
+            << "session: options useSceneRoot=" << (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy) ? "1" : "0")
+            << " update=" << (dcc_import_policy::UsesUpdateCurrentScene(importOptions_.scenePolicy) ? "1" : "0")
+            << " append=" << (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy) ? "1" : "0")
+            << " animationOnly=" << (dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy) ? "1" : "0")
+            << " importSkin=" << (importOptions_.importSkin ? "1" : "0")
+            << " importMaterials=" << (importOptions_.importMaterials ? "1" : "0")
+            << " importDeltaStates=" << (importOptions_.importDeltaStates ? "1" : "0")
+            << " importAnimationToLayer=" << (importOptions_.scenePolicy.importAnimationToLayer ? "1" : "0")
+            << " forceDeltaAnimationLayer=" << (importOptions_.scenePolicy.forceDeltaAnimationLayer ? "1" : "0")
+            << " animationLayerName=" << (importOptions_.scenePolicy.animationLayerName.empty() ? "<empty>" : importOptions_.scenePolicy.animationLayerName);
+        AppendImportDebugLog(optionsSummary.str().c_str());
     }
 
     dcc_import_transform::TransformCorrection documentCorrection = importOptions_.transformCorrection;
@@ -539,7 +572,9 @@ MStatus DmxImportSession::LoadDocument()
             maya_dmx::ReportWarning(axisWarning);
         }
     }
+    AppendImportDebugLog("session: normalize import correction begin");
     NormalizeDocumentForImportCorrection(document_, importRoot_, documentCorrection);
+    AppendImportDebugLog("session: normalize import correction ok");
     importOptions_.transformCorrection = dcc_import_transform::TransformCorrection();
     importOptions_.applyLegacyAxisCorrection = false;
 
@@ -561,11 +596,13 @@ MStatus DmxImportSession::LoadDocument()
         maya_dmx::ReportWarning("maya_dmx: animation layer import options are parsed but not implemented yet; imported animation will still target the base scene.");
     }
 
+    AppendImportDebugLog("session: load document end success");
     return MStatus::kSuccess;
 }
 
 MStatus DmxImportSession::CreateSceneRoot(ImportContext &context, MObject &sceneRoot) const
 {
+    AppendImportDebugLog("session: create scene root begin");
     const MMatrix rootImportMatrix = BuildDmxTransformMatrix(document_, importRoot_);
     context.topLevelPreTransform = MMatrix::identity;
     if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy))
@@ -573,6 +610,7 @@ MStatus DmxImportSession::CreateSceneRoot(ImportContext &context, MObject &scene
         sceneRoot = MObject::kNullObj;
         context.sceneRoot = sceneRoot;
         context.topLevelPreTransform = rootImportMatrix;
+        AppendImportDebugLog("session: create scene root using existing scene root");
         return MS::kSuccess;
     }
 
@@ -581,71 +619,90 @@ MStatus DmxImportSession::CreateSceneRoot(ImportContext &context, MObject &scene
     sceneRoot = rootTransformFn.create(MObject::kNullObj, &status);
     if (!status)
     {
+        AppendImportDebugLog("session: root transform create failed");
         return MStatus::kFailure;
     }
 
     rootTransformFn.setName(importRoot_->name.empty() ? "dmx_import" : importRoot_->name.c_str());
+    AppendImportDebugLog((std::string("session: created scene root transform name=") + rootTransformFn.name().asChar()).c_str());
 
     status = ApplyTransform(document_, importRoot_, sceneRoot);
     if (!status)
     {
+        AppendImportDebugLog("session: apply root transform failed");
         return MStatus::kFailure;
     }
     context.sceneRoot = sceneRoot;
 
+    AppendImportDebugLog("session: create scene root end success");
     return MStatus::kSuccess;
 }
 
 MStatus DmxImportSession::ImportHierarchy(ImportContext &context, MObject sceneRoot) const
 {
-    for (const simple_dmx::Element *child : FindAttributeElementArray(document_, importRoot_, "children"))
+    const std::vector<const simple_dmx::Element *> children = FindAttributeElementArray(document_, importRoot_, "children");
+    AppendImportDebugLog((std::string("session: import hierarchy begin childCount=") + std::to_string(children.size())).c_str());
+    for (const simple_dmx::Element *child : children)
     {
         MStatus status = ImportDagHierarchyRecursive(context, child, sceneRoot);
         if (!status)
         {
+            AppendImportDebugLog((std::string("session: hierarchy import failed child=") + (child ? child->name : "<null>")).c_str());
             return MStatus::kFailure;
         }
     }
 
-    for (const simple_dmx::Element *child : FindAttributeElementArray(document_, importRoot_, "children"))
+    AppendImportDebugLog("session: hierarchy transforms imported");
+    for (const simple_dmx::Element *child : children)
     {
         MStatus status = ImportDagShapesRecursive(context, child);
         if (!status)
         {
+            AppendImportDebugLog((std::string("session: shape import failed child=") + (child ? child->name : "<null>")).c_str());
             return MStatus::kFailure;
         }
     }
 
+    AppendImportDebugLog("session: import hierarchy end success");
     return MStatus::kSuccess;
 }
 
 MStatus DmxImportSession::ImportAnimation(ImportContext &context, MObject sceneRoot) const
 {
+    AppendImportDebugLog("session: import animation begin");
     const simple_dmx::Element *combinationOperator =
         FindCombinationOperator(document_, document_.GetRoot(), importRoot_, context.modelRoot);
     MStatus status = CreateCombinationControls(context, combinationOperator, sceneRoot);
     if (!status)
     {
+        AppendImportDebugLog("session: create combination controls failed");
         return MStatus::kFailure;
     }
+    AppendImportDebugLog((std::string("session: combination operator=") + (combinationOperator ? combinationOperator->name : "<null>")).c_str());
 
     const simple_dmx::Element *animationList =
         FindAnimationList(document_, document_.GetRoot(), importRoot_, context.modelRoot);
     if (!animationList)
     {
+        AppendImportDebugLog("session: no animation list");
         return MStatus::kSuccess;
     }
+    AppendImportDebugLog((std::string("session: animation list=") + animationList->name).c_str());
 
     const std::vector<const simple_dmx::Element *> animations =
         FindAttributeElementArray(document_, animationList, "animations");
+    AppendImportDebugLog((std::string("session: animation clip count=") + std::to_string(animations.size())).c_str());
     for (const simple_dmx::Element *animation : animations)
     {
+        AppendImportDebugLog((std::string("session: apply animation clip=") + (animation ? animation->name : "<null>")).c_str());
         status = ApplyChannelsClipAnimation(context, animation);
         if (!status)
         {
+            AppendImportDebugLog((std::string("session: apply animation clip failed=") + (animation ? animation->name : "<null>")).c_str());
             return MStatus::kFailure;
         }
     }
 
+    AppendImportDebugLog("session: import animation end success");
     return MStatus::kSuccess;
 }

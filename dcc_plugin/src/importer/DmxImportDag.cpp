@@ -201,6 +201,7 @@ MStatus ImportDagHierarchyRecursive(
     const bool isJoint = dagElement->type == "DmeJoint";
     const std::string rawNodeName = dagElement->name.empty() ? dagElement->type : dagElement->name;
     const std::string nodeName = SanitizeNodeName(rawNodeName);
+    AppendImportDebugLog((std::string("dag: enter hierarchy type=") + dagElement->type + " raw=" + rawNodeName + " sanitized=" + nodeName).c_str());
 
     MStatus status;
     MObject nodeObject = MObject::kNullObj;
@@ -212,21 +213,29 @@ MStatus ImportDagHierarchyRecursive(
     }
 
     const bool reusedExistingNode = !nodeObject.isNull();
+    AppendImportDebugLog((std::string("dag: hierarchy target reused=") + (reusedExistingNode ? "1" : "0")).c_str());
     if (!reusedExistingNode)
     {
         nodeObject = CreateDagNode(nodeName, isJoint, parent, status);
     }
     if (!status)
     {
+        AppendImportDebugLog((std::string("dag: create node failed name=") + nodeName).c_str());
         return MStatus::kFailure;
+    }
+    if (!reusedExistingNode)
+    {
+        AppendImportDebugLog((std::string("dag: created node name=") + nodeName).c_str());
     }
 
     MDagPath nodePath;
     status = MDagPath::getAPathTo(nodeObject, nodePath);
     if (!status)
     {
+        AppendImportDebugLog((std::string("dag: get path failed name=") + nodeName).c_str());
         return MStatus::kFailure;
     }
+    AppendImportDebugLog((std::string("dag: path=") + nodePath.fullPathName().asChar()).c_str());
     context.importedDagPaths[ElementKey(dagElement)] = nodePath;
     if (reusedExistingNode)
     {
@@ -249,6 +258,7 @@ MStatus ImportDagHierarchyRecursive(
     if (!reusedExistingNode || !appendMissingMode)
     {
         const bool topLevelNode = parent == context.sceneRoot;
+        AppendImportDebugLog((std::string("dag: apply transform name=") + nodeName + " topLevel=" + (topLevelNode ? "1" : "0")).c_str());
         status = ApplyTransform(
             context.document,
             dagElement,
@@ -256,19 +266,24 @@ MStatus ImportDagHierarchyRecursive(
             topLevelNode ? context.topLevelPreTransform : MMatrix::identity);
         if (!status)
         {
+            AppendImportDebugLog((std::string("dag: apply transform failed name=") + nodeName).c_str());
             return MStatus::kFailure;
         }
+        AppendImportDebugLog((std::string("dag: apply transform ok name=") + nodeName).c_str());
     }
 
     for (const simple_dmx::Element *child : FindAttributeElementArray(context.document, dagElement, "children"))
     {
+        AppendImportDebugLog((std::string("dag: recurse child parent=") + nodeName + " child=" + (child ? child->name : "<null>")).c_str());
         status = ImportDagHierarchyRecursive(context, child, nodeObject);
         if (!status)
         {
+            AppendImportDebugLog((std::string("dag: recurse child failed parent=") + nodeName).c_str());
             return MStatus::kFailure;
         }
     }
 
+    AppendImportDebugLog((std::string("dag: leave hierarchy name=") + nodeName).c_str());
     return MS::kSuccess;
 }
 
@@ -282,9 +297,11 @@ MStatus ImportDagShapesRecursive(
     }
 
     const std::string elementKey = ElementKey(dagElement);
+    AppendImportDebugLog((std::string("dag: enter shapes element=") + dagElement->name + " type=" + dagElement->type).c_str());
     auto it = context.importedDagPaths.find(elementKey);
     if (it == context.importedDagPaths.end())
     {
+        AppendImportDebugLog((std::string("dag: missing imported path for shapes element=") + dagElement->name).c_str());
         return maya_dmx::ReportError(MString("maya_dmx: imported DAG path was missing for ") + dagElement->name.c_str());
     }
 
@@ -292,24 +309,31 @@ MStatus ImportDagShapesRecursive(
     MObject nodeObject = it->second.node(&status);
     if (!status)
     {
+        AppendImportDebugLog((std::string("dag: shape node lookup failed element=") + dagElement->name).c_str());
         return MStatus::kFailure;
     }
 
+    AppendImportDebugLog((std::string("dag: create mesh shape begin element=") + dagElement->name).c_str());
     status = CreateMeshShape(context, dagElement, nodeObject);
     if (!status)
     {
+        AppendImportDebugLog((std::string("dag: create mesh shape failed element=") + dagElement->name).c_str());
         return MStatus::kFailure;
     }
+    AppendImportDebugLog((std::string("dag: create mesh shape ok element=") + dagElement->name).c_str());
 
     for (const simple_dmx::Element *child : FindAttributeElementArray(context.document, dagElement, "children"))
     {
+        AppendImportDebugLog((std::string("dag: recurse shapes parent=") + dagElement->name + " child=" + (child ? child->name : "<null>")).c_str());
         status = ImportDagShapesRecursive(context, child);
         if (!status)
         {
+            AppendImportDebugLog((std::string("dag: recurse shapes failed parent=") + dagElement->name).c_str());
             return MStatus::kFailure;
         }
     }
 
+    AppendImportDebugLog((std::string("dag: leave shapes element=") + dagElement->name).c_str());
     return MS::kSuccess;
 }
 

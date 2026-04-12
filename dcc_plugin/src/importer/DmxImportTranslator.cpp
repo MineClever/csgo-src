@@ -1,7 +1,10 @@
 #include "DmxImportTranslator.h"
+#include "DmxImportInternals.h"
 #include "DmxImportSession.h"
 
 #include <common/MayaDmxCommon.h>
+
+#include <string>
 
 void *DmxImportTranslator::Create()
 {
@@ -40,7 +43,13 @@ MPxFileTranslator::MFileKind DmxImportTranslator::identifyFile(const MFileObject
 
 MStatus DmxImportTranslator::reader(const MFileObject &fileObject, const MString &options, FileAccessMode)
 {
+    dmx_import_impl::ResetImportDebugLog();
+    dmx_import_impl::AppendImportDebugLog("translator: reader begin");
+    dmx_import_impl::AppendImportDebugLog((std::string("translator: file=") + fileObject.rawFullName().asChar()).c_str());
+    dmx_import_impl::AppendImportDebugLog((std::string("translator: options=") + options.asChar()).c_str());
     DmxImportSession session(fileObject, options);
-    return session.Run();
+    const MStatus status = session.Run();
+    dmx_import_impl::AppendImportDebugLog((std::string("translator: reader end status=") + (status ? "success" : "failure")).c_str());
+    return status;
 }
 

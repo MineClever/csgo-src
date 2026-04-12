@@ -822,21 +822,28 @@
       - [DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 当前也已接入同样的 delta-layer 逻辑，只覆盖 `position` / `orientation` 两类 transform channel；float / facial channel 仍保持写 base scene，不进入 layer。
       - 编译层面已通过：
         - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
-      - 宿主验证当前还不够稳定：
-        - 使用 `Ellis/DMX/animation/c1m1_intro_mechanic.dmx` 与 `MostComplexSampleSet/vcaanim_VertexAnim.dmx` 做手工 `mayapy` 验证时，当前还没有拿到像 SMD 那样稳定、可重复的正向 gate 输出。
-        - 2026-04-12 继续尝试把 `Ellis/DMX/animation/c1m1_intro_mechanic.dmx` 接入 `DELTA_LAYER_GATE_EXPECTATIONS`，并用真实 `mayapy` 复跑 `MostComplexSampleSet/vcaanim_VertexAnim` 与 `Ellis/DMX/mechanic_model.dmx`：
-          - 两条样本当前都会在 `cmds.file(... type='Valve DMX Import' ...)` 阶段直接中断 `mayapy` 进程，只留下 case 起始日志，不会回到 Python 层抛出可捕获异常。
-          - 这说明当前阻塞点已经不是 delta-layer gate 脚本本身，而是更底层的 DMX 宿主导入稳定性或当前二进制/环境兼容性。
-          - 为避免把仓库留在明确失败的 gate 上，已回退本轮临时添加的 `Ellis` delta-layer gate；当前仍只保留 SMD 的正式 delta-layer 批回归。
-          - 下一步应优先补更早期的 DMX 导入诊断：
-            - 在 importer/session 更早阶段加可持久化 debug log
-            - 或直接用 PDB/宿主调试器定位 `cmds.file` 中断点
-            - 在确认 DMX 基础 transform 动画样本重新稳定前，不再继续扩展 DMX delta-layer gate
-        - 现阶段已经确认 DMX 代码可编译接入，但还没有正式批回归 gate；后续需要优先补“最小 transform 动画 DMX 样本 + delta layer”这条单独宿主验证链路。
-    - 当前范围与已知边界：
-      - 第一阶段只覆盖 transform 通道；`flexWeight` / facial / blendShape control 动画仍不进 layer。
-      - `deltaReferenceMode=bindPose` 当前优先使用目标对象导入后的当前 local pose 作为参考；更严格区分“静态骨架 pose”与“第一帧 pose”的宿主 gate 还要继续补。
-      - DMX 这条功能当前更接近“代码已接入、SMD 已验证、DMX 宿主 gate 待补”，还不能宣告整个 DMX/SMD delta-layer 需求完全关闭。
+      - 宿主验证已从“代码接入”推进到“最小 gate 通过”：
+        - 2026-04-12 在 [DmxImportTranslator.cpp](dcc_plugin/src/importer/DmxImportTranslator.cpp)、[DmxImportSession.cpp](dcc_plugin/src/importer/DmxImportSession.cpp)、[DmxImportDag.cpp](dcc_plugin/src/importer/DmxImportDag.cpp)、[DmxImportInternals.cpp](dcc_plugin/src/importer/DmxImportInternals.cpp) / [DmxImportInternals.h](dcc_plugin/src/importer/DmxImportInternals.h) 增加了更早期的持久化 debug log，覆盖 translator 入口、文档加载、scene root、DAG 递归与动画导入阶段。
+        - 用真实 `mayapy` 重新复跑 `MostComplexSampleSet/vcaanim_VertexAnim.dmx` 后，已确认当前 Release 二进制可稳定完成：
+          - base create 导入
+          - `importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=firstFrame` 的 delta-layer update 导入
+          - layer `vcaanim_VertexAnim_dmx_delta` 创建成功
+          - layer 上存在 transform animCurve
+          - base `|vca_arm|pelvis.translateX` 仍保持原有 base animCurve 连接，未被 delta import 直接覆写
+        - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已新增这条 DMX delta-layer gate：
+          - case: `MostComplexSampleSet/vcaanim_VertexAnim`
+          - base import: `useSceneRoot=0;importMode=create`
+          - update import: `useSceneRoot=0;importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=firstFrame`
+          - 校验 `vcaanim_VertexAnim_dmx_delta` 存在、layer 上存在 transform animCurve、base plug `|vca_arm|pelvis.translateX` 未被直接覆写
+        - 真实批回归已通过：
+          - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases MostComplexSampleSet/vcaanim_VertexAnim`
+      - 复杂 DMX 宿主样本仍待继续压实：
+        - `Ellis/DMX/animation/c1m1_intro_mechanic.dmx` / `mechanic_model.dmx` 这组更接近真实项目使用方式，但当前还没有像 `vcaanim_VertexAnim` 一样固化成正式 delta-layer gate。
+        - 下一步应在最小 gate 已稳定的基础上，再把 `Ellis` 这类 paired base/update 样本补成第二层宿主验证。
+      - 当前范围与已知边界：
+        - 第一阶段只覆盖 transform 通道；`flexWeight` / facial / blendShape control 动画仍不进 layer。
+        - `deltaReferenceMode=bindPose` 当前优先使用目标对象导入后的当前 local pose 作为参考；更严格区分“静态骨架 pose”与“第一帧 pose”的宿主 gate 还要继续补。
+      - DMX 这条功能当前已达到“最小 transform 动画 gate 已验证”，但还不能宣告整个 DMX/SMD delta-layer 需求完全关闭；复杂 paired-update DMX 样本与 facial/float layer 范围仍待后续收口。
 
 ## 环境与工具链说明
 

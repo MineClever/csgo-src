@@ -30,6 +30,20 @@ namespace dmx_import_impl
 
 // --- Private helpers (not declared in DmxImportInternals.h) ---
 
+static std::string GetImportDebugLogPath()
+{
+    char tempPath[MAX_PATH] = {};
+    const DWORD length = GetTempPathA(MAX_PATH, tempPath);
+    if (length == 0 || length >= MAX_PATH)
+    {
+        return {};
+    }
+
+    std::string logPath(tempPath);
+    logPath += "maya_dmx_import_debug.log";
+    return logPath;
+}
+
 static MObject FindNodeByName(const std::string &nodeName, MStatus *outStatus = nullptr)
 {
     MStatus status;
@@ -77,17 +91,24 @@ static MStatus DisconnectDestinationPlug(MDGModifier &modifier, const MPlug &des
 
 // --- Debug helper ---
 
-void AppendImportDebugLog(const char *message)
+void ResetImportDebugLog()
 {
-    char tempPath[MAX_PATH] = {};
-    const DWORD length = GetTempPathA(MAX_PATH, tempPath);
-    if (length == 0 || length >= MAX_PATH)
+    const std::string logPath = GetImportDebugLogPath();
+    if (logPath.empty())
     {
         return;
     }
 
-    std::string logPath(tempPath);
-    logPath += "maya_dmx_import_debug.log";
+    std::ofstream logFile(logPath.c_str(), std::ios::out | std::ios::trunc);
+}
+
+void AppendImportDebugLog(const char *message)
+{
+    const std::string logPath = GetImportDebugLogPath();
+    if (logPath.empty())
+    {
+        return;
+    }
 
     std::ofstream logFile(logPath.c_str(), std::ios::out | std::ios::app);
     if (!logFile.is_open())

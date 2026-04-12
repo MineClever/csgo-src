@@ -185,6 +185,14 @@ SKIN_INFLUENCE_UPDATE_GATE_EXPECTATIONS = {
 }
 
 DELTA_LAYER_GATE_EXPECTATIONS = {
+    "MostComplexSampleSet/vcaanim_VertexAnim": {
+        "base_case": "MostComplexSampleSet/vcaanim_VertexAnim.dmx",
+        "base_import_options": "useSceneRoot=0;importMode=create",
+        "update_import_options": "useSceneRoot=0;importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=firstFrame",
+        "layer_name": "vcaanim_VertexAnim_dmx_delta",
+        "base_plug": "|vca_arm|pelvis.translateX",
+        "min_curve_count": 6,
+    },
     "ctm_fbi/ctm_fbi_anims/rom_skin.smd": {
         "base_case": "ctm_fbi/ctm_fbi.smd",
         "base_import_options": "useSceneRoot=1",

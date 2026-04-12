@@ -39,6 +39,7 @@ struct DeltaStateGroup
 };
 
 // --- Debug helper (implemented in DmxImportInternals.cpp) ---
+void ResetImportDebugLog();
 void AppendImportDebugLog(const char *message);
 
 // --- Element helpers ---
