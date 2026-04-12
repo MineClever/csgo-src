@@ -1,0 +1,26 @@
+
+$CBox 0 0 0 0 0 0
+
+$BBox -13 -13 0 13 13 72
+
+$HBoxSet "cstrike"
+$HBox 1 "head_0" -0.4 0.9 0 3.3 0.7 0 0 0 0 4.2
+$HBox 8 "neck_0" -1.3 0.9 0 1.4 1.3 0 0 0 0 3.5
+$HBox 3 "pelvis" -2.7 1.1 -3.2 -2.7 1.1 3.2 0 0 0 6
+$HBox 3 "spine_0" 1.4 0.8 3.1 1.4 0.8 -3.1 0 0 0 6
+$HBox 2 "spine_1" 3.8 0.8 -2.4 3.8 0.4 2.4 0 0 0 6.5
+$HBox 2 "spine_2" 4.8 0.15 -4.1 4.8 0.15 4.1 0 0 0 6.2
+$HBox 2 "spine_3" 2.5 -0.6 -6 2.5 -0.6 6 0 0 0 5
+$HBox 6 "leg_upper_L" 1.3 0 0 16.5 0 0 0 0 0 5
+$HBox 7 "leg_upper_R" 1.3 0 0 16.5 0 0.7 0 0 0 5
+$HBox 6 "leg_lower_L" 0.1 0 0.2 17 -0.4 0.7 0 0 0 4
+$HBox 7 "leg_lower_R" 0.1 0 0.2 17 -0.4 0.7 0 0 0 4
+$HBox 6 "ankle_L" -2.5 -3.8 -2.8 10.4 -0.2 2 0 24.1 0 -1
+$HBox 7 "ankle_R" -10.4 0.3 -2 2.6 4 2.8 0 24.5 0 -1
+$HBox 4 "hand_L" -2 -2 -2 4.6 2 2 0 13.2 0 -1
+$HBox 5 "hand_R" -5 -2 -2 2 2 2 180 194.600006 0 -1
+$HBox 4 "arm_upper_L" 0 0 0 11.2 0 0 0 0 0 3.3
+$HBox 4 "arm_lower_L" 0 0 0 10 0 0 0 0 0 3
+$HBox 5 "arm_upper_R" 0 0 0 11.2 0 0 0 0 0 3.3
+$HBox 5 "arm_lower_R" 0 0 0 10 0 0 0 0 0 3
+$SkipBoneInBBox

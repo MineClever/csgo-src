@@ -1,0 +1,30 @@
+
+$IKChain "rhand" "hand_R" knee 0 0 0
+$IKChain "lhand" "hand_L" knee 0 0 0
+$IKChain "rfoot" "ankle_R" knee 0 0 0
+$IKChain "lfoot" "ankle_L" knee 0 0 0
+
+$Sequence "default" {
+	"ctm_fbi_anims\default.smd"
+	fadein 0.2
+	fadeout 0.2
+	fps 30
+	ikrule "rhand" release
+	ikrule "lhand" release
+	ikrule "rfoot" release
+	ikrule "lfoot" release
+}
+
+$Sequence "ragdoll" {
+	"ctm_fbi_anims\ragdoll.smd"
+	activity "ACT_DIERAGDOLL" 1
+	fadein 0.2
+	fadeout 0.2
+	fps 30
+	ikrule "rhand" release
+	ikrule "lhand" release
+	ikrule "rfoot" release
+	ikrule "lfoot" release
+}
+
+$IncludeModel "player/custom_player/animset_ct.mdl"

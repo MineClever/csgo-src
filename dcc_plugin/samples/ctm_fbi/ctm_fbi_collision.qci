@@ -1,0 +1,293 @@
+
+$CollisionJoints "ctm_fbi_physics.smd"
+{
+	$mass 300
+	$inertia 10
+	$damping 0.4
+	$rotdamping 20
+	$rootbone "pelvis"
+
+	$jointmassbias "pelvis" 2.6
+	$jointdamping "pelvis" 1
+	$jointrotdamping "pelvis" 12
+
+	$jointmassbias "leg_upper_R" 3
+	$jointrotdamping "leg_upper_R" 8
+	$jointconstrain "leg_upper_R" x limit -15 15 0.4
+	$jointconstrain "leg_upper_R" y limit -70 50 0.4
+	$jointconstrain "leg_upper_R" z limit -15 15 0.4
+
+	$jointmassbias "leg_lower_R" 3
+	$jointrotdamping "leg_lower_R" 2
+	$jointconstrain "leg_lower_R" x limit 0 0 0.4
+	$jointconstrain "leg_lower_R" y limit 0 110 0.4
+	$jointconstrain "leg_lower_R" z limit 0 0 0.4
+
+	$jointmassbias "leg_upper_L" 3
+	$jointrotdamping "leg_upper_L" 8
+	$jointconstrain "leg_upper_L" x limit -15 15 0.4
+	$jointconstrain "leg_upper_L" y limit -15 15 0.4
+	$jointconstrain "leg_upper_L" z limit -70 50 0.4
+
+	$jointmassbias "leg_lower_L" 3
+	$jointrotdamping "leg_lower_L" 2
+	$jointconstrain "leg_lower_L" x limit 0 0 0.4
+	$jointconstrain "leg_lower_L" y limit 0 0 0.4
+	$jointconstrain "leg_lower_L" z limit 0 110 0.4
+
+	$jointconstrain "ankle_L" x limit -20 20 0.4
+	$jointconstrain "ankle_L" y limit -40 40 0.4
+	$jointconstrain "ankle_L" z limit -30 40 0.4
+
+	$jointrotdamping "spine_0" 2
+	$jointconstrain "spine_0" x limit -15 15 0.4
+	$jointconstrain "spine_0" y limit -15 15 0.4
+	$jointconstrain "spine_0" z limit -5 25 0.4
+
+	$jointrotdamping "spine_2" 2
+	$jointconstrain "spine_2" x limit -15 15 0.4
+	$jointconstrain "spine_2" y limit -15 15 0.4
+	$jointconstrain "spine_2" z limit -10 35 0.4
+
+	$jointmassbias "arm_upper_R" 3
+	$jointconstrain "arm_upper_R" x limit -45 45 0.4
+	$jointconstrain "arm_upper_R" y limit -30 70 0.4
+	$jointconstrain "arm_upper_R" z limit -70 45 0.4
+
+	$jointmassbias "arm_lower_R" 3
+	$jointconstrain "arm_lower_R" x limit -20 20 0.4
+	$jointconstrain "arm_lower_R" y limit -10 90 0.4
+	$jointconstrain "arm_lower_R" z limit -5 5 0.4
+
+	$jointmassbias "arm_upper_L" 3
+	$jointconstrain "arm_upper_L" x limit -45 45 0.4
+	$jointconstrain "arm_upper_L" y limit -30 70 0.4
+	$jointconstrain "arm_upper_L" z limit -70 45 0.4
+
+	$jointmassbias "arm_lower_L" 3
+	$jointconstrain "arm_lower_L" x limit -20 20 0.4
+	$jointconstrain "arm_lower_L" y limit -5 5 0.4
+	$jointconstrain "arm_lower_L" z limit -10 90 0.4
+
+	$jointrotdamping "hand_L" 8
+	$jointconstrain "hand_L" x limit -15 15 0.4
+	$jointconstrain "hand_L" y limit -20 30 0.4
+	$jointconstrain "hand_L" z limit -20 20 0.4
+
+	$jointrotdamping "hand_R" 8
+	$jointconstrain "hand_R" x limit -15 15 0.4
+	$jointconstrain "hand_R" y limit -20 30 0.4
+	$jointconstrain "hand_R" z limit -20 20 0.4
+
+	$jointrotdamping "head_0" 2
+	$jointconstrain "head_0" x limit -25 25 0.4
+	$jointconstrain "head_0" y limit -20 20 0.4
+	$jointconstrain "head_0" z limit -10 35 0.4
+
+	$jointconstrain "ankle_R" x limit -20 20 0.4
+	$jointconstrain "ankle_R" y limit -40 40 0.4
+	$jointconstrain "ankle_R" z limit -30 40 0.4
+
+	$jointcollide "ankle_R" "ankle_L"
+	$jointcollide "ankle_R" "leg_lower_L"
+	$jointcollide "ankle_R" "leg_upper_R"
+	$jointcollide "ankle_R" "leg_upper_L"
+	$jointcollide "ankle_R" "pelvis"
+	$jointcollide "ankle_R" "spine_0"
+	$jointcollide "ankle_R" "spine_2"
+	$jointcollide "ankle_R" "arm_upper_R"
+	$jointcollide "ankle_R" "arm_upper_L"
+	$jointcollide "ankle_R" "arm_lower_R"
+	$jointcollide "ankle_R" "arm_lower_L"
+	$jointcollide "ankle_R" "hand_R"
+	$jointcollide "ankle_R" "hand_L"
+	$jointcollide "ankle_R" "head_0"
+	$jointcollide "ankle_L" "ankle_R"
+	$jointcollide "ankle_L" "leg_lower_R"
+	$jointcollide "ankle_L" "leg_upper_R"
+	$jointcollide "ankle_L" "leg_upper_L"
+	$jointcollide "ankle_L" "pelvis"
+	$jointcollide "ankle_L" "spine_0"
+	$jointcollide "ankle_L" "spine_2"
+	$jointcollide "ankle_L" "arm_upper_R"
+	$jointcollide "ankle_L" "arm_upper_L"
+	$jointcollide "ankle_L" "arm_lower_R"
+	$jointcollide "ankle_L" "arm_lower_L"
+	$jointcollide "ankle_L" "hand_R"
+	$jointcollide "ankle_L" "hand_L"
+	$jointcollide "ankle_L" "head_0"
+	$jointcollide "leg_lower_R" "ankle_L"
+	$jointcollide "leg_lower_R" "leg_lower_L"
+	$jointcollide "leg_lower_R" "leg_upper_L"
+	$jointcollide "leg_lower_R" "pelvis"
+	$jointcollide "leg_lower_R" "spine_0"
+	$jointcollide "leg_lower_R" "spine_2"
+	$jointcollide "leg_lower_R" "arm_upper_R"
+	$jointcollide "leg_lower_R" "arm_upper_L"
+	$jointcollide "leg_lower_R" "arm_lower_R"
+	$jointcollide "leg_lower_R" "arm_lower_L"
+	$jointcollide "leg_lower_R" "hand_R"
+	$jointcollide "leg_lower_R" "hand_L"
+	$jointcollide "leg_lower_R" "head_0"
+	$jointcollide "leg_lower_L" "ankle_R"
+	$jointcollide "leg_lower_L" "leg_lower_R"
+	$jointcollide "leg_lower_L" "leg_upper_R"
+	$jointcollide "leg_lower_L" "pelvis"
+	$jointcollide "leg_lower_L" "spine_0"
+	$jointcollide "leg_lower_L" "spine_2"
+	$jointcollide "leg_lower_L" "arm_upper_R"
+	$jointcollide "leg_lower_L" "arm_upper_L"
+	$jointcollide "leg_lower_L" "arm_lower_R"
+	$jointcollide "leg_lower_L" "arm_lower_L"
+	$jointcollide "leg_lower_L" "hand_R"
+	$jointcollide "leg_lower_L" "hand_L"
+	$jointcollide "leg_lower_L" "head_0"
+	$jointcollide "leg_upper_R" "ankle_R"
+	$jointcollide "leg_upper_R" "ankle_L"
+	$jointcollide "leg_upper_R" "leg_lower_L"
+	$jointcollide "leg_upper_R" "leg_upper_L"
+	$jointcollide "leg_upper_R" "spine_0"
+	$jointcollide "leg_upper_R" "spine_2"
+	$jointcollide "leg_upper_R" "arm_upper_R"
+	$jointcollide "leg_upper_R" "arm_upper_L"
+	$jointcollide "leg_upper_R" "arm_lower_R"
+	$jointcollide "leg_upper_R" "arm_lower_L"
+	$jointcollide "leg_upper_R" "hand_R"
+	$jointcollide "leg_upper_R" "hand_L"
+	$jointcollide "leg_upper_R" "head_0"
+	$jointcollide "leg_upper_L" "ankle_R"
+	$jointcollide "leg_upper_L" "ankle_L"
+	$jointcollide "leg_upper_L" "leg_lower_R"
+	$jointcollide "leg_upper_L" "leg_upper_R"
+	$jointcollide "leg_upper_L" "spine_0"
+	$jointcollide "leg_upper_L" "spine_2"
+	$jointcollide "leg_upper_L" "arm_upper_R"
+	$jointcollide "leg_upper_L" "arm_upper_L"
+	$jointcollide "leg_upper_L" "arm_lower_R"
+	$jointcollide "leg_upper_L" "arm_lower_L"
+	$jointcollide "leg_upper_L" "hand_R"
+	$jointcollide "leg_upper_L" "hand_L"
+	$jointcollide "leg_upper_L" "head_0"
+	$jointcollide "pelvis" "ankle_R"
+	$jointcollide "pelvis" "ankle_L"
+	$jointcollide "pelvis" "leg_lower_R"
+	$jointcollide "pelvis" "leg_lower_L"
+	$jointcollide "pelvis" "spine_2"
+	$jointcollide "pelvis" "arm_upper_R"
+	$jointcollide "pelvis" "arm_upper_L"
+	$jointcollide "pelvis" "arm_lower_R"
+	$jointcollide "pelvis" "arm_lower_L"
+	$jointcollide "pelvis" "hand_R"
+	$jointcollide "pelvis" "hand_L"
+	$jointcollide "pelvis" "head_0"
+	$jointcollide "spine_0" "ankle_R"
+	$jointcollide "spine_0" "ankle_L"
+	$jointcollide "spine_0" "leg_lower_R"
+	$jointcollide "spine_0" "leg_lower_L"
+	$jointcollide "spine_0" "leg_upper_R"
+	$jointcollide "spine_0" "leg_upper_L"
+	$jointcollide "spine_0" "arm_upper_R"
+	$jointcollide "spine_0" "arm_upper_L"
+	$jointcollide "spine_0" "arm_lower_R"
+	$jointcollide "spine_0" "arm_lower_L"
+	$jointcollide "spine_0" "hand_R"
+	$jointcollide "spine_0" "hand_L"
+	$jointcollide "spine_0" "head_0"
+	$jointcollide "spine_2" "ankle_R"
+	$jointcollide "spine_2" "ankle_L"
+	$jointcollide "spine_2" "leg_lower_R"
+	$jointcollide "spine_2" "leg_lower_L"
+	$jointcollide "spine_2" "leg_upper_R"
+	$jointcollide "spine_2" "leg_upper_L"
+	$jointcollide "spine_2" "pelvis"
+	$jointcollide "spine_2" "arm_lower_R"
+	$jointcollide "spine_2" "arm_lower_L"
+	$jointcollide "spine_2" "hand_R"
+	$jointcollide "spine_2" "hand_L"
+	$jointcollide "arm_upper_R" "ankle_R"
+	$jointcollide "arm_upper_R" "ankle_L"
+	$jointcollide "arm_upper_R" "leg_lower_R"
+	$jointcollide "arm_upper_R" "leg_lower_L"
+	$jointcollide "arm_upper_R" "leg_upper_R"
+	$jointcollide "arm_upper_R" "leg_upper_L"
+	$jointcollide "arm_upper_R" "pelvis"
+	$jointcollide "arm_upper_R" "spine_0"
+	$jointcollide "arm_upper_R" "arm_upper_L"
+	$jointcollide "arm_upper_R" "arm_lower_L"
+	$jointcollide "arm_upper_R" "hand_R"
+	$jointcollide "arm_upper_R" "hand_L"
+	$jointcollide "arm_upper_R" "head_0"
+	$jointcollide "arm_upper_L" "ankle_R"
+	$jointcollide "arm_upper_L" "ankle_L"
+	$jointcollide "arm_upper_L" "leg_lower_R"
+	$jointcollide "arm_upper_L" "leg_lower_L"
+	$jointcollide "arm_upper_L" "leg_upper_R"
+	$jointcollide "arm_upper_L" "leg_upper_L"
+	$jointcollide "arm_upper_L" "pelvis"
+	$jointcollide "arm_upper_L" "spine_0"
+	$jointcollide "arm_upper_L" "arm_upper_R"
+	$jointcollide "arm_upper_L" "arm_lower_R"
+	$jointcollide "arm_upper_L" "hand_R"
+	$jointcollide "arm_upper_L" "hand_L"
+	$jointcollide "arm_upper_L" "head_0"
+	$jointcollide "arm_lower_R" "ankle_R"
+	$jointcollide "arm_lower_R" "ankle_L"
+	$jointcollide "arm_lower_R" "leg_lower_R"
+	$jointcollide "arm_lower_R" "leg_lower_L"
+	$jointcollide "arm_lower_R" "leg_upper_R"
+	$jointcollide "arm_lower_R" "leg_upper_L"
+	$jointcollide "arm_lower_R" "pelvis"
+	$jointcollide "arm_lower_R" "spine_0"
+	$jointcollide "arm_lower_R" "spine_2"
+	$jointcollide "arm_lower_R" "arm_upper_L"
+	$jointcollide "arm_lower_R" "head_0"
+	$jointcollide "arm_lower_L" "ankle_R"
+	$jointcollide "arm_lower_L" "ankle_L"
+	$jointcollide "arm_lower_L" "leg_lower_R"
+	$jointcollide "arm_lower_L" "leg_lower_L"
+	$jointcollide "arm_lower_L" "leg_upper_R"
+	$jointcollide "arm_lower_L" "leg_upper_L"
+	$jointcollide "arm_lower_L" "pelvis"
+	$jointcollide "arm_lower_L" "spine_0"
+	$jointcollide "arm_lower_L" "spine_2"
+	$jointcollide "arm_lower_L" "arm_upper_R"
+	$jointcollide "arm_lower_L" "head_0"
+	$jointcollide "hand_R" "ankle_R"
+	$jointcollide "hand_R" "ankle_L"
+	$jointcollide "hand_R" "leg_lower_R"
+	$jointcollide "hand_R" "leg_lower_L"
+	$jointcollide "hand_R" "leg_upper_R"
+	$jointcollide "hand_R" "leg_upper_L"
+	$jointcollide "hand_R" "pelvis"
+	$jointcollide "hand_R" "spine_0"
+	$jointcollide "hand_R" "spine_2"
+	$jointcollide "hand_R" "arm_upper_R"
+	$jointcollide "hand_R" "arm_upper_L"
+	$jointcollide "hand_R" "head_0"
+	$jointcollide "hand_L" "ankle_R"
+	$jointcollide "hand_L" "ankle_L"
+	$jointcollide "hand_L" "leg_lower_R"
+	$jointcollide "hand_L" "leg_lower_L"
+	$jointcollide "hand_L" "leg_upper_R"
+	$jointcollide "hand_L" "leg_upper_L"
+	$jointcollide "hand_L" "pelvis"
+	$jointcollide "hand_L" "spine_0"
+	$jointcollide "hand_L" "spine_2"
+	$jointcollide "hand_L" "arm_upper_R"
+	$jointcollide "hand_L" "arm_upper_L"
+	$jointcollide "hand_L" "head_0"
+	$jointcollide "head_0" "ankle_R"
+	$jointcollide "head_0" "ankle_L"
+	$jointcollide "head_0" "leg_lower_R"
+	$jointcollide "head_0" "leg_lower_L"
+	$jointcollide "head_0" "leg_upper_R"
+	$jointcollide "head_0" "leg_upper_L"
+	$jointcollide "head_0" "pelvis"
+	$jointcollide "head_0" "spine_0"
+	$jointcollide "head_0" "arm_upper_R"
+	$jointcollide "head_0" "arm_upper_L"
+	$jointcollide "head_0" "arm_lower_R"
+	$jointcollide "head_0" "arm_lower_L"
+	$jointcollide "head_0" "hand_R"
+	$jointcollide "head_0" "hand_L"
+}

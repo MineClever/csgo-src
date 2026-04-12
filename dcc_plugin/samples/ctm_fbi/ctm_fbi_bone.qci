@@ -1,0 +1,211 @@
+
+$DefineBone "pelvis" "" 0 42.824833 -2.853551 0 90.000003 90.000003 0 0 0 0 0 0
+$DefineBone "lean_root" "" 0 0 0 0 0 0 0 0 0 0 0 0
+$DefineBone "cam_driver" "" 0 0 64 0 0 0 0 0 0 0 0 0
+$DefineBone "spine_0" "pelvis" 0.934204 0.090506 0 0 6.615895 0 0 0 0 0 0 0
+$DefineBone "spine_1" "spine_0" 4.066376 0.000001 0 0 -6.720192 0 0 0 0 0 0 0
+$DefineBone "spine_2" "spine_1" 4.744072 0 0 0 -10.503316 0 0 0 0 0 0 0
+$DefineBone "spine_3" "spine_2" 6.347771 0.000001 0 0 14.001003 0 0 0 0 0 0 0
+$DefineBone "neck_0" "spine_3" 6.515205 -0.000016 0 0 13.985429 0 0 0 0 0 0 0
+$DefineBone "head_0" "neck_0" 5.762157 0.000002 0 0 -17.378821 0 0 0 0 0 0 0
+$DefineBone "jiggle_hood" "neck_0" 1.022366 -3.844492 -0.010687 86.788284 -84.25412 29.642062 0 0 0 0 0 0
+$DefineBone "clavicle_L" "spine_3" 4.311546 3.005295 1.270492 -61.86198 -116.042921 115.414338 0 0 0 0 0 0
+$DefineBone "arm_upper_L" "clavicle_L" 6.665433 0 0.000004 -38.000536 16.037399 11.704826 0 0 0 0 0 0
+$DefineBone "arm_lower_L" "arm_upper_L" 11.596664 0 0 -0.000002 25.480205 0.000003 0 0 0 0 0 0
+$DefineBone "hand_L" "arm_lower_L" 11.486961 0 0.000004 -3.03394 2.807186 86.410001 0 0 0 0 0 0
+$DefineBone "finger_middle_meta_L" "hand_L" 0.80784 0.015438 -0.224508 -5.640275 -4.480851 5.933862 0 0 0 0 0 0
+$DefineBone "finger_middle_0_L" "finger_middle_meta_L" 3.265087 0 0 -2.980436 24.773907 2.402495 0 0 0 0 0 0
+$DefineBone "finger_middle_1_L" "finger_middle_0_L" 2.075735 0 0 1.556973 20.250514 0.249379 0 0 0 0 0 0
+$DefineBone "finger_middle_2_L" "finger_middle_1_L" 1.413418 0 0 0.354592 12.342263 0.032903 0 0 0 0 0 0
+$DefineBone "finger_pinky_meta_L" "hand_L" 0.562845 0.124912 0.98924 -19.702482 5.079183 -0.790865 0 0 0 0 0 0
+$DefineBone "finger_pinky_0_L" "finger_pinky_meta_L" 2.704884 -0.000004 0 -6.970709 11.127642 -4.211321 0 0 0 0 0 0
+$DefineBone "finger_pinky_1_L" "finger_pinky_0_L" 1.511129 0 0 0.823089 20.106189 0.130547 0 0 0 0 0 0
+$DefineBone "finger_pinky_2_L" "finger_pinky_1_L" 0.872662 0.000002 0 -1.327087 2.65504 0.082141 0 0 0 0 0 0
+$DefineBone "finger_index_meta_L" "hand_L" 0.802782 0.214901 -0.873659 3.050809 -3.750102 12.112559 0 0 0 0 0 0
+$DefineBone "finger_index_0_L" "finger_index_meta_L" 3.29038 -0.000004 -0.000001 -1.37245 28.248794 5.880788 0 0 0 0 0 0
+$DefineBone "finger_index_1_L" "finger_index_0_L" 1.995686 0.000002 0 0.630867 18.943844 0.112794 0 0 0 0 0 0
+$DefineBone "finger_index_2_L" "finger_index_1_L" 1.26902 0 0 -2.098533 0.796058 0.19596 0 0 0 0 0 0
+$DefineBone "finger_thumb_0_L" "hand_L" 1.423075 0.741585 -1.1764 26.929396 33.103919 89.945259 0 0 0 0 0 0
+$DefineBone "finger_thumb_1_L" "finger_thumb_0_L" 1.698864 0 -0.000002 -5.586246 24.995786 -1.038858 0 0 0 0 0 0
+$DefineBone "finger_thumb_2_L" "finger_thumb_1_L" 1.566338 -0.000001 0 0.358664 17.232009 0.068018 0 0 0 0 0 0
+$DefineBone "finger_ring_meta_L" "hand_L" 0.711737 0.05761 0.410458 -12.336226 -1.130944 3.830364 0 0 0 0 0 0
+$DefineBone "finger_ring_0_L" "finger_ring_meta_L" 2.987719 0 0.000001 -6.211739 23.3682 -1.014241 0 0 0 0 0 0
+$DefineBone "finger_ring_1_L" "finger_ring_0_L" 1.910931 0.000002 0 0.032414 18.794541 0.00536 0 0 0 0 0 0
+$DefineBone "finger_ring_2_L" "finger_ring_1_L" 1.280708 0 0 0.519846 7.678731 0.009725 0 0 0 0 0 0
+$DefineBone "weapon_hand_L" "hand_L" 2.790777 1.123611 0.295327 0.000003 -180.000007 0.000003 0 0 0 0 0 0
+$DefineBone "arm_lower_L_TWIST" "arm_lower_L" 3.828987 0 0 -0.000002 -0.000003 0.000003 0 0 0 0 0 0
+$DefineBone "arm_lower_L_TWIST1" "arm_lower_L" 7.657978 -0.000001 0.000004 -0.000002 -0.000003 0.000003 0 0 0 0 0 0
+$DefineBone "arm_upper_L_TWIST" "arm_upper_L" 3.865551 0 0 0 -0.000004 0.000002 0 0 0 0 0 0
+$DefineBone "arm_upper_L_TWIST1" "arm_upper_L" 7.731106 0.000004 -0.000004 0 -0.000004 0.000002 0 0 0 0 0 0
+$DefineBone "clavicle_R" "spine_3" 4.311554 3.005294 -1.27049 -61.862001 63.957134 115.414338 0 0 0 0 0 0
+$DefineBone "arm_upper_R" "clavicle_R" -6.665439 -0.000003 0 38.00069 -163.962627 168.295152 0 0 0 0 0 0
+$DefineBone "arm_lower_R" "arm_upper_R" 11.596653 -0.000001 -0.000004 0.000172 -25.480147 -90.000072 0 0 0 0 0 0
+$DefineBone "hand_R" "arm_lower_R" 11.486988 0 0 -2.803294 176.962389 176.558698 0 0 0 0 0 0
+$DefineBone "finger_middle_meta_R" "hand_R" -0.807777 -0.015434 0.224528 -5.640271 -4.48085 5.933861 0 0 0 0 0 0
+$DefineBone "finger_middle_0_R" "finger_middle_meta_R" -3.265091 -0.000004 0 -2.980434 24.773904 2.402496 0 0 0 0 0 0
+$DefineBone "finger_middle_1_R" "finger_middle_0_R" -2.075773 0.000038 -0.000016 1.556974 20.250509 0.249379 0 0 0 0 0 0
+$DefineBone "finger_middle_2_R" "finger_middle_1_R" -1.413406 0.00001 -0.000002 0.354592 12.342263 0.032903 0 0 0 0 0 0
+$DefineBone "finger_pinky_meta_R" "hand_R" -0.562847 -0.124886 -0.989244 -19.70248 5.079182 -0.790864 0 0 0 0 0 0
+$DefineBone "finger_pinky_0_R" "finger_pinky_meta_R" -2.704912 0 0 -6.970704 11.127638 -4.211318 0 0 0 0 0 0
+$DefineBone "finger_pinky_1_R" "finger_pinky_0_R" -1.511091 -0.000019 -0.00001 0.823092 20.106183 0.130551 0 0 0 0 0 0
+$DefineBone "finger_pinky_2_R" "finger_pinky_1_R" -0.872673 -0.000021 0.000007 -1.327083 2.655037 0.082145 0 0 0 0 0 0
+$DefineBone "finger_index_meta_R" "hand_R" -0.802748 -0.21492 0.873668 3.050808 -3.750101 12.112559 0 0 0 0 0 0
+$DefineBone "finger_index_0_R" "finger_index_meta_R" -3.290361 0.000015 0.000001 -1.372451 28.248794 5.88079 0 0 0 0 0 0
+$DefineBone "finger_index_1_R" "finger_index_0_R" -1.99572 0.000071 -0.000042 0.630866 18.943842 0.112799 0 0 0 0 0 0
+$DefineBone "finger_index_2_R" "finger_index_1_R" -1.268997 -0.00008 0.000055 -2.098534 0.796055 0.195967 0 0 0 0 0 0
+$DefineBone "finger_thumb_0_R" "hand_R" -1.423063 -0.741623 1.176404 26.929392 33.103919 89.945266 0 0 0 0 0 0
+$DefineBone "finger_thumb_1_R" "finger_thumb_0_R" -1.698803 0.000021 -0.000076 -5.586242 24.995786 -1.03886 0 0 0 0 0 0
+$DefineBone "finger_thumb_2_R" "finger_thumb_1_R" -1.566319 0.000017 0.000044 0.358669 17.232007 0.068016 0 0 0 0 0 0
+$DefineBone "finger_ring_meta_R" "hand_R" -0.711681 -0.05761 -0.410446 -12.33622 -1.130945 3.830364 0 0 0 0 0 0
+$DefineBone "finger_ring_0_R" "finger_ring_meta_R" -2.987785 0.000034 -0.000009 -6.211735 23.368205 -1.014241 0 0 0 0 0 0
+$DefineBone "finger_ring_1_R" "finger_ring_0_R" -1.910934 -0.000069 0.000009 0.032417 18.794545 0.005363 0 0 0 0 0 0
+$DefineBone "finger_ring_2_R" "finger_ring_1_R" -1.280689 0.000076 -0.000006 0.51985 7.678736 0.009725 0 0 0 0 0 0
+$DefineBone "weapon_hand_R" "hand_R" -2.790766 -1.123657 -0.295324 0.000002 -180.000007 0.000002 0 0 0 0 0 0
+$DefineBone "arm_lower_R_TWIST" "arm_lower_R" 3.828993 0.000004 0 -0.000046 179.999966 90.000003 0 0 0 0 0 0
+$DefineBone "arm_lower_R_TWIST1" "arm_lower_R" 7.658005 0.000004 0 -0.000046 179.999966 90.000003 0 0 0 0 0 0
+$DefineBone "arm_upper_R_TWIST" "arm_upper_R" 3.865551 -0.000001 -0.000004 -0.000154 -180.000007 180.000007 0 0 0 0 0 0
+$DefineBone "arm_upper_R_TWIST1" "arm_upper_R" 7.731098 -0.000005 -0.000004 -0.000154 -180.000007 180.000007 0 0 0 0 0 0
+$DefineBone "scapula_R" "clavicle_R" -5.998333 0.409463 1.968811 -73.394317 -74.843766 -146.596625 0 0 0 0 0 0
+$DefineBone "jiggle_back_micropouches" "spine_3" -0.109306 -6.601205 0.795064 -81.244295 -7.681196 -102.509071 0 0 0 0 0 0
+$DefineBone "jiggle_front_micropouches" "spine_2" -0.869808 5.186763 5.650943 -54.713542 -90.384966 7.940623 0 0 0 0 0 0
+$DefineBone "jiggle_front_pouch_01" "spine_2" -1.057919 3.888997 -8.370535 -32.893297 99.078622 174.546469 0 0 0 0 0 0
+$DefineBone "jiggle_front_pouch_02" "spine_2" -1.455963 6.942204 -4.286187 -66.922269 97.326133 175.212003 0 0 0 0 0 0
+$DefineBone "leg_upper_L" "pelvis" -3.771385 0.913481 3.69423 -2.271182 179.170781 -15.008666 0 0 0 0 0 0
+$DefineBone "leg_lower_L" "leg_upper_L" 17.902943 0 0 0 7.365635 0.000002 0 0 0 0 0 0
+$DefineBone "ankle_L" "leg_lower_L" 16.937239 0 0 2.260583 -67.350105 179.704013 0 0 0 0 0 0
+$DefineBone "ball_L" "ankle_L" 6.329626 0 0 0.000002 28.673582 0.000001 0 0 0 0 0 0
+$DefineBone "lfoot_lock" "ball_L" 0 0 0 0.000002 0.000001 0.000001 0 0 0 0 0 0
+$DefineBone "leg_upper_L_TWIST" "leg_upper_L" 5.967648 0.000002 0 0 0 -0.000001 0 0 0 0 0 0
+$DefineBone "leg_upper_L_TWIST1" "leg_upper_L" 11.935295 0.000002 0 0 0 -0.000001 0 0 0 0 0 0
+$DefineBone "jiggle_climbinggear_01" "leg_upper_L" -3.544342 -4.397163 2.808476 -52.696406 -104.526702 -170.438274 0 0 0 0 0 0
+$DefineBone "jiggle_climbinggear_02" "jiggle_climbinggear_01" 0.322567 -2.860958 0.03917 0.000002 -0.000001 0.000001 0 0 0 0 0 0
+$DefineBone "leg_upper_R" "pelvis" -3.771431 0.913481 -3.69423 2.271183 179.170781 105.008668 0 0 0 0 0 0
+$DefineBone "leg_lower_R" "leg_upper_R" 17.902935 0 0 7.36566 0.000008 0.000002 0 0 0 0 0 0
+$DefineBone "ankle_R" "leg_lower_R" 16.937189 0 0 67.243507 -174.147258 -84.896028 0 0 0 0 0 0
+$DefineBone "ball_R" "ankle_R" -6.329633 -0.000002 0.000003 0.000003 28.673582 0 0 0 0 0 0 0
+$DefineBone "rfoot_lock" "ball_R" 0 0 0 0.000003 -0.000001 0 0 0 0 0 0 0
+$DefineBone "leg_upper_R_TWIST" "leg_upper_R" 5.967651 0 0 -0.000001 -180.000007 90.000003 0 0 0 0 0 0
+$DefineBone "leg_upper_R_TWIST1" "leg_upper_R" 11.935297 -0.000001 0 -0.000001 -180.000007 90.000003 0 0 0 0 0 0
+$DefineBone "jiggle_holster" "leg_upper_R" 4.588383 -4.984219 0.884278 -72.665864 98.656776 0.589177 0 0 0 0 0 0
+$DefineBone "finger_pinky_L_END" "finger_pinky_2_L" 0.619389 0.000002 0 -0.000005 0.000007 -0.000009 0 0 0 0 0 0
+$DefineBone "finger_thumb_L_END" "finger_thumb_2_L" 1.294838 0 0 0 -0.000001 0.000005 0 0 0 0 0 0
+$DefineBone "finger_ring_L_END" "finger_ring_2_L" 1.041981 0.000002 0 -0.000004 -0.000004 -0.000005 0 0 0 0 0 0
+$DefineBone "finger_pinky_R_END" "finger_pinky_2_R" -0.619343 -0.000025 -0.000013 -0.000001 0.000004 -0.000005 0 0 0 0 0 0
+$DefineBone "finger_thumb_R_END" "finger_thumb_2_R" -1.294922 -0.000015 -0.000044 0.000005 -0.000005 0.000007 0 0 0 0 0 0
+$DefineBone "finger_ring_R_END" "finger_ring_2_R" -1.041943 -0.000005 -0.000011 -0.000001 0.000001 -0.000003 0 0 0 0 0 0
+$DefineBone "ValveBiped.weapon_bone" "hand_R" -7.000002 -2.000004 2.500001 -0.000002 -90.00001 110.000006 0 0 0 0 0 0
+$DefineBone "lh_ik_driver" "hand_L" 0.000002 0 0 -0.000003 0.000002 -0.000002 0 0 0 0 0 0
+$DefineBone "primary_jiggle_jnt" "spine_2" 3.199997 -8.2 -4.3 3 -171.000003 -32.999998 0 0 0 0 0 0
+$DefineBone "primary_smg_jiggle_jnt" "spine_2" 6.099998 8.600001 0.5 -35 169.999995 0 0 0 0 0 0 0
+
+$BoneMerge "pelvis"
+$BoneMerge "lean_root"
+$BoneMerge "cam_driver"
+$BoneMerge "spine_0"
+$BoneMerge "spine_1"
+$BoneMerge "spine_2"
+$BoneMerge "spine_3"
+$BoneMerge "neck_0"
+$BoneMerge "head_0"
+$BoneMerge "clavicle_L"
+$BoneMerge "arm_upper_L"
+$BoneMerge "arm_lower_L"
+$BoneMerge "hand_L"
+$BoneMerge "finger_middle_meta_L"
+$BoneMerge "finger_middle_0_L"
+$BoneMerge "finger_middle_1_L"
+$BoneMerge "finger_middle_2_L"
+$BoneMerge "finger_pinky_meta_L"
+$BoneMerge "finger_pinky_0_L"
+$BoneMerge "finger_pinky_1_L"
+$BoneMerge "finger_pinky_2_L"
+$BoneMerge "finger_index_meta_L"
+$BoneMerge "finger_index_0_L"
+$BoneMerge "finger_index_1_L"
+$BoneMerge "finger_index_2_L"
+$BoneMerge "finger_thumb_0_L"
+$BoneMerge "finger_thumb_1_L"
+$BoneMerge "finger_thumb_2_L"
+$BoneMerge "finger_ring_meta_L"
+$BoneMerge "finger_ring_0_L"
+$BoneMerge "finger_ring_1_L"
+$BoneMerge "finger_ring_2_L"
+$BoneMerge "weapon_hand_L"
+$BoneMerge "arm_lower_L_TWIST"
+$BoneMerge "arm_lower_L_TWIST1"
+$BoneMerge "arm_upper_L_TWIST"
+$BoneMerge "arm_upper_L_TWIST1"
+$BoneMerge "clavicle_R"
+$BoneMerge "arm_upper_R"
+$BoneMerge "arm_lower_R"
+$BoneMerge "hand_R"
+$BoneMerge "finger_middle_meta_R"
+$BoneMerge "finger_middle_0_R"
+$BoneMerge "finger_middle_1_R"
+$BoneMerge "finger_middle_2_R"
+$BoneMerge "finger_pinky_meta_R"
+$BoneMerge "finger_pinky_0_R"
+$BoneMerge "finger_pinky_1_R"
+$BoneMerge "finger_pinky_2_R"
+$BoneMerge "finger_index_meta_R"
+$BoneMerge "finger_index_0_R"
+$BoneMerge "finger_index_1_R"
+$BoneMerge "finger_index_2_R"
+$BoneMerge "finger_thumb_0_R"
+$BoneMerge "finger_thumb_1_R"
+$BoneMerge "finger_thumb_2_R"
+$BoneMerge "finger_ring_meta_R"
+$BoneMerge "finger_ring_0_R"
+$BoneMerge "finger_ring_1_R"
+$BoneMerge "finger_ring_2_R"
+$BoneMerge "weapon_hand_R"
+$BoneMerge "arm_lower_R_TWIST"
+$BoneMerge "arm_lower_R_TWIST1"
+$BoneMerge "arm_upper_R_TWIST"
+$BoneMerge "arm_upper_R_TWIST1"
+$BoneMerge "leg_upper_L"
+$BoneMerge "leg_lower_L"
+$BoneMerge "ankle_L"
+$BoneMerge "ball_L"
+$BoneMerge "lfoot_lock"
+$BoneMerge "leg_upper_L_TWIST"
+$BoneMerge "leg_upper_L_TWIST1"
+$BoneMerge "leg_upper_R"
+$BoneMerge "leg_lower_R"
+$BoneMerge "ankle_R"
+$BoneMerge "ball_R"
+$BoneMerge "rfoot_lock"
+$BoneMerge "leg_upper_R_TWIST"
+$BoneMerge "leg_upper_R_TWIST1"
+$BoneMerge "lh_ik_driver"
+
+$JiggleBone "primary_jiggle_jnt"
+{
+	is_flexible
+	{
+		length 50
+		tip_mass 0
+		pitch_stiffness 100
+		pitch_damping 9
+		yaw_stiffness 300
+		yaw_damping 9
+		along_stiffness 100
+		along_damping 0
+		angle_constraint 45.000002
+	}
+}
+$JiggleBone "primary_smg_jiggle_jnt"
+{
+	is_flexible
+	{
+		length 50
+		tip_mass 0
+		pitch_stiffness 100
+		pitch_damping 9
+		yaw_stiffness 300
+		yaw_damping 9
+		along_stiffness 100
+		along_damping 0
+		angle_constraint 45.000002
+	}
+}
