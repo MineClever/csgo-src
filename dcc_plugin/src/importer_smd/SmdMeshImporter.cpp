@@ -25,6 +25,7 @@
 #include <maya/MGlobal.h>
 #include <maya/MIntArray.h>
 #include <maya/MItDag.h>
+#include <maya/MItDependencyGraph.h>
 #include <maya/MMatrix.h>
 #include <maya/MPointArray.h>
 #include <maya/MPlug.h>
@@ -361,10 +362,20 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
         transformFn.setName((smd_mesh_import_impl::SanitizeMeshName(materialName) + "_grp#").c_str());
     }
 
-    const bool hasExistingMeshChild = reusedExistingGroup && !findPrimaryMeshChild(transformObject).isNull();
+    const MObject existingMeshObject = reusedExistingGroup ? findPrimaryMeshChild(transformObject) : MObject::kNullObj;
+    const bool hasExistingMeshChild = !existingMeshObject.isNull();
+    const bool canReuseExistingMeshForUpdate =
+        hasExistingMeshChild &&
+        dcc_import_policy::UsesUpdateCurrentScene(scenePolicy_) &&
+        hasWeights &&
+        meshTopologyMatches(existingMeshObject, polygonCounts, polygonConnects);
+
     if (hasExistingMeshChild)
     {
-        if (dcc_import_policy::UsesUpdateCurrentScene(scenePolicy_))
+        if (canReuseExistingMeshForUpdate)
+        {
+        }
+        else if (dcc_import_policy::UsesUpdateCurrentScene(scenePolicy_))
         {
             status = smd_mesh_import_impl::DeleteExistingMeshGroupForUpdate(scenePolicy_, transformObject);
             if (!status)
@@ -378,20 +389,34 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
         }
     }
 
-    status = smd_mesh_import_impl::DeleteExistingMeshGroupForUpdate(scenePolicy_, transformObject);
-    if (!status)
-    {
-        return maya_smd::ReportError(MString("maya_smd: failed to clear mesh history for material group ") + materialName.c_str(), status);
-    }
-
     MFnMesh meshFn;
-    const MObject meshObject = meshFn.create(points.length(), polygonCounts.length(), points, polygonCounts, polygonConnects, transformObject, &status);
-    if (!status)
+    MObject meshObject = MObject::kNullObj;
+    if (canReuseExistingMeshForUpdate)
     {
-        return maya_smd::ReportError(MString("maya_smd: failed to create mesh shape for material group ") + materialName.c_str(), status);
+        meshObject = existingMeshObject;
+        meshFn.setObject(meshObject);
+        status = meshFn.setPoints(points, MSpace::kObject);
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to update mesh points for material group ") + materialName.c_str(), status);
+        }
     }
+    else
+    {
+        status = smd_mesh_import_impl::DeleteExistingMeshGroupForUpdate(scenePolicy_, transformObject);
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to clear mesh history for material group ") + materialName.c_str(), status);
+        }
 
-    meshFn.setName((smd_mesh_import_impl::SanitizeMeshName(materialName) + "Shape#").c_str());
+        meshObject = meshFn.create(points.length(), polygonCounts.length(), points, polygonCounts, polygonConnects, transformObject, &status);
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to create mesh shape for material group ") + materialName.c_str(), status);
+        }
+
+        meshFn.setName((smd_mesh_import_impl::SanitizeMeshName(materialName) + "Shape#").c_str());
+    }
 
     status = smd_mesh_import_impl::SetStringAttribute(transformObject, smd_mesh_import_impl::kSmdMaterialNameAttribute, materialName);
     if (!status)
@@ -603,6 +628,182 @@ MObject SmdMeshImporter::findPrimaryMeshChild(const MObject &transformObject) co
     }
 
     return MObject::kNullObj;
+}
+
+bool SmdMeshImporter::meshTopologyMatches(
+    const MObject &meshObject,
+    const MIntArray &polygonCounts,
+    const MIntArray &polygonConnects) const
+{
+    MStatus status;
+    MFnMesh meshFn(meshObject, &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    MIntArray existingCounts;
+    MIntArray existingConnects;
+    status = meshFn.getVertices(existingCounts, existingConnects);
+    if (!status)
+    {
+        return false;
+    }
+
+    if (existingCounts.length() != polygonCounts.length() || existingConnects.length() != polygonConnects.length())
+    {
+        return false;
+    }
+
+    for (unsigned int index = 0; index < polygonCounts.length(); ++index)
+    {
+        if (existingCounts[index] != polygonCounts[index])
+        {
+            return false;
+        }
+    }
+
+    for (unsigned int index = 0; index < polygonConnects.length(); ++index)
+    {
+        if (existingConnects[index] != polygonConnects[index])
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+MObject SmdMeshImporter::findExistingSkinClusterNode(const MObject &meshObject) const
+{
+    if (!dcc_import_policy::UsesUpdateCurrentScene(scenePolicy_) || meshObject.isNull())
+    {
+        return MObject::kNullObj;
+    }
+
+    MObject rootObject = meshObject;
+    MStatus status;
+    MItDependencyGraph iterator(
+        rootObject,
+        MFn::kSkinClusterFilter,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (; !iterator.isDone(); iterator.next())
+    {
+        MObject currentNode = iterator.currentItem(&status);
+        if (!status || currentNode.isNull())
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        return currentNode;
+    }
+
+    return MObject::kNullObj;
+}
+
+MStatus SmdMeshImporter::updateExistingSkinClusterBindings(
+    const MObject &skinClusterObject,
+    const MDagPathArray &influencePaths,
+    const MDagPath &meshParentPath) const
+{
+    if (skinClusterObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status;
+    MFnSkinCluster skinClusterFn(skinClusterObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MDagPathArray existingInfluencePaths;
+    skinClusterFn.influenceObjects(existingInfluencePaths, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    if (existingInfluencePaths.length() != influencePaths.length())
+    {
+        return maya_smd::ReportWarning(
+            MString("maya_smd: update skipped skinCluster overwrite because influence count did not match for ")
+            + meshParentPath.fullPathName());
+    }
+
+    std::unordered_map<std::string, unsigned int> existingInfluenceByPath;
+    for (unsigned int index = 0; index < existingInfluencePaths.length(); ++index)
+    {
+        existingInfluenceByPath[existingInfluencePaths[index].fullPathName().asChar()] = index;
+    }
+
+    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug bindPreMatrixArrayPlug = skinClusterNode.findPlug("bindPreMatrix", true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (unsigned int influenceIndex = 0; influenceIndex < influencePaths.length(); ++influenceIndex)
+    {
+        const std::string fullPath = influencePaths[influenceIndex].fullPathName().asChar();
+        const auto existingIt = existingInfluenceByPath.find(fullPath);
+        if (existingIt == existingInfluenceByPath.end())
+        {
+            return maya_smd::ReportWarning(
+                MString("maya_smd: update skipped skinCluster overwrite because an existing influence did not match for ")
+                + meshParentPath.fullPathName());
+        }
+
+        MPlug bindPreMatrixPlug = bindPreMatrixArrayPlug.elementByLogicalIndex(existingIt->second, &status);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        MFnMatrixData matrixDataFn;
+        MObject bindPreMatrixObject = matrixDataFn.create(influencePaths[influenceIndex].inclusiveMatrixInverse(), &status);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+        status = bindPreMatrixPlug.setMObject(bindPreMatrixObject);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+    }
+
+    MPlug geomMatrixPlug = skinClusterNode.findPlug("geomMatrix", true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MFnMatrixData geomMatrixDataFn;
+    MObject geomMatrixObject = geomMatrixDataFn.create(meshParentPath.inclusiveMatrix(), &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    status = geomMatrixPlug.setMObject(geomMatrixObject);
+    return status ? MS::kSuccess : MS::kFailure;
 }
 
 MStatus SmdMeshImporter::createSkinClusterWithApi(
@@ -851,11 +1052,22 @@ MStatus SmdMeshImporter::applySkinning(
         return maya_smd::ReportError(MString("maya_smd: failed to resolve mesh DAG path for skinning ") + meshTransformPath.fullPathName(), status);
     }
 
-    MObject skinClusterObject;
-    status = createSkinClusterWithApi(activeInfluencePaths, meshDagPath, meshTransformPath, skinClusterObject);
-    if (!status || skinClusterObject.isNull())
+    MObject skinClusterObject = findExistingSkinClusterNode(meshObject);
+    if (!skinClusterObject.isNull())
     {
-        return maya_smd::ReportError(MString("maya_smd: failed to create skinCluster for ") + meshTransformPath.fullPathName(), status);
+        status = updateExistingSkinClusterBindings(skinClusterObject, activeInfluencePaths, meshTransformPath);
+        if (!status)
+        {
+            return status;
+        }
+    }
+    else
+    {
+        status = createSkinClusterWithApi(activeInfluencePaths, meshDagPath, meshTransformPath, skinClusterObject);
+        if (!status || skinClusterObject.isNull())
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to create skinCluster for ") + meshTransformPath.fullPathName(), status);
+        }
     }
 
     MFnSkinCluster skinClusterFn(skinClusterObject, &status);

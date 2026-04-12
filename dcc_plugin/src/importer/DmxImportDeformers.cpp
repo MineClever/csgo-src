@@ -90,6 +90,176 @@ MObject DeformerImporter::findPrimaryMeshChildForDeformers(const MObject &transf
     return MObject::kNullObj;
 }
 
+MObject DeformerImporter::findExistingSkinClusterNode() const
+{
+    if (!dcc_import_policy::UsesUpdateCurrentScene(context_->scenePolicy) || meshObject_.isNull())
+    {
+        return MObject::kNullObj;
+    }
+
+    MStatus status;
+    MObject rootObject = meshObject_;
+    MItDependencyGraph iterator(
+        rootObject,
+        MFn::kSkinClusterFilter,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
+    if (!status)
+    {
+        return MObject::kNullObj;
+    }
+
+    for (; !iterator.isDone(); iterator.next())
+    {
+        MObject currentNode = iterator.currentItem(&status);
+        if (!status || currentNode.isNull())
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        return currentNode;
+    }
+
+    return MObject::kNullObj;
+}
+
+MStatus DeformerImporter::updateExistingSkinClusterBindings(
+    const MObject &skinClusterObject,
+    const MDagPathArray &influencePaths) const
+{
+    if (skinClusterObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status;
+    MFnSkinCluster skinClusterFn(skinClusterObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MDagPathArray existingInfluencePaths;
+    skinClusterFn.influenceObjects(existingInfluencePaths, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    if (existingInfluencePaths.length() != influencePaths.length())
+    {
+        return maya_dmx::ReportWarning(
+            MString("maya_dmx: update skipped skinCluster overwrite because influence count did not match for ")
+            + meshDagPath_.fullPathName());
+    }
+
+    std::unordered_map<std::string, unsigned int> existingInfluenceByPath;
+    for (unsigned int index = 0; index < existingInfluencePaths.length(); ++index)
+    {
+        existingInfluenceByPath[existingInfluencePaths[index].fullPathName().asChar()] = index;
+    }
+
+    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    const std::vector<std::string> bindPreMatrixStrings = FindAttributeStringArray(vertexData_, "mayaBindPreMatrix");
+    const std::vector<std::string> influencePathStrings = FindAttributeStringArray(vertexData_, "mayaInfluencePaths");
+    std::unordered_map<std::string, size_t> storedPathNameToIndex;
+    for (size_t storedIndex = 0; storedIndex < influencePathStrings.size(); ++storedIndex)
+    {
+        const std::string &storedPath = influencePathStrings[storedIndex];
+        const size_t lastSep = storedPath.rfind('|');
+        const std::string jointName = (lastSep != std::string::npos) ? storedPath.substr(lastSep + 1) : storedPath;
+        if (!jointName.empty())
+        {
+            storedPathNameToIndex[jointName] = storedIndex;
+        }
+    }
+
+    MPlug bindPreMatrixArrayPlug = skinClusterNode.findPlug("bindPreMatrix", true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (unsigned int influenceIndex = 0; influenceIndex < influencePaths.length(); ++influenceIndex)
+    {
+        const std::string fullPath = influencePaths[influenceIndex].fullPathName().asChar();
+        const auto existingIt = existingInfluenceByPath.find(fullPath);
+        if (existingIt == existingInfluenceByPath.end())
+        {
+            return maya_dmx::ReportWarning(
+                MString("maya_dmx: update skipped skinCluster overwrite because an existing influence did not match for ")
+                + meshDagPath_.fullPathName());
+        }
+
+        MPlug bindPreMatrixPlug = bindPreMatrixArrayPlug.elementByLogicalIndex(existingIt->second, &status);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        MMatrix bindPreMatrix = influencePaths[influenceIndex].inclusiveMatrixInverse();
+        const size_t lastSep = fullPath.rfind('|');
+        const std::string jointName = (lastSep != std::string::npos) ? fullPath.substr(lastSep + 1) : fullPath;
+        auto storedIt = storedPathNameToIndex.find(jointName);
+        if (storedIt != storedPathNameToIndex.end() && storedIt->second < bindPreMatrixStrings.size())
+        {
+            MMatrix parsedMatrix;
+            if (ParseMatrixString(bindPreMatrixStrings[storedIt->second], parsedMatrix))
+            {
+                bindPreMatrix = parsedMatrix;
+            }
+        }
+
+        MFnMatrixData matrixDataFn;
+        MObject bindPreMatrixObject = matrixDataFn.create(bindPreMatrix, &status);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+        status = bindPreMatrixPlug.setMObject(bindPreMatrixObject);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+    }
+
+    MPlug geomMatrixPlug = skinClusterNode.findPlug("geomMatrix", true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MMatrix geomMatrix = meshParentPath_.inclusiveMatrix();
+    MMatrix parsedGeomMatrix;
+    if (ParseMatrixString(FindAttributeString(vertexData_, "mayaGeomMatrix"), parsedGeomMatrix))
+    {
+        geomMatrix = parsedGeomMatrix;
+    }
+
+    MFnMatrixData geomMatrixDataFn;
+    MObject geomMatrixObject = geomMatrixDataFn.create(geomMatrix, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    status = geomMatrixPlug.setMObject(geomMatrixObject);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    return MS::kSuccess;
+}
+
 MStatus DeformerImporter::createSkinClusterWithApi(
     const MDagPathArray &influencePaths,
     MObject &skinClusterObject) const
@@ -498,6 +668,53 @@ DeformerImporter::ExistingBlendShapeInfo DeformerImporter::inspectExistingBlendS
     return info;
 }
 
+MStatus DeformerImporter::updateExistingBlendShapeTargetGeometry(
+    const MString &blendShapeNodeName,
+    unsigned int weightIndex,
+    const MPointArray &targetPoints) const
+{
+    MStringArray regenerateResult;
+    MStatus status = maya_cmd::RegenerateBlendShapeTarget(blendShapeNodeName, weightIndex, regenerateResult);
+    if (!status || regenerateResult.length() == 0)
+    {
+        return MS::kFailure;
+    }
+
+    const MString temporaryTransformName = regenerateResult[0];
+    MSelectionList selection;
+    status = selection.add(temporaryTransformName);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MObject temporaryTransformObject;
+    status = selection.getDependNode(0, temporaryTransformObject);
+    if (!status || temporaryTransformObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    const MObject targetMeshObject = findPrimaryMeshChildForDeformers(temporaryTransformObject);
+    if (targetMeshObject.isNull())
+    {
+        maya_cmd::DeleteNodeByName(temporaryTransformName);
+        return MS::kFailure;
+    }
+
+    MFnMesh targetMeshFn(targetMeshObject, &status);
+    if (!status)
+    {
+        maya_cmd::DeleteNodeByName(temporaryTransformName);
+        return MS::kFailure;
+    }
+
+    MPointArray editableTargetPoints(targetPoints);
+    status = targetMeshFn.setPoints(editableTargetPoints, MSpace::kObject);
+    maya_cmd::DeleteNodeByName(temporaryTransformName);
+    return status ? MS::kSuccess : MS::kFailure;
+}
+
 void DeformerImporter::registerBlendShapeTargetBinding(
     const std::string &targetName,
     const dmx_import_translator::BlendShapeTargetBinding &binding)
@@ -657,13 +874,26 @@ MStatus DeformerImporter::ApplySkinning(
         return MS::kSuccess;
     }
 
-    MObject skinClusterObject;
-    status = createSkinClusterWithApi(activeInfluencePaths, skinClusterObject);
-    if (!status || skinClusterObject.isNull())
+    MObject skinClusterObject = findExistingSkinClusterNode();
+    const bool reusedExistingSkinCluster = !skinClusterObject.isNull();
+    if (reusedExistingSkinCluster)
     {
-        return maya_dmx::ReportError(MString("maya_dmx: skinCluster API creation failed for ") + meshDagPath_.fullPathName(), status);
+        status = updateExistingSkinClusterBindings(skinClusterObject, activeInfluencePaths);
+        if (!status)
+        {
+            return status;
+        }
+        AppendImportDebugLog("skinning: reusing existing cluster");
     }
-    AppendImportDebugLog("skinning: created cluster");
+    else
+    {
+        status = createSkinClusterWithApi(activeInfluencePaths, skinClusterObject);
+        if (!status || skinClusterObject.isNull())
+        {
+            return maya_dmx::ReportError(MString("maya_dmx: skinCluster API creation failed for ") + meshDagPath_.fullPathName(), status);
+        }
+        AppendImportDebugLog("skinning: created cluster");
+    }
 
     MFnSkinCluster skinClusterFn(skinClusterObject, &status);
     if (!status)
@@ -860,19 +1090,55 @@ MStatus DeformerImporter::ApplyDeltaStates(
 
             const std::string targetName =
                 deltaState->name.empty() ? std::string("delta") : SanitizeNodeName(deltaState->name);
-            auto existingTargetIt = existingBlendShape.targetIndicesByAlias.find(targetName);
-            if (existingTargetIt != existingBlendShape.targetIndicesByAlias.end())
-            {
-                registerBlendShapeTargetBinding(
-                    targetName,
-                    BlendShapeTargetBinding{existingBlendShape.node, existingTargetIt->second});
-                continue;
-            }
-
             const std::vector<std::string> deltaPositionStrings = FindAttributeStringArray(deltaState, "positions");
             const std::vector<std::string> deltaPositionIndexStrings = FindAttributeStringArray(deltaState, "positionsIndices");
             if (deltaPositionStrings.empty() || deltaPositionIndexStrings.empty())
             {
+                continue;
+            }
+
+            auto existingTargetIt = existingBlendShape.targetIndicesByAlias.find(targetName);
+            MPointArray deltaPoints = *basePoints_;
+            const size_t deltaCount = std::min(deltaPositionStrings.size(), deltaPositionIndexStrings.size());
+            for (size_t i = 0; i < deltaCount; ++i)
+            {
+                const std::vector<double> deltaValues = ParseNumberList(deltaPositionStrings[i]);
+                const std::vector<double> indexValues = ParseNumberList(deltaPositionIndexStrings[i]);
+                if (deltaValues.size() < 3 || indexValues.empty())
+                {
+                    continue;
+                }
+
+                const int pointIndex = static_cast<int>(indexValues[0]);
+                if (pointIndex < 0 || pointIndex >= static_cast<int>(deltaPoints.length()))
+                {
+                    continue;
+                }
+
+                deltaPoints[pointIndex].x += deltaValues[0];
+                deltaPoints[pointIndex].y += deltaValues[1];
+                deltaPoints[pointIndex].z += deltaValues[2];
+            }
+
+            if (existingTargetIt != existingBlendShape.targetIndicesByAlias.end())
+            {
+                if (dcc_import_policy::UsesUpdateCurrentScene(context_->scenePolicy))
+                {
+                    status = updateExistingBlendShapeTargetGeometry(
+                        existingBlendShape.nodeName,
+                        existingTargetIt->second,
+                        deltaPoints);
+                    if (!status)
+                    {
+                        return maya_dmx::ReportWarning(
+                            MString("maya_dmx: update skipped blendShape target overwrite for ")
+                            + targetName.c_str() + " on " + existingBlendShape.nodeName);
+                    }
+                }
+
+                registerBlendShapeTargetBinding(
+                    targetName,
+                    BlendShapeTargetBinding{existingBlendShape.node, existingTargetIt->second});
                 continue;
             }
 
@@ -895,28 +1161,6 @@ MStatus DeformerImporter::ApplyDeltaStates(
             if (!status)
             {
                 return MStatus::kFailure;
-            }
-
-            MPointArray deltaPoints = *basePoints_;
-            const size_t deltaCount = std::min(deltaPositionStrings.size(), deltaPositionIndexStrings.size());
-            for (size_t i = 0; i < deltaCount; ++i)
-            {
-                const std::vector<double> deltaValues = ParseNumberList(deltaPositionStrings[i]);
-                const std::vector<double> indexValues = ParseNumberList(deltaPositionIndexStrings[i]);
-                if (deltaValues.size() < 3 || indexValues.empty())
-                {
-                    continue;
-                }
-
-                const int pointIndex = static_cast<int>(indexValues[0]);
-                if (pointIndex < 0 || pointIndex >= static_cast<int>(deltaPoints.length()))
-                {
-                    continue;
-                }
-
-                deltaPoints[pointIndex].x += deltaValues[0];
-                deltaPoints[pointIndex].y += deltaValues[1];
-                deltaPoints[pointIndex].z += deltaValues[2];
             }
 
             status = targetMeshFn.setPoints(deltaPoints, MSpace::kObject);
@@ -967,7 +1211,7 @@ MStatus DeformerImporter::ApplyDeltaStates(
             blendShapeNodeName = blendShapeDependency.name();
         }
 
-        if (!reusedExistingBlendShape && !group.states.empty())
+        if (!group.states.empty())
         {
             const simple_dmx::Element *metadataState = group.states.front();
             MPlug envelopePlug = blendShapeDependency.findPlug("envelope", true, &status);

@@ -556,6 +556,21 @@
     - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
     - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
     当前这条收紧规则还未覆盖所有 importer / exporter 文件，后续仍需继续把其余 `if (!status) return status;` 热路径逐步清掉。
+  - 2026-04-12：已优先继续处理 `update` 下的 `skinCluster / blendShape`。当前 [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 在 `importMode=update` 命中已有 mesh 时，已不再默认重建全部 deformer，而是新增两条复用路径：
+    - `skinCluster`：会先沿 mesh upstream 查找已有 `skinCluster`，若命中的影响骨骼集合与本次导入一致，则直接复用该节点、回写 `bindPreMatrix / geomMatrix / weights` 与相关设置；若影响骨骼集合不一致，则给出 warning 并跳过这次 skin overwrite，避免在已有 deformer 图上继续叠加错误节点。
+    - `blendShape`：对已存在 alias target 的 `update`，不再只注册 binding 后跳过，而是借助 helper 内已收口的 `sculptTarget -e -regenerate` 路径，临时再生 target mesh、直接回写 target 点位，然后销毁临时 transform，从而把 target 几何覆盖从“删旧 deformer 再重建”切到“就地覆盖已有 target”。
+    已通过：
+    - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+    - `mayapy` 回归：`simple_skinned_mesh`、`simple_blendshape_animation`
+    当前仍剩的细化缺口主要是：
+    - SMD 的 `update` 仍主要依赖旧 mesh/history 清理后重建 `skinCluster`，还没有像 DMX 一样补上就地复用路径。
+    - DMX `skinCluster` 当前对“影响骨骼集合发生变化”的 `update` 仍只 warning 跳过，尚未实现更细粒度的增量 influence 调整。
+  - 2026-04-12：已继续把 `update` 下的 `skinCluster` 复用补到 SMD。[SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 当前在 `importMode=update` 命中已有 mesh group 且拓扑一致、并且该组包含 skin 权重时，会优先复用已有 mesh shape 而不是先删掉 history 再重建；随后 `applySkinning()` 会沿 reused mesh upstream 查找已有 `skinCluster`，若影响骨骼集合一致，则直接复用旧节点、回写 `bindPreMatrix / geomMatrix / weights`。这使 SMD 的 `update` 在“同拓扑 + 同 influence 集合”的主路径下，已经和 DMX 一样具备了就地更新 skin 的能力。已通过：
+    - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
+    - `mayapy` 回归：`MostComplexSampleSet/chr_mesh.smd`
+    当前剩余边界：
+    - SMD `update` 在拓扑不一致时仍会退回当前的旧 mesh/history 清理后重建路径。
+    - SMD `skinCluster` 与 DMX 一样，对 influence 集合变化场景当前仍只 warning 跳过 overwrite，尚未支持增量 influence 调整。
 
 ## 环境与工具链说明
 

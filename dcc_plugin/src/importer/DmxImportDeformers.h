@@ -46,10 +46,18 @@ private:
 
     MStatus bindMeshContext(const MObject &meshObject, const MObject &meshParentObject);
     MObject findPrimaryMeshChildForDeformers(const MObject &transformObject) const;
+    MObject findExistingSkinClusterNode() const;
+    MStatus updateExistingSkinClusterBindings(
+        const MObject &skinClusterObject,
+        const MDagPathArray &influencePaths) const;
     MStatus createSkinClusterWithApi(const MDagPathArray &influencePaths, MObject &skinClusterObject) const;
     MStatus restoreSkinClusterSettings(const MObject &skinClusterObject) const;
     MObject findExistingBlendShapeNode(const std::string &blendShapeName) const;
     ExistingBlendShapeInfo inspectExistingBlendShape(const MObject &blendShapeObject) const;
+    MStatus updateExistingBlendShapeTargetGeometry(
+        const MString &blendShapeNodeName,
+        unsigned int weightIndex,
+        const MPointArray &targetPoints) const;
     void registerBlendShapeTargetBinding(
         const std::string &targetName,
         const dmx_import_translator::BlendShapeTargetBinding &binding);

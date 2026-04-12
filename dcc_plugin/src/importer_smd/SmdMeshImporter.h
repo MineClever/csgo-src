@@ -25,6 +25,15 @@ private:
     MStatus importMaterialGroup(const std::string &materialName, MObject parent) const;
     MStatus assignMaterial(const std::string &materialName, const MObject &meshObject) const;
     MObject findPrimaryMeshChild(const MObject &transformObject) const;
+    bool meshTopologyMatches(
+        const MObject &meshObject,
+        const MIntArray &polygonCounts,
+        const MIntArray &polygonConnects) const;
+    MObject findExistingSkinClusterNode(const MObject &meshObject) const;
+    MStatus updateExistingSkinClusterBindings(
+        const MObject &skinClusterObject,
+        const MDagPathArray &influencePaths,
+        const MDagPath &meshParentPath) const;
     MStatus createSkinClusterWithApi(
         const MDagPathArray &influencePaths,
         const MDagPath &meshDagPath,
