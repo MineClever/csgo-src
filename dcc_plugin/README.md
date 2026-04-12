@@ -191,6 +191,13 @@ Sample file for manual Maya import:
 - `dcc_plugin/samples/complex_chr_mesh.dmx`
 - `dcc_plugin/samples/complex_chr_mesh.dmxb`
 - `dcc_plugin/samples/MostComplexSampleSet/chr_mesh.dmx`
+- `dcc_plugin/samples/ctm_fbi/ctm_fbi.smd`
+- `dcc_plugin/samples/ctm_fbi/ctm_fbi_physics.smd`
+- `dcc_plugin/samples/ctm_fbi/ctm_fbi_w_ct_base_glove.smd`
+- `dcc_plugin/samples/ctm_fbi/ctm_fbi_anims/default.smd`
+- `dcc_plugin/samples/ctm_fbi/ctm_fbi_anims/ragdoll.smd`
+- `dcc_plugin/samples/ctm_fbi/ctm_fbi_anims/rom_skin.smd`
+- `dcc_plugin/samples/ctm_fbi/ctm_fbi_anims/shield_deploy.smd`
 
 Regression inputs can also live under subdirectories of `dcc_plugin/samples/`. Current regression scripts normalize nested sample names like `MostComplexSampleSet/chr_mesh` into flat output filenames such as `MostComplexSampleSet__chr_mesh.roundtrip.dmx`.
 

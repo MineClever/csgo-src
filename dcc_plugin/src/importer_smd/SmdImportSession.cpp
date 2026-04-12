@@ -7,6 +7,105 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+
+#include <maya/MEulerRotation.h>
+#include <maya/MQuaternion.h>
+#include <maya/MVector.h>
+
+namespace
+{
+std::unordered_set<int> CollectTopLevelBoneIndices(const simple_smd::Document &document)
+{
+    std::unordered_set<int> knownBoneIndices;
+    std::unordered_set<int> topLevelBoneIndices;
+    knownBoneIndices.reserve(document.nodes.size());
+    topLevelBoneIndices.reserve(document.nodes.size());
+
+    for (const simple_smd::Node &node : document.nodes)
+    {
+        knownBoneIndices.insert(node.index);
+    }
+
+    for (const simple_smd::Node &node : document.nodes)
+    {
+        if (node.parentIndex < 0 || knownBoneIndices.find(node.parentIndex) == knownBoneIndices.end())
+        {
+            topLevelBoneIndices.insert(node.index);
+        }
+    }
+
+    return topLevelBoneIndices;
+}
+
+void ApplyCorrectionToPose(
+    simple_smd::SkeletonPose &pose,
+    const dcc_import_transform::TransformCorrection &correction,
+    bool isTopLevelBone)
+{
+    MVector correctedTranslation = dcc_import_transform::ApplyToTranslationScale(
+        correction,
+        MVector(pose.tx, pose.ty, pose.tz));
+    MQuaternion correctedRotation = MEulerRotation(pose.rx, pose.ry, pose.rz).asQuaternion();
+    if (isTopLevelBone)
+    {
+        correctedTranslation = dcc_import_transform::ApplyToTopLevelTranslation(
+            correction,
+            MVector(pose.tx, pose.ty, pose.tz));
+        correctedRotation = dcc_import_transform::ApplyToQuaternion(correction, correctedRotation);
+    }
+    const MEulerRotation correctedEuler = correctedRotation.asEulerRotation();
+
+    pose.tx = correctedTranslation.x;
+    pose.ty = correctedTranslation.y;
+    pose.tz = correctedTranslation.z;
+    pose.rx = correctedEuler.x;
+    pose.ry = correctedEuler.y;
+    pose.rz = correctedEuler.z;
+}
+
+void NormalizeDocumentForImportCorrection(
+    simple_smd::Document &document,
+    const dcc_import_transform::TransformCorrection &correction)
+{
+    if (correction.IsIdentity())
+    {
+        return;
+    }
+
+    const std::unordered_set<int> topLevelBoneIndices = CollectTopLevelBoneIndices(document);
+    for (simple_smd::SkeletonFrame &frame : document.skeletonFrames)
+    {
+        for (simple_smd::SkeletonPose &pose : frame.poses)
+        {
+            ApplyCorrectionToPose(
+                pose,
+                correction,
+                topLevelBoneIndices.find(pose.boneIndex) != topLevelBoneIndices.end());
+        }
+    }
+
+    for (simple_smd::Triangle &triangle : document.triangles)
+    {
+        for (simple_smd::TriangleVertex &vertex : triangle.vertices)
+        {
+            const MVector correctedPosition = dcc_import_transform::ApplyToPoint(
+                correction,
+                MVector(vertex.px, vertex.py, vertex.pz));
+            const MVector correctedNormal = dcc_import_transform::ApplyToNormal(
+                correction,
+                MVector(vertex.nx, vertex.ny, vertex.nz));
+
+            vertex.px = correctedPosition.x;
+            vertex.py = correctedPosition.y;
+            vertex.pz = correctedPosition.z;
+            vertex.nx = correctedNormal.x;
+            vertex.ny = correctedNormal.y;
+            vertex.nz = correctedNormal.z;
+        }
+    }
+}
+}
 
 SmdImportSession::SmdImportSession(const MFileObject &fileObject, const MString &options)
     : fileObject_(fileObject), options_(options)
@@ -34,6 +133,9 @@ MStatus SmdImportSession::Run()
     }
 
     const SmdImportOptions importOptions = parseOptions();
+    NormalizeDocumentForImportCorrection(*document, importOptions.transformCorrection);
+    SmdImportOptions normalizedImportOptions = importOptions;
+    normalizedImportOptions.transformCorrection = dcc_import_transform::TransformCorrection();
     if (dcc_import_policy::UsesUpdateCurrentScene(importOptions.scenePolicy))
     {
         maya_smd::ReportWarning("maya_smd: importMode=update now reuses matching hierarchy, overwrites reused bind pose/base animation, and attempts in-place mesh/skin updates when matching nodes already exist; fine-grained scene-merge is still not implemented yet.");
@@ -52,7 +154,7 @@ MStatus SmdImportSession::Run()
         maya_smd::ReportWarning("maya_smd: animation layer import options are parsed but not implemented yet; imported animation will still target the base scene.");
     }
 
-    SmdSceneImporter importer(document, importOptions);
+    SmdSceneImporter importer(document, normalizedImportOptions);
     return importer.Import();
 }
 

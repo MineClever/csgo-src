@@ -593,6 +593,63 @@
       - `mayapy` smoke：已在 `MAYA_SKIP_USERSETUP_PY=1` 下成功 `source` 更新后的 module 脚本，并确认 `MayaDmxImport_defaultOptionsString()` / `MayaSmdImport_defaultOptionsString()` 返回新的 TRS 选项串。
     - 当前残余风险：
       - 对“顶层带动画的 root 节点 + 非一致缩放 correction”这类场景，现实现仍主要按“位置通道单独变换 + 旋转通道单独叠乘 correction quaternion”处理；这对平移/旋转和 uniform scale 已足够，但若后续要把 non-uniform scale 也定义为动画根的严格支持范围，还需要额外补更细的宿主回归样例确认不会引入剪切语义偏差。
+  - 2026-04-12：已把 `dcc_plugin/samples/ctm_fbi` 下新增的真实 SMD 样本接入默认 Maya 批回归入口，当前 [RunMayaBatchRegression.bat](dcc_plugin/RunMayaBatchRegression.bat) 与 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已覆盖：
+    - `ctm_fbi/ctm_fbi.smd`
+    - `ctm_fbi/ctm_fbi_physics.smd`
+    - `ctm_fbi/ctm_fbi_w_ct_base_glove.smd`
+    - `ctm_fbi/ctm_fbi_anims/default.smd`
+    - `ctm_fbi/ctm_fbi_anims/ragdoll.smd`
+    - `ctm_fbi/ctm_fbi_anims/rom_skin.smd`
+    - `ctm_fbi/ctm_fbi_anims/shield_deploy.smd`
+    同时已把这些样本加入 [dcc_plugin/README.md](dcc_plugin/README.md) 的手工验证清单。当前已确认：`ctm_fbi/ctm_fbi.smd` 的基础 import/export/roundtrip 路径可跑通，因此它适合作为后续真实角色样本的回归基线。额外确认的一点是：`ctm_fbi_anims/default.smd` 与 `ctm_fbi_anims/ragdoll.smd` 当前都只有 `time 0` 单帧 skeleton，不是多帧动画样本，因此它们应作为“真实单帧骨架输入”参与回归，而不应继续绑定到“必须生成 animCurve”的动画 gate。
+    `ctm_fbi_anims/rom_skin.smd` 与 `ctm_fbi_anims/shield_deploy.smd` 则已确认分别包含 400 帧和 31 帧 skeleton key，现已作为真实多帧骨骼动画样本纳入 `ANIMATION_GATE_EXPECTATIONS`。
+  - 2026-04-12：`ctm_fbi` 真实样本同时暴露出两条需要单独跟踪的边界：
+    - 回归层面：这组样本当前不应默认纳入 `append/update` gate。实际在 `cmds.file(..., i=True, ra=True)` 下，Maya 会把首次导入的根 joint / mesh group 自动命名为 `ctm_fbi_*`，而现有 SMD `append/update` 复用逻辑仍按原始骨骼名匹配，因此第二次导入会继续新建并触发 `ctm_fbi_pelvis -> ctm_fbi_pelvis1` 一类重命名。当前已先把 `ctm_fbi` 从 `APPEND_GATE_EXPECTATIONS / UPDATE_GATE_EXPECTATIONS` 移除，避免把“真实样本已接入回归”与“append/update 语义尚未补齐”混在一起；后续若要重新纳入这两类 gate，需要先让 SMD 复用匹配显式兼容 Maya 的 import rename 前缀。
+    - 变换校正层面：真实样本进一步印证，当前 SMD correction 仍然过多地发生在“写 Maya DAG / animCurve / mesh group transform”阶段，而不是“原始 SMD 文档归一化”阶段。后续建议把这项工作拆成一个独立子任务推进：
+      - 对 mesh：在 `Document` 读入后、建 Maya mesh 前，先直接校正顶点位置与法线。
+      - 对 skeleton：在 `Document` 读入后、建 joint 前，只对顶层骨骼的局部 pose / 动画通道做 correction 归一化，避免把全局校正重复施加到子骨骼局部空间。
+      - 对 scale：当前 SMD pose 结构本身不携带骨骼 scale，因此“把 correction 完整前移到数据层”对 uniform scale 以外的场景并不能无损表达；这也是为什么这一轮不宜直接把现有对象级 correction 彻底删除。后续更稳妥的路线应是“translation/rotation 与 mesh normal 先前移到数据层，scale 尤其 non-uniform scale 继续单独定义支持边界并补宿主样例验证”，再分阶段清理现有晚期 Maya 对象级补丁。
+  - 2026-04-12：已开始执行上面的 SMD correction 前移。当前 [SmdImportSession.cpp](dcc_plugin/src/importer_smd/SmdImportSession.cpp) 在 `ParseFromFile()` 之后、创建任何 Maya DAG 之前，新增了一次文档归一化处理：
+    - 已前移到数据层的部分：
+      - 顶层骨骼 bind pose / animation pose 的 translation
+      - 顶层骨骼 bind pose / animation pose 的 rotation
+      - mesh 顶点位置
+      - mesh 法线方向
+    - 2026-04-12 同日继续收口后，SMD 已改成“默认把骨骼 scale 视为 `1 1 1`，并把 scale 也前移到数据层”：
+      - 所有骨骼 local translation 现在都会先吃 `scale`
+      - 只有顶层骨骼额外再吃全局 `translation + rotation`
+      - mesh 顶点继续吃完整 `TRS`
+      - mesh 法线按 correction 的 normal 语义归一化
+      - Maya 对象层 residual correction 已清空，`normalizedImportOptions.transformCorrection` 现已回到 identity
+    这样做后，SMD 的 correction 已不再主要依赖“建 Maya 对象时再补一次 pre-transform”，`useSceneRoot=1` 下的真实样本也能在 skeleton、animation、mesh 三条路径上共享同一份 correction 语义。
+    已通过：
+      - `cmake --build dcc_plugin\build --config Release --target maya_smd -- /m:1`
+      - `mayapy` 回归：`ctm_fbi/ctm_fbi.smd`、`ctm_fbi/ctm_fbi_anims/rom_skin.smd`、`ctm_fbi/ctm_fbi_anims/shield_deploy.smd`
+    - `mayapy` 直接 smoke：`useSceneRoot=1;translateX=10;rotateX=90;scaleX=2;scaleY=2;scaleZ=2` 下，`ctm_fbi.smd` 的 `|pelvis` 平移/旋转已按 correction 变化，且根 joint scale 仍保持 `1 1 1`
+  - 2026-04-12：已把上面的 TRS 前移原则扩展到 DMX。[DmxImportSession.cpp](dcc_plugin/src/importer/DmxImportSession.cpp) 当前会在 `LoadDocument()` 阶段先把 correction 写回 DMX 文档数据，再进入 Maya importer 主流程：
+    - DAG / joint transform：
+      - 所有 local `position` 先吃 `scale`
+      - 顶层 transform 再额外吃全局 `translation + rotation`
+      - 顶层 `orientation` 直接前乘 correction rotation
+    - animation channel：
+      - `position` 通道按同样规则前移
+      - 顶层 `orientation` 通道直接前乘 correction quaternion
+    - mesh / delta：
+      - `positions` 与 `deltaStates.positions` 当前先吃 `scale`
+      - `normals` 当前按 correction 的 normal 语义重算
+    同时 [CreateSceneRoot()](dcc_plugin/src/importer/DmxImportSession.cpp) 已不再承担 correction 语义，`topLevelPreTransform` 现在只保留 importRoot 自身原始 root transform 在 `useSceneRoot=1` 下的补偿职责。
+    已通过：
+      - `cmake --build dcc_plugin\build --config Release --target maya_dmx -- /m:1`
+      - `mayapy` 回归：`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/vcaanim_VertexAnim`
+      - `mayapy` 直接 smoke：`useSceneRoot=1;translateX=10;rotateX=90;scaleX=2;scaleY=2;scaleZ=2` 下，`simple_hierarchy.dmx` 的顶层 joint translation / rotation 已按前移后的 correction 变化，且对象 scale 保持 `1 1 1`
+  - 2026-04-12：已继续修正 TRS 前移后的“旋转输入结果不正确”问题。根因已确认不是前移方向本身，而是顶层 rotation 的组合顺序错了：
+    - 这条导入链路实际按 `point * matrix` 的行向量语义在工作。
+    - 因此要等价于旧的 wrapper root，顶层 rotation 应按 `local * correction` 组合，而不是 `correction * local`。
+    - 当前已把公共 helper [ImportTransformCorrection.cpp](dcc_plugin/src/common/ImportTransformCorrection.cpp) 中的 quaternion 组合改成后乘 correction，并重新验证 SMD/DMX 两条路径。
+    - 以 `ctm_fbi.smd + rotateX=90` 为例，当前前移后的 `|pelvis` / `|pelvis|spine_0` `worldMatrix` 已能和“无 correction 导入后，再在所有顶层根节点外包一层 wrapper transform 并旋转 90 度”的旧方案结果对齐。
+    已通过：
+    - `cmake --build dcc_plugin\build --config Release --target maya_smd maya_dmx -- /m:1`
+    - `mayapy` 回归：`ctm_fbi/ctm_fbi.smd`、`ctm_fbi/ctm_fbi_anims/rom_skin.smd`、`ctm_fbi/ctm_fbi_anims/shield_deploy.smd`、`simple_skinned_mesh`、`complex_chr_mesh`、`MostComplexSampleSet/vcaanim_VertexAnim`
 
 ## 环境与工具链说明
 

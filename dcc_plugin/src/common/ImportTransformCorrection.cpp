@@ -105,9 +105,35 @@ MVector ApplyToPoint(const TransformCorrection &correction, const MVector &point
     return MVector(corrected.x, corrected.y, corrected.z);
 }
 
+MVector ApplyToTranslationScale(const TransformCorrection &correction, const MVector &translation)
+{
+    return MVector(
+        translation.x * correction.scale[0],
+        translation.y * correction.scale[1],
+        translation.z * correction.scale[2]);
+}
+
+MVector ApplyToTopLevelTranslation(const TransformCorrection &correction, const MVector &translation)
+{
+    MVector corrected = ApplyToTranslationScale(correction, translation);
+    corrected = corrected.rotateBy(correction.RotationQuaternion());
+    corrected += correction.translation;
+    return corrected;
+}
+
+MVector ApplyToNormal(const TransformCorrection &correction, const MVector &normal)
+{
+    MVector corrected(
+        std::fabs(correction.scale[0]) > kEpsilon ? normal.x / correction.scale[0] : normal.x,
+        std::fabs(correction.scale[1]) > kEpsilon ? normal.y / correction.scale[1] : normal.y,
+        std::fabs(correction.scale[2]) > kEpsilon ? normal.z / correction.scale[2] : normal.z);
+    corrected = corrected.rotateBy(correction.RotationQuaternion());
+    return corrected.length() > kEpsilon ? corrected.normal() : normal;
+}
+
 MQuaternion ApplyToQuaternion(const TransformCorrection &correction, const MQuaternion &quaternion)
 {
-    return correction.RotationQuaternion() * quaternion;
+    return quaternion * correction.RotationQuaternion();
 }
 
 MStatus ApplyPreTransformToObject(const MObject &object, const MMatrix &preTransform)

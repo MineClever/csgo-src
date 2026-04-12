@@ -33,6 +33,9 @@ bool ParseDoubleOption(
     double &value);
 
 MVector ApplyToPoint(const TransformCorrection &correction, const MVector &point);
+MVector ApplyToTranslationScale(const TransformCorrection &correction, const MVector &translation);
+MVector ApplyToTopLevelTranslation(const TransformCorrection &correction, const MVector &translation);
+MVector ApplyToNormal(const TransformCorrection &correction, const MVector &normal);
 MQuaternion ApplyToQuaternion(const TransformCorrection &correction, const MQuaternion &quaternion);
 MStatus ApplyPreTransformToObject(const MObject &object, const MMatrix &preTransform);
 

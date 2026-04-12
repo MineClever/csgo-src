@@ -78,6 +78,20 @@ ANIMATION_GATE_EXPECTATIONS = {
             [".translateX", ".translateY", ".translateZ"],
         ],
     },
+    "ctm_fbi/ctm_fbi_anims/rom_skin.smd": {
+        "min_animated_plugs": 1,
+        "required_any_suffix_groups": [
+            [".translateX", ".translateY", ".translateZ"],
+            [".rotateX", ".rotateY", ".rotateZ"],
+        ],
+    },
+    "ctm_fbi/ctm_fbi_anims/shield_deploy.smd": {
+        "min_animated_plugs": 1,
+        "required_any_suffix_groups": [
+            [".translateX", ".translateY", ".translateZ"],
+            [".rotateX", ".rotateY", ".rotateZ"],
+        ],
+    },
 }
 
 APPEND_GATE_EXPECTATIONS = {
@@ -819,7 +833,7 @@ def verify_roundtrip(
     ensure_plugins_loaded(cmds, plugin_paths)
 
     before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
-    import_kwargs = dict(i=True, type=import_type, ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
+    import_kwargs = dict(i=True, type=import_type, ignoreVersion=True, ra=True, mergeNamespacesOnClash=False, defaultNamespace=True)
     if import_options:
         import_kwargs["options"] = import_options
     cmds.file(exported_path, **import_kwargs)
@@ -917,7 +931,14 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.update_gate.txt")
     topology_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.topology_update_gate.txt")
 
-    import_kwargs = dict(i=True, type=format_config["import_type"], ignoreVersion=True, ra=True, mergeNamespacesOnClash=False)
+    import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        defaultNamespace=True,
+    )
     if import_options:
         import_kwargs["options"] = import_options
 
