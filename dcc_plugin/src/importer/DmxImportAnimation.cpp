@@ -1155,47 +1155,5 @@ MStatus AnimationImporter::CreateCombinationControls(
     return MS::kSuccess;
 }
 
-const simple_dmx::Element *FindAnimationList(
-    const simple_dmx::Document &document,
-    const simple_dmx::Element *documentRoot,
-    const simple_dmx::Element *importRoot,
-    const simple_dmx::Element *modelRoot)
-{
-    ImportContext proxyContext{document};
-    auto contextPtr = std::shared_ptr<ImportContext>(&proxyContext, [](ImportContext *) {});
-    AnimationImporter importer(contextPtr);
-    importer.setLookupRoots(documentRoot, importRoot, modelRoot);
-    return importer.FindAnimationList();
-}
-
-const simple_dmx::Element *FindCombinationOperator(
-    const simple_dmx::Document &document,
-    const simple_dmx::Element *documentRoot,
-    const simple_dmx::Element *importRoot,
-    const simple_dmx::Element *modelRoot)
-{
-    ImportContext proxyContext{document};
-    auto contextPtr = std::shared_ptr<ImportContext>(&proxyContext, [](ImportContext *) {});
-    AnimationImporter importer(contextPtr);
-    importer.setLookupRoots(documentRoot, importRoot, modelRoot);
-    return importer.FindCombinationOperator();
-}
-
-MStatus ApplyChannelsClipAnimation(ImportContext &context, const simple_dmx::Element *channelsClip)
-{
-    auto contextPtr = std::shared_ptr<ImportContext>(&context, [](ImportContext *) {});
-    AnimationImporter importer(contextPtr);
-    return importer.ApplyChannelsClipAnimation(channelsClip);
-}
-
-MStatus CreateCombinationControls(
-    ImportContext &context,
-    const simple_dmx::Element *combinationOperator,
-    const MObject &sceneRoot)
-{
-    auto contextPtr = std::shared_ptr<ImportContext>(&context, [](ImportContext *) {});
-    AnimationImporter importer(contextPtr);
-    return importer.CreateCombinationControls(combinationOperator, sceneRoot);
-}
 
 } // namespace dmx_import_impl

@@ -1434,28 +1434,4 @@ MStatus DeformerImporter::ApplyDeltaStates(
     return MS::kSuccess;
 }
 
-MStatus ApplySkinning(
-    const ImportContext &context,
-    const simple_dmx::Element *vertexData,
-    const MObject &meshObject,
-    const MObject &meshParentObject)
-{
-    auto contextPtr = std::shared_ptr<ImportContext>(&const_cast<ImportContext &>(context), [](ImportContext *) {});
-    DeformerImporter importer(contextPtr);
-    return importer.ApplySkinning(vertexData, meshObject, meshParentObject);
-}
-
-MStatus ApplyDeltaStates(
-    ImportContext &context,
-    const simple_dmx::Document &document,
-    const simple_dmx::Element *meshElement,
-    const MObject &meshObject,
-    const MObject &meshParentObject,
-    const MPointArray &basePoints)
-{
-    auto contextPtr = std::shared_ptr<ImportContext>(&context, [](ImportContext *) {});
-    DeformerImporter importer(contextPtr);
-    return importer.ApplyDeltaStates(document, meshElement, meshObject, meshParentObject, basePoints);
-}
-
 } // namespace dmx_import_impl

@@ -4,6 +4,7 @@
 
 #include <common/SimpleDmxDocument.h>
 
+#include <memory>
 #include <maya/MFileObject.h>
 #include <maya/MObject.h>
 #include <maya/MStatus.h>
@@ -20,7 +21,7 @@ private:
     MStatus LoadDocument();
     MStatus CreateSceneRoot(dmx_import_translator::ImportContext &context, MObject &sceneRoot) const;
     MStatus ImportHierarchy(dmx_import_translator::ImportContext &context, MObject sceneRoot) const;
-    MStatus ImportAnimation(dmx_import_translator::ImportContext &context, MObject sceneRoot) const;
+    MStatus ImportAnimation(std::shared_ptr<dmx_import_translator::ImportContext> context, MObject sceneRoot);
 
     MString filePath_;
     MString optionsText_;

@@ -77,18 +77,4 @@ private:
     const MPointArray *basePoints_ = nullptr;
 };
 
-MStatus ApplySkinning(
-    const ImportContext &context,
-    const simple_dmx::Element *vertexData,
-    const MObject &meshObject,
-    const MObject &meshParentObject);
-
-MStatus ApplyDeltaStates(
-    ImportContext &context,
-    const simple_dmx::Document &document,
-    const simple_dmx::Element *meshElement,
-    const MObject &meshObject,
-    const MObject &meshParentObject,
-    const MPointArray &basePoints);
-
 } // namespace dmx_import_impl

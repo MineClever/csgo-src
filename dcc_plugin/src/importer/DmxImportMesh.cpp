@@ -615,21 +615,27 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         }
     }
 
-    if (context.importSkin)
+    if (context.importSkin || context.importDeltaStates)
     {
-        status = ApplySkinning(context, vertexData, meshObject, parent);
-        if (!status)
-        {
-            return maya_dmx::ReportWarning(MString("maya_dmx: failed to apply skinning for ") + dagElement->name.c_str());
-        }
-    }
+        auto contextPtr = std::shared_ptr<ImportContext>(&context, [](ImportContext *) {});
+        DeformerImporter deformerImporter(contextPtr);
 
-    if (context.importDeltaStates)
-    {
-        status = ApplyDeltaStates(context, document, meshElement, meshObject, parent, points);
-        if (!status)
+        if (context.importSkin)
         {
-            return maya_dmx::ReportWarning(MString("maya_dmx: failed to apply delta states for ") + dagElement->name.c_str());
+            status = deformerImporter.ApplySkinning(vertexData, meshObject, parent);
+            if (!status)
+            {
+                return maya_dmx::ReportWarning(MString("maya_dmx: failed to apply skinning for ") + dagElement->name.c_str());
+            }
+        }
+
+        if (context.importDeltaStates)
+        {
+            status = deformerImporter.ApplyDeltaStates(document, meshElement, meshObject, parent, points);
+            if (!status)
+            {
+                return maya_dmx::ReportWarning(MString("maya_dmx: failed to apply delta states for ") + dagElement->name.c_str());
+            }
         }
     }
 

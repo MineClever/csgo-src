@@ -436,8 +436,11 @@ void NormalizeDocumentForImportCorrection(
 
     const simple_dmx::Element *documentRoot = document.GetRoot();
     const simple_dmx::Element *modelRoot = importRoot->type == "DmeModel" ? importRoot : nullptr;
-    const simple_dmx::Element *animationList =
-        FindAnimationList(document, documentRoot, importRoot, modelRoot);
+    ImportContext proxyContext{document};
+    auto proxyContextPtr = std::shared_ptr<ImportContext>(&proxyContext, [](ImportContext *) {});
+    AnimationImporter proxyAnimator(proxyContextPtr);
+    proxyAnimator.setLookupRoots(documentRoot, importRoot, modelRoot);
+    const simple_dmx::Element *animationList = proxyAnimator.FindAnimationList();
     if (animationList)
     {
         NormalizeAnimationForImportCorrection(document, animationList, topLevelTransformKeys, correction);
@@ -462,20 +465,20 @@ MStatus DmxImportSession::Run()
     }
     AppendImportDebugLog("session: load document ok");
 
-    ImportContext context{document_};
-    context.modelRoot = importRoot_->type == "DmeModel" ? importRoot_ : nullptr;
-    context.scenePolicy = importOptions_.scenePolicy;
-    context.importSkin = importOptions_.importSkin;
-    context.importMaterials = importOptions_.importMaterials;
-    context.importDeltaStates = importOptions_.importDeltaStates;
-    if (context.modelRoot)
+    auto context = std::shared_ptr<ImportContext>(new ImportContext{document_});
+    context->modelRoot = importRoot_->type == "DmeModel" ? importRoot_ : nullptr;
+    context->scenePolicy = importOptions_.scenePolicy;
+    context->importSkin = importOptions_.importSkin;
+    context->importMaterials = importOptions_.importMaterials;
+    context->importDeltaStates = importOptions_.importDeltaStates;
+    if (context->modelRoot)
     {
-        CollectJointInfo(document_, context.modelRoot, context);
+        CollectJointInfo(document_, context->modelRoot, *context);
     }
-    AppendImportDebugLog((std::string("session: context modelRoot=") + (context.modelRoot ? context.modelRoot->name : "<null>")).c_str());
+    AppendImportDebugLog((std::string("session: context modelRoot=") + (context->modelRoot ? context->modelRoot->name : "<null>")).c_str());
 
     MObject sceneRoot;
-    status = CreateSceneRoot(context, sceneRoot);
+    status = CreateSceneRoot(*context, sceneRoot);
     if (!status)
     {
         AppendImportDebugLog("session: create scene root failed");
@@ -483,7 +486,7 @@ MStatus DmxImportSession::Run()
     }
     AppendImportDebugLog("session: create scene root ok");
 
-    status = ImportHierarchy(context, sceneRoot);
+    status = ImportHierarchy(*context, sceneRoot);
     if (!status)
     {
         AppendImportDebugLog("session: import hierarchy failed");
@@ -671,12 +674,15 @@ MStatus DmxImportSession::ImportHierarchy(ImportContext &context, MObject sceneR
     return MStatus::kSuccess;
 }
 
-MStatus DmxImportSession::ImportAnimation(ImportContext &context, MObject sceneRoot) const
+MStatus DmxImportSession::ImportAnimation(std::shared_ptr<ImportContext> context, MObject sceneRoot)
 {
     AppendImportDebugLog("session: import animation begin");
-    const simple_dmx::Element *combinationOperator =
-        FindCombinationOperator(document_, document_.GetRoot(), importRoot_, context.modelRoot);
-    MStatus status = CreateCombinationControls(context, combinationOperator, sceneRoot);
+
+    AnimationImporter animator(context);
+    animator.setLookupRoots(document_.GetRoot(), importRoot_, context->modelRoot);
+
+    const simple_dmx::Element *combinationOperator = animator.FindCombinationOperator();
+    MStatus status = animator.CreateCombinationControls(combinationOperator, sceneRoot);
     if (!status)
     {
         AppendImportDebugLog("session: create combination controls failed");
@@ -684,8 +690,7 @@ MStatus DmxImportSession::ImportAnimation(ImportContext &context, MObject sceneR
     }
     AppendImportDebugLog((std::string("session: combination operator=") + (combinationOperator ? combinationOperator->name : "<null>")).c_str());
 
-    const simple_dmx::Element *animationList =
-        FindAnimationList(document_, document_.GetRoot(), importRoot_, context.modelRoot);
+    const simple_dmx::Element *animationList = animator.FindAnimationList();
     if (!animationList)
     {
         AppendImportDebugLog("session: no animation list");
@@ -699,7 +704,7 @@ MStatus DmxImportSession::ImportAnimation(ImportContext &context, MObject sceneR
     for (const simple_dmx::Element *animation : animations)
     {
         AppendImportDebugLog((std::string("session: apply animation clip=") + (animation ? animation->name : "<null>")).c_str());
-        status = ApplyChannelsClipAnimation(context, animation);
+        status = animator.ApplyChannelsClipAnimation(animation);
         if (!status)
         {
             AppendImportDebugLog((std::string("session: apply animation clip failed=") + (animation ? animation->name : "<null>")).c_str());
