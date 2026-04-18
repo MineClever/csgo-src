@@ -639,6 +639,16 @@ MStatus CreateMeshShape(ImportContext &context, const simple_dmx::Element *dagEl
         }
     }
 
+    if (faceVertexNormals.length() == polygonConnects.length() && faceIds.length() == polygonConnects.length() && normalVertexIds.length() == polygonConnects.length())
+    {
+        status = meshFn.lockFaceVertexNormals(faceIds, normalVertexIds);
+        if (!status)
+        {
+            maya_dmx::ReportWarning(MString("maya_dmx: failed to lock face-vertex normals for ") + dagElement->name.c_str());
+            status = MS::kSuccess;
+        }
+    }
+
     return MS::kSuccess;
 }
 

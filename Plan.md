@@ -196,6 +196,8 @@
     - importer 已支持最小 `flexWeight` facial 通道：同一条 `DmeFloatLog` 现在可同时驱动已导入 `blendShape` 权重与最小 `DmeCombinationOperator` 控制节点属性；[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 已验证会同时生成 `combinationOperator_controls.smile` 与 `blendshapeAnimMeshShape_blendShape.smile` 两条 3 帧动画曲线。
     - 2026-04-18 已补齐 DMX/SMD source delta 的 `Use Clip` 布尔选项与 scene animation layer reference 入口；当 `Use Clip` 关闭时，reference 仍回退到当前场景状态。对应的回归样例已加入 `simple_source_delta_overlay.dmx`、`simple_source_delta_overlay_scene_reference.dmx`、`simple_source_delta_base.smd`、`simple_source_delta_overlay.smd`，并已用 `mayapy` 跑通新增 case。运行时会有 `VaccineKiller.mod` 的外部权限警告，但未阻塞回归结果。
     - 2026-04-18 补充修正：当 `Use Clip` 启用时，`Scene Clip` 现在会从当前场景动画层中选择 reference，`Reference Frame` 保持可编辑；DMX / SMD 的 UI 联动已同步，避免出现过时的 clip 入口。另已确认 source-delta layer 在 Maya 中应保持 additive，写层时不再先把样本预减成 delta，而是让 layer 语义自行编码差值，以免和 `setKeyframe -animLayer` 的叠加规则发生二次减法。
+    - 2026-04-18 继续修复 SMD mesh normals 生命周期：在 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 中，`setFaceVertexNormals()` 之后补上 `lockFaceVertexNormals()`，并把锁定放在 skinning 之后统一完成，避免再次导入动画或播放时 custom normals 被 Maya 重新计算回默认值。该修复只影响 SMD 路径，DMX 不变。
+    - 2026-04-18 进一步同步 DMX normals 行为：在 [DmxImportMesh.cpp](dcc_plugin/src/importer/DmxImportMesh.cpp) 中也补上 face-vertex normals 锁定，保证 DMX/SMD 的 mesh normals 生命周期一致，避免动画播放时法线回退到默认重算结果。
     - exporter 已开始补最小动画导出。当前 [DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 已支持导出单个 `animationList`，覆盖 `position`、`orientation`、transform 标量通道以及最小 `flexWeight` 通道；私有 binary serializer 也已补上 `time/time_array`。用 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 实测时，[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx) 的 text/binary 动画 roundtrip 已通过。
     - translator 结构拆分已开始：（旧 DmxExportTextModel 已删除，见下）把 importer 的 DMX 查询、数值解析和命名清洗 helper 拆到 [DmxImportUtils.h](dcc_plugin/src/importer/DmxImportUtils.h) / [DmxImportUtils.cpp](dcc_plugin/src/importer/DmxImportUtils.cpp)，为后续继续拆 animation / mesh / material / skin 逻辑打基础。
     - 第二轮 translator 拆分已把 animation 相关 context/option 结构与 helper 群从主文件移出：新增 [DmxExportTranslatorTypes.h](dcc_plugin/src/exporter/DmxExportTranslatorTypes.h)、[DmxExportAnimation.hpp](dcc_plugin/src/exporter/DmxExportAnimation.hpp)、[DmxImportTranslatorTypes.h](dcc_plugin/src/importer/DmxImportTranslatorTypes.h)、[DmxImportAnimation.hpp](dcc_plugin/src/importer/DmxImportAnimation.hpp)，当前主 translator 已明显收缩，动画导入导出逻辑可在不触碰 mesh/skin 主流程的前提下继续迭代。
@@ -958,6 +960,7 @@
       - [simple_source_delta_overlay.smd](dcc_plugin/samples/simple_source_delta_overlay.smd)
       - [simple_source_delta_overlay_scene_reference.smd](dcc_plugin/samples/simple_source_delta_overlay_scene_reference.smd)
     - 相关 DMX / SMD 回归已在 `mayapy` 下通过。
+    - 新发现问题：SMD mesh 只在导入时写了 face-vertex normals，但没有显式锁定 normals。结合 Maya 的 normals 机制，后续播放动画时如果 skinCluster / history 触发了重算，custom normals 可能会回退到默认计算结果。后续修复优先考虑在 normals 写入后显式 freeze/lock，对 `update` 和 `animationOnly` 路径都保持一致。
     - 早期围绕 file clip 的历史条目保留在这段日志之前的完成记录里，不再作为当前实现状态说明。
   - 当前待办：
     - 后续若要支持真正的 DMX clip 语义，需要单独开任务补 sequence / animcmd 对接，不再沿用当前 `SceneClip` 入口。
