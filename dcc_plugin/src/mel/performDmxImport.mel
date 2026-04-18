@@ -16,17 +16,21 @@ global proc MayaDmxImport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_scaleZ`) { optionVar -floatValue MayaDmx_scaleZ 1; }
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_importAnimationToLayer`) { optionVar -intValue MayaDmx_importAnimationToLayer 0; }
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_animationLayerMode`) { optionVar -stringValue MayaDmx_animationLayerMode "new"; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaMode`) { optionVar -stringValue MayaDmx_sourceDeltaMode "none"; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaReferenceClip`) { optionVar -stringValue MayaDmx_sourceDeltaReferenceClip ""; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaTargetClip`) { optionVar -stringValue MayaDmx_sourceDeltaTargetClip ""; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaReferenceFrame`) { optionVar -intValue MayaDmx_sourceDeltaReferenceFrame 0; }
 }
 
 global proc string MayaDmxImport_defaultOptionsString()
 {
-    return "importMaterials=1;importSkin=1;importDeltaStates=1;useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1;importAnimationToLayer=0;animationLayerMode=new";
+    return "importMaterials=1;importSkin=1;importDeltaStates=1;useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1;importAnimationToLayer=0;animationLayerMode=new;sourceDeltaMode=none;sourceDeltaReferenceFrame=0";
 }
 
 global proc string MayaDmxImport_collectOptionVarString()
 {
     MayaDmxImport_setOptionVars(0);
-    return ("importMaterials=" + `optionVar -q MayaDmx_importMaterials`
+    string $options = ("importMaterials=" + `optionVar -q MayaDmx_importMaterials`
         + ";importSkin=" + `optionVar -q MayaDmx_importSkin`
         + ";importDeltaStates=" + `optionVar -q MayaDmx_importDeltaStates`
         + ";useSceneRoot=" + `optionVar -q MayaDmx_useSceneRoot`
@@ -41,7 +45,25 @@ global proc string MayaDmxImport_collectOptionVarString()
         + ";scaleY=" + `optionVar -q MayaDmx_scaleY`
         + ";scaleZ=" + `optionVar -q MayaDmx_scaleZ`
         + ";importAnimationToLayer=" + `optionVar -q MayaDmx_importAnimationToLayer`
-        + ";animationLayerMode=" + `optionVar -q MayaDmx_animationLayerMode`);
+        + ";animationLayerMode=" + `optionVar -q MayaDmx_animationLayerMode`
+        + ";sourceDeltaMode=" + `optionVar -q MayaDmx_sourceDeltaMode`
+        + ";sourceDeltaReferenceFrame=" + `optionVar -q MayaDmx_sourceDeltaReferenceFrame`);
+    string $referenceClip = `optionVar -q MayaDmx_sourceDeltaReferenceClip`;
+    string $targetClip = `optionVar -q MayaDmx_sourceDeltaTargetClip`;
+    if (size($referenceClip) > 0) { $options += (";sourceDeltaReferenceClip=" + $referenceClip); }
+    if (size($targetClip) > 0) { $options += (";sourceDeltaTargetClip=" + $targetClip); }
+    return $options;
+}
+
+global proc string MayaDmxImport_sourceDeltaModeFromControl(string $control)
+{
+    if (!`optionMenuGrp -exists $control`) { return "none"; }
+    int $modeSelect = `optionMenuGrp -q -select $control`;
+    if ($modeSelect == 2) { return "subtract"; }
+    if ($modeSelect == 3) { return "presubtract"; }
+    if ($modeSelect == 4) { return "lineardelta"; }
+    if ($modeSelect == 5) { return "splinedelta"; }
+    return "none";
 }
 
 global proc MayaDmxImport_applyOptionsString(string $options)
@@ -58,6 +80,10 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
     int $importAnimationToLayer = 0;
     string $animationLayerMode = "new";
+    string $sourceDeltaMode = "none";
+    string $sourceDeltaReferenceClip = "";
+    string $sourceDeltaTargetClip = "";
+    int $sourceDeltaReferenceFrame = 0;
 
     string $optionList[]; tokenize($effectiveOptions, ";", $optionList);
     for ($option in $optionList) {
@@ -79,6 +105,10 @@ global proc MayaDmxImport_applyOptionsString(string $options)
         else if ($parts[0] == "scaleZ") { $scaleZ = $parts[1]; }
         else if ($parts[0] == "importAnimationToLayer") { $importAnimationToLayer = $parts[1]; }
         else if ($parts[0] == "animationLayerMode") { $animationLayerMode = $parts[1]; }
+        else if ($parts[0] == "sourceDeltaMode") { $sourceDeltaMode = $parts[1]; }
+        else if ($parts[0] == "sourceDeltaReferenceClip") { $sourceDeltaReferenceClip = $parts[1]; }
+        else if ($parts[0] == "sourceDeltaTargetClip") { $sourceDeltaTargetClip = $parts[1]; }
+        else if ($parts[0] == "sourceDeltaReferenceFrame") { $sourceDeltaReferenceFrame = $parts[1]; }
     }
 
     if (`checkBoxGrp -exists dmxImportMaterials`) { checkBoxGrp -e -value1 $importMaterials dmxImportMaterials; }
@@ -98,6 +128,22 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     if (`optionMenuGrp -exists dmxImportAnimationLayerMode`) {
         if ($animationLayerMode == "replace") { optionMenuGrp -e -select 2 dmxImportAnimationLayerMode; }
         else { optionMenuGrp -e -select 1 dmxImportAnimationLayerMode; }
+    }
+    if (`optionMenuGrp -exists dmxImportSourceDeltaMode`) {
+        if ($sourceDeltaMode == "subtract") { optionMenuGrp -e -select 2 dmxImportSourceDeltaMode; }
+        else if ($sourceDeltaMode == "presubtract") { optionMenuGrp -e -select 3 dmxImportSourceDeltaMode; }
+        else if ($sourceDeltaMode == "lineardelta") { optionMenuGrp -e -select 4 dmxImportSourceDeltaMode; }
+        else if ($sourceDeltaMode == "splinedelta") { optionMenuGrp -e -select 5 dmxImportSourceDeltaMode; }
+        else { optionMenuGrp -e -select 1 dmxImportSourceDeltaMode; }
+    }
+    if (`textFieldGrp -exists dmxImportSourceDeltaReferenceClip`) {
+        textFieldGrp -e -text $sourceDeltaReferenceClip dmxImportSourceDeltaReferenceClip;
+    }
+    if (`textFieldGrp -exists dmxImportSourceDeltaTargetClip`) {
+        textFieldGrp -e -text $sourceDeltaTargetClip dmxImportSourceDeltaTargetClip;
+    }
+    if (`intFieldGrp -exists dmxImportSourceDeltaReferenceFrame`) {
+        intFieldGrp -e -value1 $sourceDeltaReferenceFrame dmxImportSourceDeltaReferenceFrame;
     }
     MayaDmxImport_updateAnimationLayerUI();
 }
@@ -153,8 +199,21 @@ global proc string MayaDmxImport_collectOptionsString()
     if (`optionMenuGrp -exists dmxImportAnimationLayerMode`) {
         if (`optionMenuGrp -q -select dmxImportAnimationLayerMode` == 2) { $animationLayerMode = "replace"; }
     }
+    string $sourceDeltaMode = MayaDmxImport_sourceDeltaModeFromControl("dmxImportSourceDeltaMode");
+    string $sourceDeltaReferenceClip = "";
+    string $sourceDeltaTargetClip = "";
+    int $sourceDeltaReferenceFrame = 0;
+    if (`textFieldGrp -exists dmxImportSourceDeltaReferenceClip`) {
+        $sourceDeltaReferenceClip = `textFieldGrp -q -text dmxImportSourceDeltaReferenceClip`;
+    }
+    if (`textFieldGrp -exists dmxImportSourceDeltaTargetClip`) {
+        $sourceDeltaTargetClip = `textFieldGrp -q -text dmxImportSourceDeltaTargetClip`;
+    }
+    if (`intFieldGrp -exists dmxImportSourceDeltaReferenceFrame`) {
+        $sourceDeltaReferenceFrame = `intFieldGrp -q -value1 dmxImportSourceDeltaReferenceFrame`;
+    }
 
-    return ("importMaterials=" + $importMaterials
+    string $options = ("importMaterials=" + $importMaterials
         + ";importSkin=" + $importSkin
         + ";importDeltaStates=" + $importDeltaStates
         + ";useSceneRoot=" + $useSceneRoot
@@ -169,7 +228,12 @@ global proc string MayaDmxImport_collectOptionsString()
         + ";scaleY=" + $scaleY
         + ";scaleZ=" + $scaleZ
         + ";importAnimationToLayer=" + $importAnimationToLayer
-        + ";animationLayerMode=" + $animationLayerMode);
+        + ";animationLayerMode=" + $animationLayerMode
+        + ";sourceDeltaMode=" + $sourceDeltaMode
+        + ";sourceDeltaReferenceFrame=" + $sourceDeltaReferenceFrame);
+    if (size($sourceDeltaReferenceClip) > 0) { $options += (";sourceDeltaReferenceClip=" + $sourceDeltaReferenceClip); }
+    if (size($sourceDeltaTargetClip) > 0) { $options += (";sourceDeltaTargetClip=" + $sourceDeltaTargetClip); }
+    return $options;
 }
 
 global proc MayaDmx_importSetup(string $parent, int $forceFactorySettings)
@@ -204,6 +268,10 @@ global proc MayaDmx_importCallback(string $parent, int $doIt)
         else if ($parts[0] == "scaleZ") { optionVar -floatValue MayaDmx_scaleZ $parts[1]; }
         else if ($parts[0] == "importAnimationToLayer") { optionVar -intValue MayaDmx_importAnimationToLayer $parts[1]; }
         else if ($parts[0] == "animationLayerMode") { optionVar -stringValue MayaDmx_animationLayerMode $parts[1]; }
+        else if ($parts[0] == "sourceDeltaMode") { optionVar -stringValue MayaDmx_sourceDeltaMode $parts[1]; }
+        else if ($parts[0] == "sourceDeltaReferenceClip") { optionVar -stringValue MayaDmx_sourceDeltaReferenceClip $parts[1]; }
+        else if ($parts[0] == "sourceDeltaTargetClip") { optionVar -stringValue MayaDmx_sourceDeltaTargetClip $parts[1]; }
+        else if ($parts[0] == "sourceDeltaReferenceFrame") { optionVar -intValue MayaDmx_sourceDeltaReferenceFrame $parts[1]; }
     }
     if ($doIt) { performDmxImport 0; }
 }
@@ -212,17 +280,33 @@ global proc MayaDmx_importCallback(string $parent, int $doIt)
 global proc MayaDmxImport_updateAnimationLayerUI()
 {
     int $supportsLayer = 0;
+    int $supportsSourceDelta = 0;
     if (`optionMenuGrp -exists dmxImportMode`) {
         int $modeSelect = `optionMenuGrp -q -select dmxImportMode`;
         $supportsLayer = ($modeSelect == 2 || $modeSelect == 4);
+        $supportsSourceDelta = ($modeSelect == 2);
     }
     int $importToLayer = 0;
     if (`checkBoxGrp -exists dmxImportAnimationLayer`) {
         checkBoxGrp -e -enable $supportsLayer dmxImportAnimationLayer;
         $importToLayer = `checkBoxGrp -q -value1 dmxImportAnimationLayer`;
     }
+    string $sourceDeltaMode = MayaDmxImport_sourceDeltaModeFromControl("dmxImportSourceDeltaMode");
+    int $useSourceDelta = ($supportsSourceDelta && $sourceDeltaMode != "none");
     if (`optionMenuGrp -exists dmxImportAnimationLayerMode`) {
-        optionMenuGrp -e -enable ($supportsLayer && $importToLayer) dmxImportAnimationLayerMode;
+        optionMenuGrp -e -enable ($supportsLayer && ($importToLayer || $useSourceDelta)) dmxImportAnimationLayerMode;
+    }
+    if (`optionMenuGrp -exists dmxImportSourceDeltaMode`) {
+        optionMenuGrp -e -enable $supportsSourceDelta dmxImportSourceDeltaMode;
+    }
+    if (`textFieldGrp -exists dmxImportSourceDeltaReferenceClip`) {
+        textFieldGrp -e -enable $useSourceDelta dmxImportSourceDeltaReferenceClip;
+    }
+    if (`textFieldGrp -exists dmxImportSourceDeltaTargetClip`) {
+        textFieldGrp -e -enable $useSourceDelta dmxImportSourceDeltaTargetClip;
+    }
+    if (`intFieldGrp -exists dmxImportSourceDeltaReferenceFrame`) {
+        intFieldGrp -e -enable $useSourceDelta dmxImportSourceDeltaReferenceFrame;
     }
 }
 
@@ -256,6 +340,21 @@ global proc string DmxImportOptionsUI(string $parent)
                 dmxImportAnimationLayerMode;
                 menuItem -label "New Layer";
                 menuItem -label "Replace Existing Layer";
+            separator -style "in";
+            text -align "left" -label "Source Delta  (Update Only)";
+            optionMenuGrp
+                -label "Delta Mode"
+                -annotation "Interprets imported transform animation as Source-style delta data and routes it through an animation layer. Reference clip fields are only used by subtract / preSubtract."
+                -changeCommand "MayaDmxImport_updateAnimationLayerUI"
+                dmxImportSourceDeltaMode;
+                menuItem -label "Disabled";
+                menuItem -label "Subtract";
+                menuItem -label "PreSubtract";
+                menuItem -label "Linear Delta";
+                menuItem -label "Spline Delta";
+            textFieldGrp -label "Reference Clip" -annotation "Used by subtract / preSubtract to locate the reference clip in the imported DMX file." dmxImportSourceDeltaReferenceClip;
+            textFieldGrp -label "Target Clip" -annotation "Optional imported clip name filter. When set, only this target clip is imported as source delta." dmxImportSourceDeltaTargetClip;
+            intFieldGrp -numberOfFields 1 -label "Reference Frame" -annotation "Reference frame index used by subtract / preSubtract when sampling the reference clip." dmxImportSourceDeltaReferenceFrame;
             separator -style "in";
             text -align "left" -label "Transform Correction";
             text -align "left" -label "Applied directly during import as translation, rotation and scale correction.\n Namespace options use Maya's native Import file panel.";
@@ -308,6 +407,10 @@ global proc string[] captureDmxImportOptionVars(string $version)
     $args[13] = `optionVar -q MayaDmx_scaleZ`;
     $args[14] = `optionVar -q MayaDmx_importAnimationToLayer`;
     $args[15] = `optionVar -q MayaDmx_animationLayerMode`;
+    $args[16] = `optionVar -q MayaDmx_sourceDeltaMode`;
+    $args[17] = `optionVar -q MayaDmx_sourceDeltaReferenceClip`;
+    $args[18] = `optionVar -q MayaDmx_sourceDeltaTargetClip`;
+    $args[19] = `optionVar -q MayaDmx_sourceDeltaReferenceFrame`;
     return $args;
 }
 

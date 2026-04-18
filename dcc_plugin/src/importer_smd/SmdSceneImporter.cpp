@@ -6,7 +6,9 @@
 #include <common_smd/MayaSmdCommon.h>
 
 #include <algorithm>
+#include <cmath>
 #include <string>
+#include <vector>
 
 #include <maya/MAnimControl.h>
 #include <maya/MEulerRotation.h>
@@ -23,6 +25,11 @@
 
 namespace
 {
+double ApplySplineWeight(double t)
+{
+    return 3.0 * t * t - 2.0 * t * t * t;
+}
+
 std::string SanitizeNodeName(std::string value)
 {
     for (char &character : value)
@@ -460,6 +467,12 @@ MStatus SmdSceneImporter::applyAnimation()
             continue;
         }
 
+        status = applySourceDeltaToSamples(sampledTranslations, sampledRotations);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+
         MFnTransform transformFn(pathIt->second, &status);
         if (!status)
         {
@@ -564,6 +577,50 @@ MStatus SmdSceneImporter::applyAnimation()
     MAnimControl::setMinTime(MTime(static_cast<double>(document_->skeletonFrames.front().time), MTime::uiUnit()));
     MAnimControl::setMaxTime(MTime(static_cast<double>(document_->skeletonFrames.back().time), MTime::uiUnit()));
     MAnimControl::setCurrentTime(MTime(static_cast<double>(document_->skeletonFrames.front().time), MTime::uiUnit()));
+    return MS::kSuccess;
+}
+
+MStatus SmdSceneImporter::applySourceDeltaToSamples(
+    std::vector<MVector> &translations,
+    std::vector<MQuaternion> &rotations) const
+{
+    const dcc_import_policy::SourceDeltaMode mode = importOptions_.scenePolicy.sourceDeltaMode;
+    if (mode == dcc_import_policy::SourceDeltaMode::None)
+    {
+        return MS::kSuccess;
+    }
+
+    if (translations.empty() || rotations.empty() || translations.size() != rotations.size())
+    {
+        return MS::kSuccess;
+    }
+
+    if (mode != dcc_import_policy::SourceDeltaMode::LinearDelta &&
+        mode != dcc_import_policy::SourceDeltaMode::SplineDelta)
+    {
+        return maya_smd::ReportError("maya_smd: sourceDelta currently only supports lineardelta and splinedelta for SMD transform import.");
+    }
+
+    const size_t sampleCount = translations.size();
+    const MVector firstTranslation = translations.front();
+    const MVector lastTranslation = translations.back();
+    const MQuaternion firstRotation = rotations.front();
+    const MQuaternion lastRotation = rotations.back();
+    for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
+    {
+        double t = sampleCount > 1 ? static_cast<double>(sampleIndex) / static_cast<double>(sampleCount - 1) : 1.0;
+        if (mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
+        {
+            t = ApplySplineWeight(t);
+        }
+
+        const MVector referenceTranslation = firstTranslation * (1.0 - t) + lastTranslation * t;
+        translations[sampleIndex] = translations[sampleIndex] - referenceTranslation;
+
+        const MQuaternion referenceRotation = slerp(firstRotation, lastRotation, t);
+        rotations[sampleIndex] = rotations[sampleIndex] * referenceRotation.inverse();
+    }
+
     return MS::kSuccess;
 }
 

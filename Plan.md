@@ -961,6 +961,21 @@
     - 当前边界与残余风险：
       - 这轮只完成 DMX transform Source delta 的最小 importer 闭环，SMD 侧、UI 暴露、`CDmeSequence/m_bDelta/m_bPreDelta` 直读、以及更复杂 paired clip 资产仍未收口。
       - 目前 clip 级 delta 主要通过导入选项驱动；虽然 importer 已预留读取 clip 上 `sourceDelta*` 属性，但还没有把真实 Valve sequence/animcmd metadata 自动翻译成这些字段。
+  - 2026-04-18：已继续补齐 Source delta 的 SMD 与 UI 部分，当前状态如下：
+    - SMD importer：
+      - [SmdImportSession.cpp](dcc_plugin/src/importer_smd/SmdImportSession.cpp) 现在会在启用 `sourceDeltaMode` 时自动切到 `importAnimationToLayer=1`，默认层名后缀改为 `_source_delta`。
+      - 当前明确只支持 `lineardelta / splinedelta`；若外部选项传入 `subtract / presubtract`，会给出 warning 并忽略，不再伪装成已支持。
+      - [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 已在 transform 动画采样后加入最小 delta 运算：平移按首末帧线性/样条参考求差，旋转按首末帧 quaternion `slerp` 参考求 delta，再写入 Maya animation layer。
+    - 导入 UI：
+      - DMX 导入 UI [performDmxImport.mel](dcc_plugin/src/mel/performDmxImport.mel) / [doDmxImportArgList.mel](dcc_plugin/src/mel/doDmxImportArgList.mel) 已补上 `sourceDeltaMode`、`sourceDeltaReferenceClip`、`sourceDeltaTargetClip`、`sourceDeltaReferenceFrame` 四个选项，并接入 optionVar 持久化与 file-specific options string。
+      - SMD 导入 UI [performSmdImport.mel](dcc_plugin/src/mel/performSmdImport.mel) 已补上 `Animation Only`、`importAnimationToLayer`、`animationLayerMode` 与最小 `sourceDeltaMode(lineardelta/splinedelta)` 入口，界面 enable/disable 逻辑也已同步更新。
+    - 验证：
+      - 完整重建 `maya_dmx / maya_smd` 通过。
+      - 在真实 `mayapy` 下，用 `ctm_fbi.smd` 作为基础场景，再以 `useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=lineardelta` 导入 `ctm_fbi_anims/rom_skin.smd`，已确认会生成 `rom_skin_smd_source_delta`。
+      - 对 `|pelvis.translateX` 与 `|pelvis.rotateX` 的 layer curve 逐项检查后，当前满足“首尾关键帧归零、中间关键帧非零”，说明 SMD source delta 的最小 layer 写入路径已经工作。
+    - 当前残余：
+      - SMD 侧还没有像 DMX 那样补入“可重建绝对结果”的 subtract / presubtract 参考 clip 机制。
+      - UI 这轮只补到 file-specific options 和 MEL option box，尚未单独增加更高层 workflow/preset 封装。
   - 2026-04-13：已复核 SourceEngine / studiomdl 对 delta animation 的真实处理方式，并据此修正插件当前语义表述：
     - Source 侧结论：
       - 原始 DMX `DmeAnimationList / DmeChannelsClip / DmeChannel / Dme*Log` 在 `studiomdl` 读入阶段先被当作绝对通道求值得到逐帧骨骼 pose；见 [dmxsupport.cpp](src/utils/studiomdl/dmxsupport.cpp) 的 `LoadAnimations()` / `ComputeFramePose()`。

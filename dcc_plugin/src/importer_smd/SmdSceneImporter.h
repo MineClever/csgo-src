@@ -13,6 +13,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 class SmdSceneImporter
 {
@@ -33,6 +34,7 @@ private:
     MObject findParentObject(const simple_smd::Node &node) const;
     const simple_smd::SkeletonPose *findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const;
     bool isTopLevelNode(const simple_smd::Node &node) const;
+    MStatus applySourceDeltaToSamples(std::vector<MVector> &translations, std::vector<MQuaternion> &rotations) const;
     MStatus ensureTransformAnimationLayer(MString &layerName) const;
     bool usesAnimationLayerForTransforms() const;
 

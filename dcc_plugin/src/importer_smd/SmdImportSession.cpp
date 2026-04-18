@@ -173,6 +173,10 @@ MStatus SmdImportSession::Run()
     {
         maya_smd::ReportWarning("maya_smd: importAnimationToLayer writes imported animation to a Maya override animation layer. Base animation remains unchanged while the layer is muted.");
     }
+    if (dcc_import_policy::UsesSourceDeltaImport(importOptions.scenePolicy))
+    {
+        maya_smd::ReportWarning("maya_smd: sourceDelta for SMD currently only supports transform channels with lineardelta/splinedelta and always writes into a Maya animation layer.");
+    }
 
     SmdSceneImporter importer(document, normalizedImportOptions);
     return importer.Import();
@@ -199,9 +203,20 @@ SmdImportOptions SmdImportSession::parseOptions() const
     const std::unordered_map<std::string, std::string> optionMap = dcc_import_policy::ParseOptionMap(options_);
     parsedOptions.scenePolicy = dcc_import_policy::ParseSceneImportPolicy(optionMap);
     dcc_import_policy::CaptureCurrentNamespace(parsedOptions.scenePolicy);
+    if (dcc_import_policy::UsesSourceDeltaImport(parsedOptions.scenePolicy))
+    {
+        parsedOptions.scenePolicy.importAnimationToLayer = true;
+        if (parsedOptions.scenePolicy.sourceDeltaMode != dcc_import_policy::SourceDeltaMode::LinearDelta &&
+            parsedOptions.scenePolicy.sourceDeltaMode != dcc_import_policy::SourceDeltaMode::SplineDelta)
+        {
+            maya_smd::ReportWarning("maya_smd: sourceDelta currently only supports lineardelta and splinedelta for SMD import; subtract/presubtract will be ignored.");
+            parsedOptions.scenePolicy.sourceDeltaMode = dcc_import_policy::SourceDeltaMode::None;
+        }
+    }
     if (parsedOptions.scenePolicy.importAnimationToLayer && parsedOptions.scenePolicy.animationLayerName.empty())
     {
-        parsedOptions.scenePolicy.animationLayerName = SanitizeLayerName(fileObject_.rawName().asChar()) + "_layer";
+        parsedOptions.scenePolicy.animationLayerName = SanitizeLayerName(fileObject_.rawName().asChar()) +
+            (dcc_import_policy::UsesSourceDeltaImport(parsedOptions.scenePolicy) ? "_source_delta" : "_layer");
     }
     parsedOptions.transformCorrection = dcc_import_transform::ParseTransformCorrection(optionMap);
     return parsedOptions;
