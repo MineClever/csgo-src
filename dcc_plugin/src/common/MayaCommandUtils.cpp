@@ -624,6 +624,7 @@ MStatus EnsureSkinClusterBindPose(
 MStatus EnsureAnimationLayer(
     const MString &layerName,
     bool replaceExisting,
+    bool overrideLayer,
     MString *resolvedLayerName)
 {
     if (layerName.length() == 0)
@@ -657,28 +658,51 @@ MStatus EnsureAnimationLayer(
 
     if (!layerExists || replaceExisting)
     {
-        MObject createdLayerObject;
-        status = CreateNamedDependencyNode("animLayer", layerName, createdLayerObject);
-        if (!status || createdLayerObject.isNull())
+        MString createCommand("animLayer \"");
+        createCommand += layerName;
+        createCommand += "\"";
+        MString createdLayerName;
+        status = MGlobal::executeCommand(createCommand, createdLayerName, false, false);
+        if (!status || createdLayerName.length() == 0)
         {
             return MS::kFailure;
         }
 
         if (resolvedLayerName)
         {
-            MFnDependencyNode createdLayerFn(createdLayerObject, &status);
+            *resolvedLayerName = createdLayerName;
+        }
+        if (overrideLayer)
+        {
+            MString overrideCommand("animLayer -e -override true \"");
+            overrideCommand += createdLayerName;
+            overrideCommand += "\"";
+            status = MGlobal::executeCommand(overrideCommand, false, false);
             if (!status)
             {
                 return MS::kFailure;
             }
-            *resolvedLayerName = createdLayerFn.name();
         }
+
         return MS::kSuccess;
+    }
+
+    MString resolvedName = layerName;
+    if (overrideLayer)
+    {
+        MString overrideCommand("animLayer -e -override true \"");
+        overrideCommand += resolvedName;
+        overrideCommand += "\"";
+        status = MGlobal::executeCommand(overrideCommand, false, false);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
     }
 
     if (resolvedLayerName)
     {
-        *resolvedLayerName = layerName;
+        *resolvedLayerName = resolvedName;
     }
     return MS::kSuccess;
 }

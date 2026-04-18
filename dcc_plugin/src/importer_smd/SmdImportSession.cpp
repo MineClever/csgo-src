@@ -25,7 +25,7 @@ std::string SanitizeLayerName(std::string value)
         }
     }
 
-    return value.empty() ? std::string("smd_delta") : value;
+    return value.empty() ? std::string("smd_layer") : value;
 }
 
 std::unordered_set<int> CollectTopLevelBoneIndices(const simple_smd::Document &document)
@@ -149,6 +149,13 @@ MStatus SmdImportSession::Run()
     NormalizeDocumentForImportCorrection(*document, importOptions.transformCorrection);
     SmdImportOptions normalizedImportOptions = importOptions;
     normalizedImportOptions.transformCorrection = dcc_import_transform::TransformCorrection();
+    if (dcc_import_policy::UsesAnimationOnlyImport(importOptions.scenePolicy) &&
+        !dcc_import_policy::UsesSceneRoot(importOptions.scenePolicy))
+    {
+        normalizedImportOptions.scenePolicy.rootMode = dcc_import_policy::RootMode::SceneRoot;
+        maya_smd::ReportWarning("maya_smd: importMode=animationOnly forces useSceneRoot=1 so imported animation can target existing scene joints.");
+    }
+
     if (dcc_import_policy::UsesUpdateCurrentScene(importOptions.scenePolicy))
     {
         maya_smd::ReportWarning("maya_smd: importMode=update now reuses matching hierarchy, overwrites reused bind pose/base animation, and attempts in-place mesh/skin updates when matching nodes already exist; fine-grained scene-merge is still not implemented yet.");
@@ -159,16 +166,12 @@ MStatus SmdImportSession::Run()
     }
     else if (dcc_import_policy::UsesAnimationOnlyImport(importOptions.scenePolicy))
     {
-        maya_smd::ReportWarning("maya_smd: importMode=animationOnly is parsed but not implemented yet; falling back to create-new import behavior.");
+        maya_smd::ReportWarning("maya_smd: importMode=animationOnly only targets matching existing scene joints; missing joints and all mesh import work are skipped.");
     }
 
-    if (importOptions.scenePolicy.importAnimationToLayer && !importOptions.scenePolicy.forceDeltaAnimationLayer)
+    if (importOptions.scenePolicy.importAnimationToLayer)
     {
-        maya_smd::ReportWarning("maya_smd: animation layer import options are parsed but not implemented yet; imported animation will still target the base scene.");
-    }
-    else if (importOptions.scenePolicy.forceDeltaAnimationLayer)
-    {
-        maya_smd::ReportWarning("maya_smd: forceDeltaAnimationLayer currently means a Maya-side relative animation layer built from absolute local TR keys. It does not implement Source delta-sequence subtraction semantics.");
+        maya_smd::ReportWarning("maya_smd: importAnimationToLayer writes imported animation to a Maya override animation layer. Base animation remains unchanged while the layer is muted.");
     }
 
     SmdSceneImporter importer(document, normalizedImportOptions);
@@ -196,9 +199,9 @@ SmdImportOptions SmdImportSession::parseOptions() const
     const std::unordered_map<std::string, std::string> optionMap = dcc_import_policy::ParseOptionMap(options_);
     parsedOptions.scenePolicy = dcc_import_policy::ParseSceneImportPolicy(optionMap);
     dcc_import_policy::CaptureCurrentNamespace(parsedOptions.scenePolicy);
-    if (parsedOptions.scenePolicy.forceDeltaAnimationLayer && parsedOptions.scenePolicy.animationLayerName.empty())
+    if (parsedOptions.scenePolicy.importAnimationToLayer && parsedOptions.scenePolicy.animationLayerName.empty())
     {
-        parsedOptions.scenePolicy.animationLayerName = SanitizeLayerName(fileObject_.rawName().asChar()) + "_delta";
+        parsedOptions.scenePolicy.animationLayerName = SanitizeLayerName(fileObject_.rawName().asChar()) + "_layer";
     }
     parsedOptions.transformCorrection = dcc_import_transform::ParseTransformCorrection(optionMap);
     return parsedOptions;

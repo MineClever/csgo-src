@@ -32,12 +32,6 @@ enum class AnimationImportMode
     ReplaceLayer,
 };
 
-enum class DeltaReferenceMode
-{
-    BindPose,
-    FirstFrame,
-};
-
 struct SceneImportPolicy
 {
     RootMode rootMode = RootMode::DedicatedRoot;
@@ -46,8 +40,6 @@ struct SceneImportPolicy
     std::string currentNamespace;
     bool importAnimationToLayer = false;
     AnimationImportMode animationImportMode = AnimationImportMode::None;
-    bool forceDeltaAnimationLayer = false;
-    DeltaReferenceMode deltaReferenceMode = DeltaReferenceMode::BindPose;
     std::string animationLayerName;
 };
 
@@ -132,11 +124,6 @@ inline SceneImportPolicy ParseSceneImportPolicy(const std::unordered_map<std::st
     policy.importAnimationToLayer =
         ParseBoolOption(optionMap, "importanimationtolayer", false) ||
         ParseBoolOption(optionMap, "useanimationlayer", false);
-    policy.forceDeltaAnimationLayer = ParseBoolOption(optionMap, "forcedeltaanimationlayer", false);
-    if (policy.forceDeltaAnimationLayer)
-    {
-        policy.importAnimationToLayer = true;
-    }
 
     auto animationLayerModeIt = optionMap.find("animationlayermode");
     if (policy.importAnimationToLayer || animationLayerModeIt != optionMap.end())
@@ -152,19 +139,6 @@ inline SceneImportPolicy ParseSceneImportPolicy(const std::unordered_map<std::st
             {
                 policy.animationImportMode = AnimationImportMode::ReplaceLayer;
             }
-        }
-    }
-
-    auto deltaReferenceModeIt = optionMap.find("deltareferencemode");
-    if (deltaReferenceModeIt != optionMap.end())
-    {
-        std::string deltaReferenceMode = deltaReferenceModeIt->second;
-        std::transform(deltaReferenceMode.begin(), deltaReferenceMode.end(), deltaReferenceMode.begin(), [](unsigned char ch) {
-            return static_cast<char>(std::tolower(ch));
-        });
-        if (deltaReferenceMode == "firstframe")
-        {
-            policy.deltaReferenceMode = DeltaReferenceMode::FirstFrame;
         }
     }
 
@@ -321,12 +295,18 @@ inline bool UsesAppendMissingObjects(const SceneImportPolicy &policy)
 inline bool UsesExistingObjectMerge(const SceneImportPolicy &policy)
 {
     return policy.objectMergeMode == ObjectMergeMode::AppendMissing ||
-        policy.objectMergeMode == ObjectMergeMode::UpdateScene;
+        policy.objectMergeMode == ObjectMergeMode::UpdateScene ||
+        policy.objectMergeMode == ObjectMergeMode::AnimationOnly;
 }
 
 inline bool UsesAnimationOnlyImport(const SceneImportPolicy &policy)
 {
     return policy.objectMergeMode == ObjectMergeMode::AnimationOnly;
+}
+
+inline bool UsesAnimationLayerImport(const SceneImportPolicy &policy)
+{
+    return policy.importAnimationToLayer;
 }
 
 } // namespace dcc_import_policy

@@ -34,13 +34,14 @@ private:
     const simple_smd::SkeletonPose *findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const;
     bool isTopLevelNode(const simple_smd::Node &node) const;
     MStatus ensureTransformAnimationLayer(MString &layerName) const;
-    bool usesDeltaAnimationLayerForTransforms() const;
+    bool usesAnimationLayerForTransforms() const;
 
     std::shared_ptr<const simple_smd::Document> document_;
     SmdImportOptions importOptions_;
     MObject importRoot_ = MObject::kNullObj;
     std::unordered_map<int, MDagPath> jointPathsByBone_;
     std::unordered_set<int> reusedBoneIndices_;
+    std::unordered_set<int> skippedBoneIndices_;
     mutable bool transformAnimationLayerInitialized_ = false;
     mutable MString transformAnimationLayerName_;
 };

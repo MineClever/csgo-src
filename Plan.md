@@ -939,6 +939,9 @@
       - `simple_blendshape_animation` 二次 append 后仍只有一个 `*combinationOperator_controls` 与一个 `*blendshapeAnimMeshShape_blendShape`，且手工改写的 `smile=0.75` 保持不变；
       - `MostComplexSampleSet/chr_mesh.smd` 二次 append 后 `*pelvis` 与 `*tex_d_bmp_grp1` 仍各只有一个实例。
   - 2026-04-13：任务盘点同步（DMX/SMD 剩余事项核对）。本次已关闭“SMD/DMX append 挂起问题”这一项；当前剩余任务收敛为 `simple_blendshape_animation` 几何保真、复杂复合动画样例补强、材质网络补全、facial/rig 语义扩展，以及中期的 translator/common 层继续收口。
+  - 2026-04-18：任务同步（DMX/SMD 剩余里程碑盘点）。本次仅重新核对 `Plan.md` 的 DMX/SMD 主线与里程碑状态，未发现新的技术阻塞；当前剩余开发里程碑仍集中在 `simple_blendshape_animation` 几何保真、复杂复合动画样例补强、材质网络补全、facial/rig 语义扩展、统一导入模式后续收口，以及中期的 translator/common 层继续收口，优先级判断维持不变。
+  - 2026-04-18：流程约束补记。对于自动化、大规模查询与辅助验证，后续任务默认允许通过编写 Python 脚本进行辅助验证；只要脚本用途限定在查询、批量检查、结果整理或验证，不视为偏离主线实现。
+  - 2026-04-18：任务同步（M5 动画合并与动画层收口）。已按新约束从当前 DMX/SMD 主线中移除 `forceDeltaAnimationLayer`，不再把 Maya 宿主侧相对层保留为现有选项；后续若要支持真正的 Source delta 语义，改为单独任务替代。当前 `importAnimationToLayer` 已落地为普通 Maya override animation layer，`importMode=animationOnly` 也已落地为“只命中现有对象、跳过缺失层级与几何”的真实行为；DMX 导入 UI 已同步改成普通动画层选项，并新增 `Animation Only` 模式。复杂复合动画样例补强方面，[MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已改为用普通 animation layer gate 覆盖 `MostComplexSampleSet/vcaanim_VertexAnim`、`Ellis/DMX/animation/c1m1_intro_mechanic.dmx`、`ctm_fbi/ctm_fbi_anims/rom_skin.smd` 与 `ctm_fbi/ctm_fbi_anims/shield_deploy.smd`；其中 SMD 两条复杂样例已在真实 `mayapy` 下通过，DMX 两条样例当前在 standalone 宿主里仍会触发导入后崩溃，说明这部分验证仍有宿主级阻塞，后续需单独继续排查。
   - 2026-04-13：已复核 SourceEngine / studiomdl 对 delta animation 的真实处理方式，并据此修正插件当前语义表述：
     - Source 侧结论：
       - 原始 DMX `DmeAnimationList / DmeChannelsClip / DmeChannel / Dme*Log` 在 `studiomdl` 读入阶段先被当作绝对通道求值得到逐帧骨骼 pose；见 [dmxsupport.cpp](src/utils/studiomdl/dmxsupport.cpp) 的 `LoadAnimations()` / `ComputeFramePose()`。

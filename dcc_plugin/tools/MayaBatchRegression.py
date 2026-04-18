@@ -199,32 +199,49 @@ SKIN_CLUSTER_REUSE_GATE_EXPECTATIONS = {
     },
 }
 
-DELTA_LAYER_GATE_EXPECTATIONS = {
+ANIMATION_LAYER_IMPORT_GATE_EXPECTATIONS = {
     "MostComplexSampleSet/vcaanim_VertexAnim": {
         "base_case": "MostComplexSampleSet/vcaanim_VertexAnim.dmx",
         "base_import_options": "useSceneRoot=0;importMode=create",
-        "update_import_options": "useSceneRoot=0;importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=firstFrame",
-        "layer_name": "vcaanim_VertexAnim_dmx_delta",
+        "update_import_options": "useSceneRoot=0;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+        "layer_name": "vcaanim_VertexAnim_dmx_layer",
         "base_plug": "|vca_arm|pelvis.translateX",
         "min_curve_count": 6,
     },
     "ctm_fbi/ctm_fbi_anims/rom_skin.smd": {
         "base_case": "ctm_fbi/ctm_fbi.smd",
-        "base_import_options": "useSceneRoot=1",
-        "update_import_options": "useSceneRoot=1;importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=firstFrame",
-        "layer_name": "rom_skin_smd_delta",
+        "base_import_options": "useSceneRoot=1;importMode=create",
+        "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+        "layer_name": "rom_skin_smd_layer",
         "base_plug": "|pelvis.translateX",
         "min_curve_count": 6,
     },
     "Ellis/DMX/animation/c1m1_intro_mechanic.dmx": {
         "base_case": "Ellis/DMX/mechanic_model.dmx",
         "base_import_options": "useSceneRoot=1;importMode=create",
-        "update_import_options": "useSceneRoot=1;importMode=update;forceDeltaAnimationLayer=1;deltaReferenceMode=bindPose",
-        "layer_name": "c1m1_intro_mechanic_dmx_delta",
+        "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+        "layer_name": "c1m1_intro_mechanic_dmx_layer",
         "base_plug": "|ValveBiped_Bip01_Pelvis.translateX",
         "min_curve_count": 6,
     },
+    "ctm_fbi/ctm_fbi_anims/shield_deploy.smd": {
+        "base_case": "ctm_fbi/ctm_fbi.smd",
+        "base_import_options": "useSceneRoot=1;importMode=create",
+        "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+        "layer_name": "shield_deploy_smd_layer",
+        "base_plug": "|pelvis.translateX",
+        "min_curve_count": 6,
+    },
 }
+
+
+def snapshot_scene_animation_only_counts(cmds):
+    return {
+        "joint_count": len(cmds.ls(type="joint", long=True) or []),
+        "mesh_count": len(cmds.ls(type="mesh", long=True) or []),
+        "blendshape_count": len(cmds.ls(type="blendShape", long=True) or []),
+        "transform_count": len(cmds.ls(type="transform", long=True) or []),
+    }
 
 
 def snapshot_imported_node_types(root_paths):
@@ -1115,10 +1132,9 @@ def validate_skin_cluster_reuse_gate(cmds, plugin_paths, format_config, input_pa
             f"new={sorted(new_nodes)} deleted={sorted(deleted_nodes)}"
         )
 
-
-def validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_name):
+def validate_animation_layer_import_gate(cmds, plugin_paths_by_format, sample_dir, case_name):
     normalized_case_name = case_name.replace("\\", "/")
-    expectation = DELTA_LAYER_GATE_EXPECTATIONS.get(normalized_case_name)
+    expectation = ANIMATION_LAYER_IMPORT_GATE_EXPECTATIONS.get(normalized_case_name)
     if not expectation:
         return
 
@@ -1127,7 +1143,7 @@ def validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_nam
     format_config = FORMAT_CONFIGS[format_name]
     plugin_path = plugin_paths_by_format.get(format_name)
     if not plugin_path:
-        raise RuntimeError(f"Missing plugin for delta-layer gate format '{format_name}' while running case '{case_name}'")
+        raise RuntimeError(f"Missing plugin for animation-layer gate format '{format_name}' while running case '{case_name}'")
 
     base_input_path = resolve_input_path(sample_dir, expectation["base_case"])
 
@@ -1143,7 +1159,7 @@ def validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_nam
         defaultNamespace=True,
         options=expectation["base_import_options"],
     )
-    delta_import_kwargs = dict(
+    layer_import_kwargs = dict(
         i=True,
         type=format_config["import_type"],
         ignoreVersion=True,
@@ -1156,23 +1172,31 @@ def validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_nam
     cmds.file(base_input_path, **base_import_kwargs)
     if not cmds.objExists(expectation["base_plug"]):
         raise RuntimeError(
-            f"Delta layer gate failed for {normalized_case_name}. "
-            f"missing base plug before delta import: {expectation['base_plug']}"
+            f"Animation layer gate failed for {normalized_case_name}. "
+            f"missing base plug before layer import: {expectation['base_plug']}"
         )
 
+    scene_counts_before = snapshot_scene_animation_only_counts(cmds)
     base_value = cmds.getAttr(expectation["base_plug"])
-    cmds.file(input_path, **delta_import_kwargs)
+    cmds.file(input_path, **layer_import_kwargs)
 
     if not cmds.objExists(expectation["layer_name"]):
         raise RuntimeError(
-            f"Delta layer gate failed for {normalized_case_name}. "
+            f"Animation layer gate failed for {normalized_case_name}. "
             f"missing expected animation layer: {expectation['layer_name']}"
+        )
+
+    scene_counts_after = snapshot_scene_animation_only_counts(cmds)
+    if scene_counts_after != scene_counts_before:
+        raise RuntimeError(
+            f"Animation layer gate failed for {normalized_case_name}. "
+            f"animationOnly import changed scene object counts: before={scene_counts_before} after={scene_counts_after}"
         )
 
     layer_curves = cmds.animLayer(expectation["layer_name"], query=True, animCurves=True) or []
     if len(layer_curves) < expectation["min_curve_count"]:
         raise RuntimeError(
-            f"Delta layer gate failed for {normalized_case_name}. "
+            f"Animation layer gate failed for {normalized_case_name}. "
             f"expected at least {expectation['min_curve_count']} layer curves, got {layer_curves}"
         )
 
@@ -1183,7 +1207,7 @@ def validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_nam
         cmds.animLayer(expectation["layer_name"], edit=True, mute=False)
     if abs(updated_value - base_value) > 1.0e-6:
         raise RuntimeError(
-            f"Delta layer gate failed for {normalized_case_name}. "
+            f"Animation layer gate failed for {normalized_case_name}. "
             f"base plug was overwritten: before={base_value} after={updated_value}"
         )
 
@@ -1308,7 +1332,7 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     topology_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.topology_update_gate.txt")
     skin_influence_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.skin_influence_update_gate.txt")
     skin_cluster_reuse_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.skin_cluster_reuse_gate.txt")
-    delta_layer_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.delta_layer_gate.txt")
+    animation_layer_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.animation_layer_gate.txt")
 
     import_kwargs = dict(
         i=True,
@@ -1401,8 +1425,8 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
         with open(skin_cluster_reuse_gate_marker, "w", encoding="utf-8") as marker_file:
             marker_file.write("ok\n")
 
-        validate_delta_layer_gate(cmds, plugin_paths_by_format, sample_dir, case_name)
-        with open(delta_layer_gate_marker, "w", encoding="utf-8") as marker_file:
+        validate_animation_layer_import_gate(cmds, plugin_paths_by_format, sample_dir, case_name)
+        with open(animation_layer_gate_marker, "w", encoding="utf-8") as marker_file:
             marker_file.write("ok\n")
 
     # For samples that contain skinned meshes, automatically run a second pass with

@@ -157,14 +157,17 @@ MStatus SmdSceneImporter::Import()
         return MStatus::kFailure;
     }
 
-    auto jointPathsByBonePtr = std::shared_ptr<const std::unordered_map<int, MDagPath>>(
-        &jointPathsByBone_,
-        [](const std::unordered_map<int, MDagPath> *) {});
-    SmdMeshImporter meshImporter(document_, jointPathsByBonePtr, importOptions_.scenePolicy, importOptions_.transformCorrection);
-    status = meshImporter.Import(importRoot_);
-    if (!status)
+    if (!dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy))
     {
-        return MStatus::kFailure;
+        auto jointPathsByBonePtr = std::shared_ptr<const std::unordered_map<int, MDagPath>>(
+            &jointPathsByBone_,
+            [](const std::unordered_map<int, MDagPath> *) {});
+        SmdMeshImporter meshImporter(document_, jointPathsByBonePtr, importOptions_.scenePolicy, importOptions_.transformCorrection);
+        status = meshImporter.Import(importRoot_);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
     }
 
     if (document_->hasVertexAnimation)
@@ -177,7 +180,8 @@ MStatus SmdSceneImporter::Import()
 
 MStatus SmdSceneImporter::createImportRoot()
 {
-    if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy))
+    if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy) ||
+        dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy))
     {
         importRoot_ = MObject::kNullObj;
         return MS::kSuccess;
@@ -213,6 +217,12 @@ MStatus SmdSceneImporter::createJointHierarchy()
 MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
 {
     MStatus status;
+    if (skippedBoneIndices_.find(node.parentIndex) != skippedBoneIndices_.end())
+    {
+        skippedBoneIndices_.insert(node.index);
+        return MS::kSuccess;
+    }
+
     const MObject parentObject = findParentObject(node);
     MObject jointObject = MObject::kNullObj;
     const bool reuseExistingMode = dcc_import_policy::UsesExistingObjectMerge(importOptions_.scenePolicy);
@@ -222,6 +232,12 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
     }
 
     const bool reusedExistingJoint = !jointObject.isNull();
+    if (dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy) && !reusedExistingJoint)
+    {
+        skippedBoneIndices_.insert(node.index);
+        return MS::kSuccess;
+    }
+
     if (!reusedExistingJoint)
     {
         MFnIkJoint jointFn;
@@ -344,7 +360,8 @@ MStatus SmdSceneImporter::applyBindPose()
     {
         if (reusedBoneIndices_.find(node.index) != reusedBoneIndices_.end() &&
             (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy) ||
-             importOptions_.scenePolicy.forceDeltaAnimationLayer))
+             dcc_import_policy::UsesAnimationLayerImport(importOptions_.scenePolicy) ||
+             dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy)))
         {
             continue;
         }
@@ -449,7 +466,6 @@ MStatus SmdSceneImporter::applyAnimation()
             return maya_smd::ReportError(MString("maya_smd: failed to access transform for animated joint ") + node.name.c_str(), status);
         }
 
-        MVector referenceTranslation;
         MEulerRotation currentEulerRotation;
         status = transformFn.getRotation(currentEulerRotation);
         if (!status)
@@ -457,40 +473,14 @@ MStatus SmdSceneImporter::applyAnimation()
             return maya_smd::ReportError(MString("maya_smd: failed to read current rotation for animated joint ") + node.name.c_str(), status);
         }
 
-        if (usesDeltaAnimationLayerForTransforms())
-        {
-            if (importOptions_.scenePolicy.deltaReferenceMode == dcc_import_policy::DeltaReferenceMode::FirstFrame)
-            {
-                referenceTranslation = sampledTranslations.front();
-            }
-            else
-            {
-                referenceTranslation = transformFn.translation(MSpace::kTransform, &status);
-                if (!status)
-                {
-                    return maya_smd::ReportError(MString("maya_smd: failed to read current translation for animated joint ") + node.name.c_str(), status);
-                }
-            }
-        }
-
-        const MQuaternion referenceRotation = usesDeltaAnimationLayerForTransforms()
-            ? (importOptions_.scenePolicy.deltaReferenceMode == dcc_import_policy::DeltaReferenceMode::FirstFrame
-                ? sampledRotations.front()
-                : currentEulerRotation.asQuaternion())
-            : MQuaternion::identity;
-
         for (size_t valueIndex = 0; valueIndex < sampledTranslations.size(); ++valueIndex)
         {
-            const MVector finalTranslation = usesDeltaAnimationLayerForTransforms()
-                ? sampledTranslations[valueIndex] - referenceTranslation
-                : sampledTranslations[valueIndex];
+            const MVector finalTranslation = sampledTranslations[valueIndex];
             txValues.push_back(finalTranslation.x);
             tyValues.push_back(finalTranslation.y);
             tzValues.push_back(finalTranslation.z);
 
-            const MQuaternion finalRotation = usesDeltaAnimationLayerForTransforms()
-                ? (sampledRotations[valueIndex] * referenceRotation.inverse())
-                : sampledRotations[valueIndex];
+            const MQuaternion finalRotation = sampledRotations[valueIndex];
             MEulerRotation finalEuler = finalRotation.asEulerRotation();
             finalEuler.reorderIt(currentEulerRotation.order);
             rxValues.push_back(finalEuler.x);
@@ -504,7 +494,7 @@ MStatus SmdSceneImporter::applyAnimation()
             return maya_smd::ReportError("maya_smd: failed to find translateX plug for animated joint.", status);
         }
         MString layerName;
-        const bool useLayer = usesDeltaAnimationLayerForTransforms();
+        const bool useLayer = usesAnimationLayerForTransforms();
         if (useLayer)
         {
             status = ensureTransformAnimationLayer(layerName);
@@ -577,9 +567,9 @@ MStatus SmdSceneImporter::applyAnimation()
     return MS::kSuccess;
 }
 
-bool SmdSceneImporter::usesDeltaAnimationLayerForTransforms() const
+bool SmdSceneImporter::usesAnimationLayerForTransforms() const
 {
-    return importOptions_.scenePolicy.forceDeltaAnimationLayer;
+    return dcc_import_policy::UsesAnimationLayerImport(importOptions_.scenePolicy);
 }
 
 MStatus SmdSceneImporter::ensureTransformAnimationLayer(MString &layerName) const
@@ -592,11 +582,12 @@ MStatus SmdSceneImporter::ensureTransformAnimationLayer(MString &layerName) cons
 
     transformAnimationLayerInitialized_ = true;
     const std::string configuredName = importOptions_.scenePolicy.animationLayerName.empty() ?
-        std::string("smd_delta") :
+        std::string("smd_layer") :
         importOptions_.scenePolicy.animationLayerName;
     MStatus status = maya_cmd::EnsureAnimationLayer(
         configuredName.c_str(),
         importOptions_.scenePolicy.animationImportMode == dcc_import_policy::AnimationImportMode::ReplaceLayer,
+        true,
         &transformAnimationLayerName_);
     if (!status)
     {

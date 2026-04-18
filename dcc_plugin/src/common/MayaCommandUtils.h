@@ -40,6 +40,7 @@ MStatus EnsureSkinClusterBindPose(
 MStatus EnsureAnimationLayer(
     const MString &layerName,
     bool replaceExisting,
+    bool overrideLayer,
     MString *resolvedLayerName = nullptr);
 MStatus AddPlugToAnimationLayer(
     const MString &layerName,

@@ -73,8 +73,9 @@ private:
         const std::string &targetName,
         const dmx_import_translator::ScalarAttributeBinding &binding);
     void bindCurrentChannel(const simple_dmx::Element *channel);
-    bool usesDeltaAnimationLayerForTransforms() const;
-    MStatus ensureTransformAnimationLayer(MString &layerName) const;
+    bool usesAnimationLayerForTransforms() const;
+    bool usesAnimationLayerForScalars() const;
+    MStatus ensureAnimationLayer(MString &layerName) const;
 
     std::shared_ptr<ImportContext> context_;
     const simple_dmx::Element *documentRoot_ = nullptr;

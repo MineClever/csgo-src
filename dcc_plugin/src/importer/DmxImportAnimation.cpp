@@ -192,13 +192,13 @@ MStatus AnimationImporter::setTransformCurveKeys(
     const std::vector<double> &values,
     MFnAnimCurve::AnimCurveType curveType) const
 {
-    if (!usesDeltaAnimationLayerForTransforms())
+    if (!usesAnimationLayerForTransforms())
     {
         return setCurveKeys(plug, times, values, curveType);
     }
 
     MString layerName;
-    MStatus status = ensureTransformAnimationLayer(layerName);
+    MStatus status = ensureAnimationLayer(layerName);
     if (!status)
     {
         return MStatus::kFailure;
@@ -268,33 +268,9 @@ MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, con
         return MStatus::kFailure;
     }
 
-    MVector referenceTranslation;
-    if (usesDeltaAnimationLayerForTransforms())
-    {
-        if (context_->scenePolicy.deltaReferenceMode == dcc_import_policy::DeltaReferenceMode::FirstFrame)
-        {
-            referenceTranslation = sampledTranslations.front();
-        }
-        else
-        {
-            MFnTransform transformFn(targetPath, &status);
-            if (!status)
-            {
-                return MStatus::kFailure;
-            }
-            referenceTranslation = transformFn.translation(MSpace::kTransform, &status);
-            if (!status)
-            {
-                return MStatus::kFailure;
-            }
-        }
-    }
-
     for (size_t valueIndex = 0; valueIndex < sampledTranslations.size(); ++valueIndex)
     {
-        const MVector finalValue = usesDeltaAnimationLayerForTransforms()
-            ? sampledTranslations[valueIndex] - referenceTranslation
-            : sampledTranslations[valueIndex];
+        const MVector finalValue = sampledTranslations[valueIndex];
         xValues.push_back(finalValue.x);
         yValues.push_back(finalValue.y);
         zValues.push_back(finalValue.z);
@@ -399,17 +375,9 @@ MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, 
         return MStatus::kFailure;
     }
 
-    const MQuaternion referenceRotation = usesDeltaAnimationLayerForTransforms()
-        ? (context_->scenePolicy.deltaReferenceMode == dcc_import_policy::DeltaReferenceMode::FirstFrame
-            ? sampledRotations.front()
-            : currentEulerRotation.asQuaternion())
-        : MQuaternion::identity;
-
     for (size_t valueIndex = 0; valueIndex < sampledRotations.size(); ++valueIndex)
     {
-        const MQuaternion finalRotation = usesDeltaAnimationLayerForTransforms()
-            ? (sampledRotations[valueIndex] * referenceRotation.inverse())
-            : sampledRotations[valueIndex];
+        const MQuaternion finalRotation = sampledRotations[valueIndex];
         MEulerRotation eulerRotation = finalRotation.asEulerRotation();
         eulerRotation.reorderIt(currentEulerRotation.order);
         xValues.push_back(eulerRotation.x);
@@ -662,7 +630,19 @@ MStatus AnimationImporter::applyFloatAnimation(const MPlug &targetPlug, const si
         return MS::kSuccess;
     }
 
-    return setCurveKeysAuto(targetPlug, times, values);
+    if (!usesAnimationLayerForScalars())
+    {
+        return setCurveKeysAuto(targetPlug, times, values);
+    }
+
+    MString layerName;
+    MStatus status = ensureAnimationLayer(layerName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    return maya_cmd::SetKeyframesOnAnimationLayer(layerName, targetPlug, times.data(), values.data(), times.size(), true);
 }
 
 MStatus AnimationImporter::applyFloatAnimation(const std::vector<MPlug> &targetPlugs, const simple_dmx::Element *logLayer) const
@@ -912,12 +892,17 @@ void AnimationImporter::bindCurrentChannel(const simple_dmx::Element *channel)
     currentLogLayer_ = findFirstLogLayer(currentLogElement_);
 }
 
-bool AnimationImporter::usesDeltaAnimationLayerForTransforms() const
+bool AnimationImporter::usesAnimationLayerForTransforms() const
 {
-    return context_->scenePolicy.forceDeltaAnimationLayer;
+    return dcc_import_policy::UsesAnimationLayerImport(context_->scenePolicy);
 }
 
-MStatus AnimationImporter::ensureTransformAnimationLayer(MString &layerName) const
+bool AnimationImporter::usesAnimationLayerForScalars() const
+{
+    return dcc_import_policy::UsesAnimationLayerImport(context_->scenePolicy);
+}
+
+MStatus AnimationImporter::ensureAnimationLayer(MString &layerName) const
 {
     if (transformAnimationLayerInitialized_)
     {
@@ -927,11 +912,12 @@ MStatus AnimationImporter::ensureTransformAnimationLayer(MString &layerName) con
 
     transformAnimationLayerInitialized_ = true;
     const std::string configuredName = context_->scenePolicy.animationLayerName.empty() ?
-        std::string("dmx_delta") :
+        std::string("dmx_anim") :
         context_->scenePolicy.animationLayerName;
     MStatus status = maya_cmd::EnsureAnimationLayer(
         configuredName.c_str(),
         context_->scenePolicy.animationImportMode == dcc_import_policy::AnimationImportMode::ReplaceLayer,
+        true,
         &transformAnimationLayerName_);
     if (!status)
     {
@@ -1045,6 +1031,11 @@ MStatus AnimationImporter::CreateCombinationControls(
     const bool reusedExistingNode = !controlNodeObject.isNull();
     if (!reusedExistingNode)
     {
+        if (dcc_import_policy::UsesAnimationOnlyImport(context_->scenePolicy))
+        {
+            return MS::kSuccess;
+        }
+
         MFnTransform controlNodeFn;
         controlNodeObject = controlNodeFn.create(sceneRoot, &status);
         if (!status)
