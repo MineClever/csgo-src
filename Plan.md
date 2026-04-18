@@ -467,6 +467,20 @@
       - 更接近 FBX 的 scene-merge 策略模板
       - 与 DMX workflow 的更深层共用抽象
 
+  - 里程碑 M7：导出校正逻辑统一
+    - 目标：把 SMD / DMX 导出统一到一套可复用的导出校正逻辑，并逐步淘汰 DMX 现有的单独 `upAxis` 选择路径。
+    - 方案：
+      - 在 common 层抽一套面向导出的校正对象，和导入侧 `TransformCorrection` 共用数据结构与矩阵构造思路，但明确区分“导入到 Maya”和“从 Maya 导出”的方向。
+      - 先让 DMX / SMD 导出都通过同一个校正入口处理 transform、rotation、normal、动画采样时间点上的姿态值，避免两边各自散落修正逻辑。
+      - DMX 侧先保留 `upAxis` 兼容输入和文件元数据写出，但内部不再把它当成独立逻辑分支，而是映射到统一导出校正对象。
+      - SMD 侧接入同一套导出校正对象，不新增单独轴向 UI。
+      - 等 DMX / SMD 导出结果和现有样例回归稳定后，再评估是否移除 DMX 导出 UI 中旧的 `upAxis` 选项。
+    - 出口条件：
+      - DMX / SMD 导出共用同一个导出校正入口
+      - 顶层平移、旋转、法线和动画采样结果都经过统一校正
+      - DMX 旧 `upAxis` 行为被兼容吸收到统一逻辑中
+      - 回归样例能覆盖“无修正 / 统一修正 / 旧 DMX 兼容路径”
+
 - 当前完成面：
   - `maya_smd.mll` 已独立落地，构建、部署、回归脚本已接通。
   - SMD parser / writer 已支持 `version / nodes / skeleton / triangles / vertexanimation` 文本主段落。
@@ -797,6 +811,11 @@
   - 2026-04-18：已落地统一场景合并策略对象 `SceneMergeStrategy`，DMX / SMD 的 session 级别 scene root、namespace、update / append / animationOnly、source delta 规范化开始收口到同一入口。
   - 2026-04-18：进一步把 DMX / SMD 的层级查找与归一化辅助收进 `SceneMergeResolver` 和文件内 struct，减少匿名命名空间自由函数，提升后续复用空间。
   - 2026-04-18：`SceneMergeStrategy` 与 `SceneMergeResolver` 已合并到同一个头文件，避免双文件同步维护。
+  - 2026-04-18：`SmdSceneImporter` 已继续拆分为面向对象结构，匿名命名空间辅助逻辑改为具名 `smd_import_impl` 工具单元，transform 动画导入与 source delta 采样分别落到 `SmdAnimationImporter`、`SmdSourceDeltaProcessor`，`SmdSceneImporter` 自身只保留场景骨架/层级搭建与调度职责。
+  - 2026-04-18：评估结果显示，Maya 2022.5 里动画层相关 C++ API 覆盖不足，当前 `animLayer / setKeyframe -animLayer` 仍需要 MEL 包装；若未来升级 SDK baseline，再考虑用 `MAnimUtil` 的更高版本接口替换。
+  - 2026-04-18：当前可直接用 OpenMayaAnim 保留的仅是 `MFnAnimCurve` 这类普通曲线写入；动画层创建、挂接、查曲线仍需要 MEL 过桥，后续若升级到更高 Maya 版本再评估替换。
+  - 2026-04-18：帧率自适应不宜默认接入导入流程。DMX 有 `frameRate` / `timeFrame` 元数据，理论上可作为可选覆盖；SMD 只有帧序号，没有可靠 fps 来源。若要切 Maya time unit，应作为显式导入选项而不是自动行为。
+  - 2026-04-18：导出侧轴向统一可以评估，但不能直接复用导入侧校正矩阵原样下沉。DMX 当前有显式 `upAxis` UI / optionVar，SMD 导出没有轴向选项；若要统一，需要先抽出一套“导出方向”的校正层，再决定是保留默认输出轴还是彻底移除导出轴向选择。
   - 当前待办：真正的 DMX clip 语义需要单独做 `sequence / animcmd` 对接，并继续收敛 `source delta` / `animation layer` 的验证边界。
 ## 环境与工具链说明
 
