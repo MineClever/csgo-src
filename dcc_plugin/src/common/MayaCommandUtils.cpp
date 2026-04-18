@@ -15,6 +15,55 @@
 namespace maya_cmd
 {
 
+namespace
+{
+
+MStatus ResolvePlugCommandNames(
+    const MPlug &plug,
+    MString &nodeName,
+    MString &attributeName,
+    MString &fullPlugName)
+{
+    if (plug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status;
+    attributeName = plug.partialName(false, false, false, false, false, true, &status);
+    if (!status || attributeName.length() == 0)
+    {
+        return MStatus::kFailure;
+    }
+
+    if (plug.node().hasFn(MFn::kDagNode))
+    {
+        MDagPath dagPath;
+        status = MDagPath::getAPathTo(plug.node(), dagPath);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        nodeName = dagPath.fullPathName();
+    }
+    else
+    {
+        MFnDependencyNode nodeFn(plug.node(), &status);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        nodeName = nodeFn.name();
+    }
+
+    fullPlugName = nodeName;
+    fullPlugName += ".";
+    fullPlugName += attributeName;
+    return MS::kSuccess;
+}
+
+} // namespace
+
 bool TryGetNodeByName(const MString &nodeName, MObject &nodeObject)
 {
     nodeObject = MObject::kNullObj;
@@ -716,8 +765,17 @@ MStatus AddPlugToAnimationLayer(
         return MS::kFailure;
     }
 
+    MString nodeName;
+    MString attributeName;
+    MString fullPlugName;
+    MStatus status = ResolvePlugCommandNames(plug, nodeName, attributeName, fullPlugName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     MString command("animLayer -e -attribute \"");
-    command += plug.name();
+    command += fullPlugName;
     command += "\" \"";
     command += layerName;
     command += "\"";
@@ -733,14 +791,23 @@ MStatus ClearAnimationLayerCurve(
         return MS::kFailure;
     }
 
+    MString nodeName;
+    MString attributeName;
+    MString fullPlugName;
+    MStatus status = ResolvePlugCommandNames(plug, nodeName, attributeName, fullPlugName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     MString queryCommand("animLayer -q -findCurveForPlug \"");
-    queryCommand += plug.name();
+    queryCommand += fullPlugName;
     queryCommand += "\" \"";
     queryCommand += layerName;
     queryCommand += "\"";
 
     MStringArray curveNames;
-    MStatus status = MGlobal::executeCommand(queryCommand, curveNames, false, false);
+    status = MGlobal::executeCommand(queryCommand, curveNames, false, false);
     if (!status)
     {
         return MS::kSuccess;
@@ -783,14 +850,10 @@ MStatus SetKeyframesOnAnimationLayer(
         return MS::kFailure;
     }
 
-    MFnDependencyNode nodeFn(plug.node(), &status);
-    if (!status)
-    {
-        return MS::kFailure;
-    }
-
-    const MString nodeName = nodeFn.name();
-    const MString attrName = plug.partialName(false, false, false, false, false, true, &status);
+    MString nodeName;
+    MString attrName;
+    MString fullPlugName;
+    status = ResolvePlugCommandNames(plug, nodeName, attrName, fullPlugName);
     if (!status)
     {
         return MS::kFailure;

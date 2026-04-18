@@ -587,12 +587,7 @@ MStatus DmxImportSession::LoadDocument()
     importOptions_.transformCorrection = dcc_import_transform::TransformCorrection();
     importOptions_.applyLegacyAxisCorrection = false;
 
-    if (dcc_import_policy::UsesUpdateCurrentScene(importOptions_.scenePolicy) &&
-        dcc_import_policy::UsesAnimationLayerImport(importOptions_.scenePolicy))
-    {
-        maya_dmx::ReportWarning("maya_dmx: importMode=update + importAnimationToLayer now only reuses matching existing scene nodes for animation-layer writes; missing DAG nodes, meshes and deformers are skipped.");
-    }
-    else if (dcc_import_policy::UsesUpdateCurrentScene(importOptions_.scenePolicy))
+    if (dcc_import_policy::UsesUpdateCurrentScene(importOptions_.scenePolicy))
     {
         maya_dmx::ReportWarning("maya_dmx: importMode=update now reuses matching hierarchy, overwrites reused transforms/base animation, and attempts in-place mesh/deformer updates when matching nodes already exist; fine-grained scene-merge is still not implemented yet.");
     }

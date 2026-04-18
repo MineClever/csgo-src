@@ -207,8 +207,7 @@ MStatus ImportDagHierarchyRecursive(
     MObject nodeObject = MObject::kNullObj;
     const bool reuseExistingMode = dcc_import_policy::UsesExistingObjectMerge(context.scenePolicy);
     const bool appendMissingMode = dcc_import_policy::UsesAppendMissingObjects(context.scenePolicy);
-    const bool existingAnimationTargetsOnly =
-        dcc_import_policy::UsesExistingAnimationTargetsOnly(context.scenePolicy);
+    const bool animationOnlyMode = dcc_import_policy::UsesAnimationOnlyImport(context.scenePolicy);
     if (reuseExistingMode)
     {
         nodeObject = FindAppendTargetChild(context, parent, nodeName, isJoint);
@@ -216,9 +215,9 @@ MStatus ImportDagHierarchyRecursive(
 
     const bool reusedExistingNode = !nodeObject.isNull();
     AppendImportDebugLog((std::string("dag: hierarchy target reused=") + (reusedExistingNode ? "1" : "0")).c_str());
-    if (existingAnimationTargetsOnly && !reusedExistingNode)
+    if (animationOnlyMode && !reusedExistingNode)
     {
-        AppendImportDebugLog((std::string("dag: skip subtree missing existing node=") + nodeName).c_str());
+        AppendImportDebugLog((std::string("dag: animationOnly skip subtree missing existing node=") + nodeName).c_str());
         return MS::kSuccess;
     }
 
@@ -266,7 +265,7 @@ MStatus ImportDagHierarchyRecursive(
     if (!reusedExistingNode ||
         (!appendMissingMode &&
          !dcc_import_policy::UsesAnimationLayerImport(context.scenePolicy) &&
-         !existingAnimationTargetsOnly))
+         !animationOnlyMode))
     {
         const bool topLevelNode = parent == context.sceneRoot;
         AppendImportDebugLog((std::string("dag: apply transform name=") + nodeName + " topLevel=" + (topLevelNode ? "1" : "0")).c_str());
@@ -302,7 +301,7 @@ MStatus ImportDagShapesRecursive(
     ImportContext &context,
     const simple_dmx::Element *dagElement)
 {
-    if (dcc_import_policy::UsesExistingAnimationTargetsOnly(context.scenePolicy))
+    if (dcc_import_policy::UsesAnimationOnlyImport(context.scenePolicy))
     {
         return MS::kSuccess;
     }
