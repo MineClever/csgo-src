@@ -315,7 +315,7 @@ MStatus SmdAnimationImporter::setCurveKeys(
     curveFn.create(plug, curveType, nullptr, &status);
     if (!status)
     {
-        return maya_smd::ReportError(MString("maya_smd: failed to create animation curve for ") + plug.name(), status);
+        maya_smd::ReportWarning(MString("maya_smd: failed to create animation curve for ") + plug.name());
     }
 
     for (size_t index = 0; index < times.size(); ++index)
@@ -329,7 +329,7 @@ MStatus SmdAnimationImporter::setCurveKeys(
             &status);
         if (!status)
         {
-            return maya_smd::ReportError(MString("maya_smd: failed to add animation key for ") + plug.name(), status);
+            maya_smd::ReportWarning(MString("maya_smd: failed to add animation key for ") + plug.name());
         }
     }
 
