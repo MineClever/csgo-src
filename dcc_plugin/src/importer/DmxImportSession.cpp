@@ -542,12 +542,22 @@ MStatus DmxImportSession::LoadDocument()
         maya_dmx::ReportWarning("maya_dmx: importMode=animationOnly forces useSceneRoot=1 so imported animation can target existing scene nodes.");
     }
 
+    if (dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy))
+    {
+        importOptions_.scenePolicy.importAnimationToLayer = true;
+        if (importOptions_.scenePolicy.animationImportMode == dcc_import_policy::AnimationImportMode::None)
+        {
+            importOptions_.scenePolicy.animationImportMode = dcc_import_policy::AnimationImportMode::NewLayer;
+        }
+    }
+
     if (importOptions_.scenePolicy.importAnimationToLayer && importOptions_.scenePolicy.animationLayerName.empty())
     {
         const std::string resolvedPath = filePath_.asChar();
         const size_t lastSeparator = resolvedPath.find_last_of("/\\");
         const std::string baseName = lastSeparator == std::string::npos ? resolvedPath : resolvedPath.substr(lastSeparator + 1);
-        importOptions_.scenePolicy.animationLayerName = SanitizeLayerName(baseName) + "_layer";
+        importOptions_.scenePolicy.animationLayerName = SanitizeLayerName(baseName) +
+            (dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy) ? "_source_delta" : "_layer");
     }
     {
         std::ostringstream optionsSummary;
@@ -560,7 +570,11 @@ MStatus DmxImportSession::LoadDocument()
             << " importMaterials=" << (importOptions_.importMaterials ? "1" : "0")
             << " importDeltaStates=" << (importOptions_.importDeltaStates ? "1" : "0")
             << " importAnimationToLayer=" << (importOptions_.scenePolicy.importAnimationToLayer ? "1" : "0")
-            << " animationLayerName=" << (importOptions_.scenePolicy.animationLayerName.empty() ? "<empty>" : importOptions_.scenePolicy.animationLayerName);
+            << " animationLayerName=" << (importOptions_.scenePolicy.animationLayerName.empty() ? "<empty>" : importOptions_.scenePolicy.animationLayerName)
+            << " sourceDelta=" << static_cast<int>(importOptions_.scenePolicy.sourceDeltaMode)
+            << " sourceDeltaReferenceClip=" << (importOptions_.scenePolicy.sourceDeltaReferenceClip.empty() ? "<empty>" : importOptions_.scenePolicy.sourceDeltaReferenceClip)
+            << " sourceDeltaTargetClip=" << (importOptions_.scenePolicy.sourceDeltaTargetClip.empty() ? "<empty>" : importOptions_.scenePolicy.sourceDeltaTargetClip)
+            << " sourceDeltaReferenceFrame=" << importOptions_.scenePolicy.sourceDeltaReferenceFrame;
         AppendImportDebugLog(optionsSummary.str().c_str());
     }
 
@@ -603,6 +617,10 @@ MStatus DmxImportSession::LoadDocument()
     if (importOptions_.scenePolicy.importAnimationToLayer)
     {
         maya_dmx::ReportWarning("maya_dmx: importAnimationToLayer writes imported animation to a Maya override animation layer. Base animation remains unchanged while the layer is muted.");
+    }
+    if (dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy))
+    {
+        maya_dmx::ReportWarning("maya_dmx: sourceDeltaMode applies Source-style subtract/linear-delta semantics to transform channels and writes the resulting delta to a Maya animation layer. Float channels remain absolute.");
     }
 
     AppendImportDebugLog("session: load document end success");

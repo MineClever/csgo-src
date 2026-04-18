@@ -234,6 +234,20 @@ ANIMATION_LAYER_IMPORT_GATE_EXPECTATIONS = {
     },
 }
 
+SOURCE_DELTA_IMPORT_GATE_EXPECTATIONS = {
+    "simple_source_delta_overlay": {
+        "base_case": "simple_source_delta_base.dmx",
+        "baseline_import_options": "useSceneRoot=1;importMode=create",
+        "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract;sourceDeltaReferenceClip=base_pose;sourceDeltaTargetClip=overlay_pose;sourceDeltaReferenceFrame=0",
+        "layer_name": "simple_source_delta_overlay_dmx_source_delta",
+        "compare_plugs": [
+            "|source_delta_joint.translateX",
+            "|source_delta_joint.rotateZ",
+        ],
+        "sample_times": [0.0, 0.5, 1.0],
+    },
+}
+
 
 def snapshot_scene_animation_only_counts(cmds):
     return {
@@ -1212,6 +1226,86 @@ def validate_animation_layer_import_gate(cmds, plugin_paths_by_format, sample_di
         )
 
 
+def validate_source_delta_import_gate(cmds, plugin_paths_by_format, sample_dir, case_name):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = SOURCE_DELTA_IMPORT_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    input_path = resolve_input_path(sample_dir, case_name)
+    format_name = detect_format(input_path)
+    format_config = FORMAT_CONFIGS[format_name]
+    plugin_path = plugin_paths_by_format.get(format_name)
+    if not plugin_path:
+        raise RuntimeError(f"Missing plugin for source-delta gate format '{format_name}' while running case '{case_name}'")
+
+    base_input_path = resolve_input_path(sample_dir, expectation["base_case"])
+
+    def _sample_plugs(sampled_plugs, times):
+        values = {}
+        for plug in sampled_plugs:
+            if not cmds.objExists(plug):
+                raise RuntimeError(
+                    f"Source delta gate failed for {normalized_case_name}. "
+                    f"missing expected plug: {plug}"
+                )
+            plug_values = []
+            for time_value in times:
+                cmds.currentTime(f"{time_value}sec", edit=True)
+                value = cmds.getAttr(plug)
+                if isinstance(value, (list, tuple)):
+                    value = value[0]
+                if isinstance(value, (list, tuple)):
+                    value = value[0]
+                plug_values.append(float(value))
+            values[plug] = plug_values
+        return values
+
+    direct_import_kwargs = dict(
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        defaultNamespace=True,
+        options=expectation["baseline_import_options"],
+    )
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, [plugin_path])
+    cmds.file(input_path, **direct_import_kwargs)
+    direct_values = _sample_plugs(expectation["compare_plugs"], expectation["sample_times"])
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, [plugin_path])
+    cmds.file(base_input_path, **direct_import_kwargs)
+    cmds.file(
+        input_path,
+        i=True,
+        type=format_config["import_type"],
+        ignoreVersion=True,
+        ra=True,
+        mergeNamespacesOnClash=False,
+        defaultNamespace=True,
+        options=expectation["delta_import_options"],
+    )
+
+    if not cmds.objExists(expectation["layer_name"]):
+        raise RuntimeError(
+            f"Source delta gate failed for {normalized_case_name}. "
+            f"missing expected source-delta animation layer: {expectation['layer_name']}"
+        )
+
+    delta_values = _sample_plugs(expectation["compare_plugs"], expectation["sample_times"])
+    for plug in expectation["compare_plugs"]:
+        for baseline_value, delta_value, time_value in zip(direct_values[plug], delta_values[plug], expectation["sample_times"]):
+            if abs(baseline_value - delta_value) > 1.0e-5:
+                raise RuntimeError(
+                    f"Source delta gate failed for {normalized_case_name}. "
+                    f"value mismatch on {plug} at time {time_value}: baseline={baseline_value} delta={delta_value}"
+                )
+
+
 def verify_roundtrip(
     cmds,
     plugin_paths,
@@ -1333,6 +1427,7 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     skin_influence_update_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.skin_influence_update_gate.txt")
     skin_cluster_reuse_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.skin_cluster_reuse_gate.txt")
     animation_layer_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.animation_layer_gate.txt")
+    source_delta_gate_marker = os.path.join(output_dir, f"{case_output_name}{options_suffix}.source_delta_gate.txt")
 
     import_kwargs = dict(
         i=True,
@@ -1427,6 +1522,10 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
 
         validate_animation_layer_import_gate(cmds, plugin_paths_by_format, sample_dir, case_name)
         with open(animation_layer_gate_marker, "w", encoding="utf-8") as marker_file:
+            marker_file.write("ok\n")
+
+        validate_source_delta_import_gate(cmds, plugin_paths_by_format, sample_dir, case_name)
+        with open(source_delta_gate_marker, "w", encoding="utf-8") as marker_file:
             marker_file.write("ok\n")
 
     # For samples that contain skinned meshes, automatically run a second pass with

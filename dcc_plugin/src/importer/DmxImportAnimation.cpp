@@ -5,6 +5,8 @@
 #include <common/ImportTransformCorrection.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -25,6 +27,43 @@
 
 namespace dmx_import_impl
 {
+
+namespace
+{
+
+constexpr double kSourceDeltaRadiansToDegrees = 180.0 / 3.14159265358979323846;
+
+dcc_import_policy::SourceDeltaMode ParseSourceDeltaModeValue(const std::string &value)
+{
+    std::string normalized = value;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (normalized == "subtract")
+    {
+        return dcc_import_policy::SourceDeltaMode::Subtract;
+    }
+    if (normalized == "presubtract")
+    {
+        return dcc_import_policy::SourceDeltaMode::PreSubtract;
+    }
+    if (normalized == "lineardelta")
+    {
+        return dcc_import_policy::SourceDeltaMode::LinearDelta;
+    }
+    if (normalized == "splinedelta")
+    {
+        return dcc_import_policy::SourceDeltaMode::SplineDelta;
+    }
+    return dcc_import_policy::SourceDeltaMode::None;
+}
+
+double ApplySplineWeight(double t)
+{
+    return 3.0 * t * t - 2.0 * t * t * t;
+}
+
+} // namespace
 
 static MStatus ClearExistingAnimationCurve(const MPlug &plug)
 {
@@ -101,6 +140,368 @@ const simple_dmx::Element *AnimationImporter::findFirstLogLayer(const simple_dmx
 
     const std::vector<const simple_dmx::Element *> layers = FindAttributeElementArray(context_->document, logElement, "layers");
     return layers.empty() ? nullptr : layers.front();
+}
+
+const simple_dmx::Element *AnimationImporter::findAnimationClipByName(const std::string &clipName) const
+{
+    if (!animationList_ || clipName.empty())
+    {
+        return nullptr;
+    }
+
+    for (const simple_dmx::Element *animation : FindAttributeElementArray(context_->document, animationList_, "animations"))
+    {
+        if (animation && animation->name == clipName)
+        {
+            return animation;
+        }
+    }
+
+    return nullptr;
+}
+
+const simple_dmx::Element *AnimationImporter::findMatchingChannel(
+    const simple_dmx::Element *channelsClip,
+    const simple_dmx::Element *targetElement,
+    const std::string &targetAttribute) const
+{
+    if (!channelsClip || !targetElement || targetAttribute.empty())
+    {
+        return nullptr;
+    }
+
+    const std::string targetKey = ElementKey(targetElement);
+    for (const simple_dmx::Element *channel : FindAttributeElementArray(context_->document, channelsClip, "channels"))
+    {
+        if (!channel)
+        {
+            continue;
+        }
+
+        const simple_dmx::Element *candidateTarget = FindAttributeElement(context_->document, channel, "toElement");
+        if (!candidateTarget || ElementKey(candidateTarget) != targetKey)
+        {
+            continue;
+        }
+
+        if (FindAttributeString(channel, "toAttribute") == targetAttribute)
+        {
+            return channel;
+        }
+    }
+
+    return nullptr;
+}
+
+AnimationImporter::SourceDeltaSettings AnimationImporter::resolveSourceDeltaSettings(const simple_dmx::Element *channelsClip) const
+{
+    SourceDeltaSettings settings;
+    settings.mode = context_->scenePolicy.sourceDeltaMode;
+    settings.referenceClipName = context_->scenePolicy.sourceDeltaReferenceClip;
+    settings.targetClipName = context_->scenePolicy.sourceDeltaTargetClip;
+    settings.referenceFrame = std::max(0, context_->scenePolicy.sourceDeltaReferenceFrame);
+
+    if (!channelsClip)
+    {
+        return settings;
+    }
+
+    const std::string modeValue = FindAttributeString(channelsClip, "sourceDeltaMode");
+    if (!modeValue.empty())
+    {
+        settings.mode = ParseSourceDeltaModeValue(modeValue);
+    }
+
+    const std::string referenceClipValue = FindAttributeString(channelsClip, "sourceDeltaReferenceClip");
+    if (!referenceClipValue.empty())
+    {
+        settings.referenceClipName = referenceClipValue;
+    }
+
+    const std::string targetClipValue = FindAttributeString(channelsClip, "sourceDeltaTargetClip");
+    if (!targetClipValue.empty())
+    {
+        settings.targetClipName = targetClipValue;
+    }
+
+    const std::string referenceFrameValue = FindAttributeString(channelsClip, "sourceDeltaReferenceFrame");
+    if (!referenceFrameValue.empty())
+    {
+        settings.referenceFrame = std::max(0, std::atoi(referenceFrameValue.c_str()));
+    }
+
+    return settings;
+}
+
+bool AnimationImporter::shouldImportChannelsClip(const simple_dmx::Element *channelsClip, const SourceDeltaSettings &settings) const
+{
+    if (!channelsClip)
+    {
+        return false;
+    }
+
+    if (settings.mode == dcc_import_policy::SourceDeltaMode::None)
+    {
+        return true;
+    }
+
+    if (!settings.targetClipName.empty())
+    {
+        return channelsClip->name == settings.targetClipName;
+    }
+
+    if (!settings.referenceClipName.empty() && channelsClip->name == settings.referenceClipName)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+MStatus AnimationImporter::extractVector3AnimationSamples(
+    const MDagPath &targetPath,
+    const simple_dmx::Element *logLayer,
+    Vector3AnimationSamples &samples) const
+{
+    samples.times.clear();
+    samples.values.clear();
+    if (!logLayer)
+    {
+        return MS::kSuccess;
+    }
+
+    const std::vector<std::string> timeStrings = FindAttributeStringArray(logLayer, "times");
+    const std::vector<std::string> valueStrings = FindAttributeStringArray(logLayer, "values");
+    if (timeStrings.empty() || valueStrings.empty() || timeStrings.size() != valueStrings.size())
+    {
+        return MS::kSuccess;
+    }
+
+    const bool applyTopLevelCorrection =
+        isTopLevelImportedPath(targetPath) &&
+        !context_->topLevelPreTransform.isEquivalent(MMatrix::identity);
+    for (size_t keyIndex = 0; keyIndex < timeStrings.size(); ++keyIndex)
+    {
+        const std::vector<double> timeValues = ParseNumberList(timeStrings[keyIndex]);
+        const std::vector<double> vectorValues = ParseNumberList(valueStrings[keyIndex]);
+        if (timeValues.empty() || vectorValues.size() < 3)
+        {
+            continue;
+        }
+
+        MVector correctedValue(vectorValues[0], vectorValues[1], vectorValues[2]);
+        if (applyTopLevelCorrection)
+        {
+            const MPoint transformed = MPoint(correctedValue) * context_->topLevelPreTransform;
+            correctedValue = MVector(transformed.x, transformed.y, transformed.z);
+        }
+
+        samples.times.push_back(timeValues[0]);
+        samples.values.push_back(correctedValue);
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus AnimationImporter::extractQuaternionAnimationSamples(
+    const MDagPath &targetPath,
+    const simple_dmx::Element *logLayer,
+    QuaternionAnimationSamples &samples) const
+{
+    samples.times.clear();
+    samples.values.clear();
+    if (!logLayer)
+    {
+        return MS::kSuccess;
+    }
+
+    const std::vector<std::string> timeStrings = FindAttributeStringArray(logLayer, "times");
+    const std::vector<std::string> valueStrings = FindAttributeStringArray(logLayer, "values");
+    if (timeStrings.empty() || valueStrings.empty() || timeStrings.size() != valueStrings.size())
+    {
+        return MS::kSuccess;
+    }
+
+    const bool applyTopLevelCorrection =
+        isTopLevelImportedPath(targetPath) &&
+        !context_->topLevelPreTransform.isEquivalent(MMatrix::identity);
+    MQuaternion correctionRotation;
+    if (applyTopLevelCorrection)
+    {
+        MTransformationMatrix correctionTransform(context_->topLevelPreTransform);
+        correctionRotation = correctionTransform.rotation();
+    }
+
+    for (size_t keyIndex = 0; keyIndex < timeStrings.size(); ++keyIndex)
+    {
+        const std::vector<double> timeValues = ParseNumberList(timeStrings[keyIndex]);
+        const std::vector<double> quaternionValues = ParseNumberList(valueStrings[keyIndex]);
+        if (timeValues.empty() || quaternionValues.size() < 4)
+        {
+            continue;
+        }
+
+        MQuaternion correctedRotation(
+            quaternionValues[0],
+            quaternionValues[1],
+            quaternionValues[2],
+            quaternionValues[3]);
+        if (applyTopLevelCorrection)
+        {
+            correctedRotation = correctionRotation * correctedRotation;
+        }
+
+        samples.times.push_back(timeValues[0]);
+        samples.values.push_back(correctedRotation);
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus AnimationImporter::buildSourceDeltaVector3Samples(
+    const simple_dmx::Element *channelsClip,
+    const simple_dmx::Element *targetElement,
+    const MDagPath &targetPath,
+    const SourceDeltaSettings &settings,
+    Vector3AnimationSamples &samples) const
+{
+    if (!currentLogLayer_ || settings.mode == dcc_import_policy::SourceDeltaMode::None)
+    {
+        return extractVector3AnimationSamples(targetPath, currentLogLayer_, samples);
+    }
+
+    MStatus status = extractVector3AnimationSamples(targetPath, currentLogLayer_, samples);
+    if (!status || samples.times.empty())
+    {
+        return status;
+    }
+
+    if (settings.mode == dcc_import_policy::SourceDeltaMode::LinearDelta ||
+        settings.mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
+    {
+        const MVector firstValue = samples.values.front();
+        const MVector lastValue = samples.values.back();
+        const size_t sampleCount = samples.values.size();
+        for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
+        {
+            double t = sampleCount > 1 ? static_cast<double>(sampleIndex) / static_cast<double>(sampleCount - 1) : 1.0;
+            if (settings.mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
+            {
+                t = ApplySplineWeight(t);
+            }
+            const MVector referenceValue = firstValue * (1.0 - t) + lastValue * t;
+            samples.values[sampleIndex] = samples.values[sampleIndex] - referenceValue;
+        }
+        return MS::kSuccess;
+    }
+
+    const simple_dmx::Element *referenceClip = findAnimationClipByName(settings.referenceClipName);
+    if (!referenceClip)
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference clip was not found: ") + settings.referenceClipName.c_str());
+    }
+
+    const simple_dmx::Element *referenceChannel = findMatchingChannel(referenceClip, targetElement, currentTargetAttribute_);
+    if (!referenceChannel)
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference channel was missing for attribute ") + currentTargetAttribute_.c_str());
+    }
+
+    Vector3AnimationSamples referenceSamples;
+    status = extractVector3AnimationSamples(targetPath, findFirstLogLayer(FindAttributeElement(context_->document, referenceChannel, "log")), referenceSamples);
+    if (!status || referenceSamples.values.empty())
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference samples were missing for clip ") + settings.referenceClipName.c_str());
+    }
+
+    const size_t referenceIndex = std::min(static_cast<size_t>(settings.referenceFrame), referenceSamples.values.size() - 1);
+    const MVector referenceValue = referenceSamples.values[referenceIndex];
+    for (MVector &sampleValue : samples.values)
+    {
+        if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
+        {
+            sampleValue = referenceValue - sampleValue;
+        }
+        else
+        {
+            sampleValue = sampleValue - referenceValue;
+        }
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus AnimationImporter::buildSourceDeltaQuaternionSamples(
+    const simple_dmx::Element *channelsClip,
+    const simple_dmx::Element *targetElement,
+    const MDagPath &targetPath,
+    const SourceDeltaSettings &settings,
+    QuaternionAnimationSamples &samples) const
+{
+    if (!currentLogLayer_ || settings.mode == dcc_import_policy::SourceDeltaMode::None)
+    {
+        return extractQuaternionAnimationSamples(targetPath, currentLogLayer_, samples);
+    }
+
+    MStatus status = extractQuaternionAnimationSamples(targetPath, currentLogLayer_, samples);
+    if (!status || samples.times.empty())
+    {
+        return status;
+    }
+
+    if (settings.mode == dcc_import_policy::SourceDeltaMode::LinearDelta ||
+        settings.mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
+    {
+        const MQuaternion firstValue = samples.values.front();
+        const MQuaternion lastValue = samples.values.back();
+        const size_t sampleCount = samples.values.size();
+        for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
+        {
+            double t = sampleCount > 1 ? static_cast<double>(sampleIndex) / static_cast<double>(sampleCount - 1) : 1.0;
+            if (settings.mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
+            {
+                t = ApplySplineWeight(t);
+            }
+            const MQuaternion referenceValue = slerp(firstValue, lastValue, t);
+            samples.values[sampleIndex] = samples.values[sampleIndex] * referenceValue.inverse();
+        }
+        return MS::kSuccess;
+    }
+
+    const simple_dmx::Element *referenceClip = findAnimationClipByName(settings.referenceClipName);
+    if (!referenceClip)
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference clip was not found: ") + settings.referenceClipName.c_str());
+    }
+
+    const simple_dmx::Element *referenceChannel = findMatchingChannel(referenceClip, targetElement, currentTargetAttribute_);
+    if (!referenceChannel)
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference channel was missing for attribute ") + currentTargetAttribute_.c_str());
+    }
+
+    QuaternionAnimationSamples referenceSamples;
+    status = extractQuaternionAnimationSamples(targetPath, findFirstLogLayer(FindAttributeElement(context_->document, referenceChannel, "log")), referenceSamples);
+    if (!status || referenceSamples.values.empty())
+    {
+        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference samples were missing for clip ") + settings.referenceClipName.c_str());
+    }
+
+    const size_t referenceIndex = std::min(static_cast<size_t>(settings.referenceFrame), referenceSamples.values.size() - 1);
+    const MQuaternion referenceValue = referenceSamples.values[referenceIndex];
+    for (MQuaternion &sampleValue : samples.values)
+    {
+        if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
+        {
+            sampleValue = referenceValue.inverse() * sampleValue;
+        }
+        else
+        {
+            sampleValue = sampleValue * referenceValue.inverse();
+        }
+    }
+
+    return MS::kSuccess;
 }
 
 MStatus AnimationImporter::setCurveKeys(
@@ -208,54 +609,28 @@ MStatus AnimationImporter::setTransformCurveKeys(
     return maya_cmd::SetKeyframesOnAnimationLayer(layerName, plug, times.data(), values.data(), times.size(), true);
 }
 
-MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, const simple_dmx::Element *logLayer) const
+MStatus AnimationImporter::applyVector3Animation(
+    const simple_dmx::Element *channelsClip,
+    const simple_dmx::Element *targetElement,
+    const MDagPath &targetPath,
+    const simple_dmx::Element *logLayer,
+    const SourceDeltaSettings &settings) const
 {
     if (!logLayer)
     {
         return MS::kSuccess;
     }
 
-    const std::vector<std::string> timeStrings = FindAttributeStringArray(logLayer, "times");
-    const std::vector<std::string> valueStrings = FindAttributeStringArray(logLayer, "values");
-    if (timeStrings.empty() || valueStrings.empty() || timeStrings.size() != valueStrings.size())
+    Vector3AnimationSamples samples;
+    MStatus status = buildSourceDeltaVector3Samples(channelsClip, targetElement, targetPath, settings, samples);
+    if (!status || samples.times.empty())
     {
-        return MS::kSuccess;
+        return status;
     }
 
-    std::vector<double> times;
     std::vector<double> xValues;
     std::vector<double> yValues;
     std::vector<double> zValues;
-    std::vector<MVector> sampledTranslations;
-    const bool applyTopLevelCorrection =
-        isTopLevelImportedPath(targetPath) &&
-        !context_->topLevelPreTransform.isEquivalent(MMatrix::identity);
-    for (size_t keyIndex = 0; keyIndex < timeStrings.size(); ++keyIndex)
-    {
-        const std::vector<double> timeValues = ParseNumberList(timeStrings[keyIndex]);
-        const std::vector<double> vectorValues = ParseNumberList(valueStrings[keyIndex]);
-        if (timeValues.empty() || vectorValues.size() < 3)
-        {
-            continue;
-        }
-
-        MVector correctedValue(vectorValues[0], vectorValues[1], vectorValues[2]);
-        if (applyTopLevelCorrection)
-        {
-            const MPoint transformed = MPoint(correctedValue) * context_->topLevelPreTransform;
-            correctedValue = MVector(transformed.x, transformed.y, transformed.z);
-        }
-
-        times.push_back(timeValues[0]);
-        sampledTranslations.push_back(correctedValue);
-    }
-
-    if (times.empty())
-    {
-        return MS::kSuccess;
-    }
-
-    MStatus status;
     MFnDependencyNode targetNodeFn(targetPath.node(), &status);
     if (!status)
     {
@@ -268,9 +643,9 @@ MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, con
         return MStatus::kFailure;
     }
 
-    for (size_t valueIndex = 0; valueIndex < sampledTranslations.size(); ++valueIndex)
+    for (size_t valueIndex = 0; valueIndex < samples.values.size(); ++valueIndex)
     {
-        const MVector finalValue = sampledTranslations[valueIndex];
+        const MVector finalValue = samples.values[valueIndex];
         xValues.push_back(finalValue.x);
         yValues.push_back(finalValue.y);
         zValues.push_back(finalValue.z);
@@ -286,76 +661,41 @@ MStatus AnimationImporter::applyVector3Animation(const MDagPath &targetPath, con
         return MStatus::kFailure;
     }
 
-    status = setTransformCurveKeys(translateXPlug, times, xValues, MFnAnimCurve::kAnimCurveTL);
+    status = setTransformCurveKeys(translateXPlug, samples.times, xValues, MFnAnimCurve::kAnimCurveTL);
     if (!status)
     {
         return MStatus::kFailure;
     }
-    status = setTransformCurveKeys(translateYPlug, times, yValues, MFnAnimCurve::kAnimCurveTL);
+    status = setTransformCurveKeys(translateYPlug, samples.times, yValues, MFnAnimCurve::kAnimCurveTL);
     if (!status)
     {
         return MStatus::kFailure;
     }
-    return setTransformCurveKeys(translateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTL);
+    return setTransformCurveKeys(translateZPlug, samples.times, zValues, MFnAnimCurve::kAnimCurveTL);
 }
 
-MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, const simple_dmx::Element *logLayer) const
+MStatus AnimationImporter::applyQuaternionAnimation(
+    const simple_dmx::Element *channelsClip,
+    const simple_dmx::Element *targetElement,
+    const MDagPath &targetPath,
+    const simple_dmx::Element *logLayer,
+    const SourceDeltaSettings &settings) const
 {
     if (!logLayer)
     {
         return MS::kSuccess;
     }
 
-    const std::vector<std::string> timeStrings = FindAttributeStringArray(logLayer, "times");
-    const std::vector<std::string> valueStrings = FindAttributeStringArray(logLayer, "values");
-    if (timeStrings.empty() || valueStrings.empty() || timeStrings.size() != valueStrings.size())
+    QuaternionAnimationSamples samples;
+    MStatus status = buildSourceDeltaQuaternionSamples(channelsClip, targetElement, targetPath, settings, samples);
+    if (!status || samples.times.empty())
     {
-        return MS::kSuccess;
+        return status;
     }
 
-    std::vector<double> times;
     std::vector<double> xValues;
     std::vector<double> yValues;
     std::vector<double> zValues;
-    std::vector<MQuaternion> sampledRotations;
-    const bool applyTopLevelCorrection =
-        isTopLevelImportedPath(targetPath) &&
-        !context_->topLevelPreTransform.isEquivalent(MMatrix::identity);
-    MQuaternion correctionRotation;
-    if (applyTopLevelCorrection)
-    {
-        MTransformationMatrix correctionTransform(context_->topLevelPreTransform);
-        correctionRotation = correctionTransform.rotation();
-    }
-    for (size_t keyIndex = 0; keyIndex < timeStrings.size(); ++keyIndex)
-    {
-        const std::vector<double> timeValues = ParseNumberList(timeStrings[keyIndex]);
-        const std::vector<double> quaternionValues = ParseNumberList(valueStrings[keyIndex]);
-        if (timeValues.empty() || quaternionValues.size() < 4)
-        {
-            continue;
-        }
-
-        MQuaternion correctedRotation(
-            quaternionValues[0],
-            quaternionValues[1],
-            quaternionValues[2],
-            quaternionValues[3]);
-        if (applyTopLevelCorrection)
-        {
-            correctedRotation = correctionRotation * correctedRotation;
-        }
-
-        times.push_back(timeValues[0]);
-        sampledRotations.push_back(correctedRotation);
-    }
-
-    if (times.empty())
-    {
-        return MS::kSuccess;
-    }
-
-    MStatus status;
     MFnDependencyNode targetNodeFn(targetPath.node(), &status);
     if (!status)
     {
@@ -375,9 +715,9 @@ MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, 
         return MStatus::kFailure;
     }
 
-    for (size_t valueIndex = 0; valueIndex < sampledRotations.size(); ++valueIndex)
+    for (size_t valueIndex = 0; valueIndex < samples.values.size(); ++valueIndex)
     {
-        const MQuaternion finalRotation = sampledRotations[valueIndex];
+        const MQuaternion finalRotation = samples.values[valueIndex];
         MEulerRotation eulerRotation = finalRotation.asEulerRotation();
         eulerRotation.reorderIt(currentEulerRotation.order);
         xValues.push_back(eulerRotation.x);
@@ -401,17 +741,17 @@ MStatus AnimationImporter::applyQuaternionAnimation(const MDagPath &targetPath, 
         return MStatus::kFailure;
     }
 
-    status = setTransformCurveKeys(rotateXPlug, times, xValues, MFnAnimCurve::kAnimCurveTA);
+    status = setTransformCurveKeys(rotateXPlug, samples.times, xValues, MFnAnimCurve::kAnimCurveTA);
     if (!status)
     {
         return MStatus::kFailure;
     }
-    status = setTransformCurveKeys(rotateYPlug, times, yValues, MFnAnimCurve::kAnimCurveTA);
+    status = setTransformCurveKeys(rotateYPlug, samples.times, yValues, MFnAnimCurve::kAnimCurveTA);
     if (!status)
     {
         return MStatus::kFailure;
     }
-    return setTransformCurveKeys(rotateZPlug, times, zValues, MFnAnimCurve::kAnimCurveTA);
+    return setTransformCurveKeys(rotateZPlug, samples.times, zValues, MFnAnimCurve::kAnimCurveTA);
 }
 
 MStatus AnimationImporter::addScalarAnimationTarget(
@@ -837,19 +1177,23 @@ const simple_dmx::Element *AnimationImporter::FindAnimationList() const
 {
     if (const simple_dmx::Element *animationList = FindAttributeElement(context_->document, documentRoot_, "animationList"))
     {
+        const_cast<AnimationImporter *>(this)->animationList_ = animationList;
         return animationList;
     }
 
     if (const simple_dmx::Element *animationList = FindAttributeElement(context_->document, importRoot_, "animationList"))
     {
+        const_cast<AnimationImporter *>(this)->animationList_ = animationList;
         return animationList;
     }
 
     if (const simple_dmx::Element *animationList = FindAttributeElement(context_->document, modelRoot_, "animationList"))
     {
+        const_cast<AnimationImporter *>(this)->animationList_ = animationList;
         return animationList;
     }
 
+    const_cast<AnimationImporter *>(this)->animationList_ = nullptr;
     return nullptr;
 }
 
@@ -937,6 +1281,12 @@ MStatus AnimationImporter::ApplyChannelsClipAnimation(const simple_dmx::Element 
         return MS::kSuccess;
     }
 
+    const SourceDeltaSettings sourceDeltaSettings = resolveSourceDeltaSettings(channelsClip);
+    if (!shouldImportChannelsClip(channelsClip, sourceDeltaSettings))
+    {
+        return MS::kSuccess;
+    }
+
     const std::vector<const simple_dmx::Element *> channels = FindAttributeElementArray(context_->document, channelsClip, "channels");
     for (const simple_dmx::Element *channel : channels)
     {
@@ -959,7 +1309,12 @@ MStatus AnimationImporter::ApplyChannelsClipAnimation(const simple_dmx::Element 
             {
                 continue;
             }
-            status = applyVector3Animation(targetIt->second, currentLogLayer_);
+            status = applyVector3Animation(
+                channelsClip,
+                currentTargetElement_,
+                targetIt->second,
+                currentLogLayer_,
+                sourceDeltaSettings);
         }
         else if (targetIt != context_->importedTransformPaths.end() && currentTargetAttribute_ == "orientation")
         {
@@ -967,7 +1322,12 @@ MStatus AnimationImporter::ApplyChannelsClipAnimation(const simple_dmx::Element 
             {
                 continue;
             }
-            status = applyQuaternionAnimation(targetIt->second, currentLogLayer_);
+            status = applyQuaternionAnimation(
+                channelsClip,
+                currentTargetElement_,
+                targetIt->second,
+                currentLogLayer_,
+                sourceDeltaSettings);
         }
         else if (currentLogElement_ && currentLogElement_->type == "DmeFloatLog")
         {

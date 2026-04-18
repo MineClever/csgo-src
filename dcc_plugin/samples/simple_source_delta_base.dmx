@@ -1,0 +1,123 @@
+<!-- dmx encoding keyvalues2 1 format model 1 -->
+"DmElement"
+{
+    "id" "elementid" "source-delta-base-scene"
+    "name" "string" "SourceDeltaBaseScene"
+    "skeleton" "DmeModel"
+    {
+        "id" "elementid" "source-delta-base-model"
+        "name" "string" "source_delta_root"
+        "children" "element_array"
+        [
+            "DmeJoint"
+            {
+                "id" "elementid" "source-delta-base-joint"
+                "name" "string" "source_delta_joint"
+                "transform" "DmeTransform"
+                {
+                    "id" "elementid" "source-delta-base-joint-transform"
+                    "name" "string" "source_delta_joint"
+                    "position" "vector3" "0 0 0"
+                    "orientation" "quaternion" "0 0 0 1"
+                    "scale" "vector3" "1 1 1"
+                }
+            }
+        ]
+        "transform" "DmeTransform"
+        {
+            "id" "elementid" "source-delta-base-model-transform"
+            "position" "vector3" "0 0 0"
+            "orientation" "quaternion" "0 0 0 1"
+        }
+    }
+    "animationList" "DmeAnimationList"
+    {
+        "id" "elementid" "source-delta-base-animation-list"
+        "name" "string" "source_delta_root"
+        "animations" "element_array"
+        [
+            "DmeChannelsClip"
+            {
+                "id" "elementid" "source-delta-base-clip"
+                "name" "string" "base_pose"
+                "timeFrame" "DmeTimeFrame"
+                {
+                    "id" "elementid" "source-delta-base-timeframe"
+                    "name" "string" "timeframe"
+                    "duration" "time" "1.0000"
+                    "scale" "float" "1.000000"
+                }
+                "frameRate" "int" "24"
+                "channels" "element_array"
+                [
+                    "DmeChannel"
+                    {
+                        "id" "elementid" "source-delta-base-position-channel"
+                        "name" "string" "source_delta_joint_position"
+                        "toAttribute" "string" "position"
+                        "toElement" "element" "source-delta-base-joint-transform"
+                        "mode" "int" "1"
+                        "log" "DmeVector3Log"
+                        {
+                            "id" "elementid" "source-delta-base-position-log"
+                            "name" "string" "Vector3 log"
+                            "layers" "element_array"
+                            [
+                                "DmeVector3LogLayer"
+                                {
+                                    "id" "elementid" "source-delta-base-position-layer"
+                                    "name" "string" "Vector3 log"
+                                    "times" "time_array"
+                                    [
+                                        "0.0000",
+                                        "0.5000",
+                                        "1.0000"
+                                    ]
+                                    "values" "vector3_array"
+                                    [
+                                        "0 0 0",
+                                        "1 0 0",
+                                        "2 0 0"
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    "DmeChannel"
+                    {
+                        "id" "elementid" "source-delta-base-orientation-channel"
+                        "name" "string" "source_delta_joint_orientation"
+                        "toAttribute" "string" "orientation"
+                        "toElement" "element" "source-delta-base-joint-transform"
+                        "mode" "int" "1"
+                        "log" "DmeQuaternionLog"
+                        {
+                            "id" "elementid" "source-delta-base-orientation-log"
+                            "name" "string" "Quaternion log"
+                            "layers" "element_array"
+                            [
+                                "DmeQuaternionLogLayer"
+                                {
+                                    "id" "elementid" "source-delta-base-orientation-layer"
+                                    "name" "string" "Quaternion log"
+                                    "times" "time_array"
+                                    [
+                                        "0.0000",
+                                        "0.5000",
+                                        "1.0000"
+                                    ]
+                                    "values" "quaternion_array"
+                                    [
+                                        "0 0 0 1",
+                                        "0 0 0.0871557 0.9961947",
+                                        "0 0 0.1736482 0.9848078"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+}

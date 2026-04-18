@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <string>
 #include <unordered_map>
 
@@ -32,6 +33,15 @@ enum class AnimationImportMode
     ReplaceLayer,
 };
 
+enum class SourceDeltaMode
+{
+    None,
+    Subtract,
+    PreSubtract,
+    LinearDelta,
+    SplineDelta,
+};
+
 struct SceneImportPolicy
 {
     RootMode rootMode = RootMode::DedicatedRoot;
@@ -41,6 +51,10 @@ struct SceneImportPolicy
     bool importAnimationToLayer = false;
     AnimationImportMode animationImportMode = AnimationImportMode::None;
     std::string animationLayerName;
+    SourceDeltaMode sourceDeltaMode = SourceDeltaMode::None;
+    std::string sourceDeltaReferenceClip;
+    std::string sourceDeltaTargetClip;
+    int sourceDeltaReferenceFrame = 0;
 };
 
 inline std::unordered_map<std::string, std::string> ParseOptionMap(const MString &options)
@@ -146,6 +160,49 @@ inline SceneImportPolicy ParseSceneImportPolicy(const std::unordered_map<std::st
     if (animationLayerNameIt != optionMap.end())
     {
         policy.animationLayerName = animationLayerNameIt->second;
+    }
+
+    auto sourceDeltaModeIt = optionMap.find("sourcedeltamode");
+    if (sourceDeltaModeIt != optionMap.end())
+    {
+        std::string sourceDeltaMode = sourceDeltaModeIt->second;
+        std::transform(sourceDeltaMode.begin(), sourceDeltaMode.end(), sourceDeltaMode.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        if (sourceDeltaMode == "subtract")
+        {
+            policy.sourceDeltaMode = SourceDeltaMode::Subtract;
+        }
+        else if (sourceDeltaMode == "presubtract")
+        {
+            policy.sourceDeltaMode = SourceDeltaMode::PreSubtract;
+        }
+        else if (sourceDeltaMode == "lineardelta")
+        {
+            policy.sourceDeltaMode = SourceDeltaMode::LinearDelta;
+        }
+        else if (sourceDeltaMode == "splinedelta")
+        {
+            policy.sourceDeltaMode = SourceDeltaMode::SplineDelta;
+        }
+    }
+
+    auto sourceDeltaReferenceClipIt = optionMap.find("sourcedeltareferenceclip");
+    if (sourceDeltaReferenceClipIt != optionMap.end())
+    {
+        policy.sourceDeltaReferenceClip = sourceDeltaReferenceClipIt->second;
+    }
+
+    auto sourceDeltaTargetClipIt = optionMap.find("sourcedeltatargetclip");
+    if (sourceDeltaTargetClipIt != optionMap.end())
+    {
+        policy.sourceDeltaTargetClip = sourceDeltaTargetClipIt->second;
+    }
+
+    auto sourceDeltaReferenceFrameIt = optionMap.find("sourcedeltareferenceframe");
+    if (sourceDeltaReferenceFrameIt != optionMap.end())
+    {
+        policy.sourceDeltaReferenceFrame = std::max(0, std::atoi(sourceDeltaReferenceFrameIt->second.c_str()));
     }
 
     return policy;
@@ -307,6 +364,11 @@ inline bool UsesAnimationOnlyImport(const SceneImportPolicy &policy)
 inline bool UsesAnimationLayerImport(const SceneImportPolicy &policy)
 {
     return policy.importAnimationToLayer;
+}
+
+inline bool UsesSourceDeltaImport(const SceneImportPolicy &policy)
+{
+    return policy.sourceDeltaMode != SourceDeltaMode::None;
 }
 
 } // namespace dcc_import_policy

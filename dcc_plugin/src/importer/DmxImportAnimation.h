@@ -5,6 +5,7 @@
 #include <common/SimpleDmxDocument.h>
 
 #include <memory>
+#include <unordered_map>
 #include <string>
 #include <vector>
 
@@ -39,7 +40,54 @@ public:
         const MObject &sceneRoot);
 
 private:
+    struct Vector3AnimationSamples
+    {
+        std::vector<double> times;
+        std::vector<MVector> values;
+    };
+
+    struct QuaternionAnimationSamples
+    {
+        std::vector<double> times;
+        std::vector<MQuaternion> values;
+    };
+
+    struct SourceDeltaSettings
+    {
+        dcc_import_policy::SourceDeltaMode mode = dcc_import_policy::SourceDeltaMode::None;
+        std::string referenceClipName;
+        std::string targetClipName;
+        int referenceFrame = 0;
+    };
+
     const simple_dmx::Element *findFirstLogLayer(const simple_dmx::Element *logElement) const;
+    const simple_dmx::Element *findAnimationClipByName(const std::string &clipName) const;
+    const simple_dmx::Element *findMatchingChannel(
+        const simple_dmx::Element *channelsClip,
+        const simple_dmx::Element *targetElement,
+        const std::string &targetAttribute) const;
+    SourceDeltaSettings resolveSourceDeltaSettings(const simple_dmx::Element *channelsClip) const;
+    bool shouldImportChannelsClip(const simple_dmx::Element *channelsClip, const SourceDeltaSettings &settings) const;
+    MStatus extractVector3AnimationSamples(
+        const MDagPath &targetPath,
+        const simple_dmx::Element *logLayer,
+        Vector3AnimationSamples &samples) const;
+    MStatus extractQuaternionAnimationSamples(
+        const MDagPath &targetPath,
+        const simple_dmx::Element *logLayer,
+        QuaternionAnimationSamples &samples) const;
+    MStatus buildSourceDeltaVector3Samples(
+        const simple_dmx::Element *channelsClip,
+        const simple_dmx::Element *targetElement,
+        const MDagPath &targetPath,
+        const SourceDeltaSettings &settings,
+        Vector3AnimationSamples &samples) const;
+    MStatus buildSourceDeltaQuaternionSamples(
+        const simple_dmx::Element *channelsClip,
+        const simple_dmx::Element *targetElement,
+        const MDagPath &targetPath,
+        const SourceDeltaSettings &settings,
+        QuaternionAnimationSamples &samples) const;
     MStatus setCurveKeys(
         const MPlug &plug,
         const std::vector<double> &times,
@@ -54,8 +102,18 @@ private:
         const std::vector<double> &times,
         const std::vector<double> &values,
         MFnAnimCurve::AnimCurveType curveType) const;
-    MStatus applyVector3Animation(const MDagPath &targetPath, const simple_dmx::Element *logLayer) const;
-    MStatus applyQuaternionAnimation(const MDagPath &targetPath, const simple_dmx::Element *logLayer) const;
+    MStatus applyVector3Animation(
+        const simple_dmx::Element *channelsClip,
+        const simple_dmx::Element *targetElement,
+        const MDagPath &targetPath,
+        const simple_dmx::Element *logLayer,
+        const SourceDeltaSettings &settings) const;
+    MStatus applyQuaternionAnimation(
+        const simple_dmx::Element *channelsClip,
+        const simple_dmx::Element *targetElement,
+        const MDagPath &targetPath,
+        const simple_dmx::Element *logLayer,
+        const SourceDeltaSettings &settings) const;
     MStatus addScalarAnimationTarget(std::vector<MPlug> &targets, const MObject &nodeObject, const std::string &attributeName) const;
     MStatus ensureControlAttributeTargets(const std::string &targetName);
     MStatus collectFloatAnimationTargets(
@@ -81,6 +139,7 @@ private:
     const simple_dmx::Element *documentRoot_ = nullptr;
     const simple_dmx::Element *importRoot_ = nullptr;
     const simple_dmx::Element *modelRoot_ = nullptr;
+    const simple_dmx::Element *animationList_ = nullptr;
     const simple_dmx::Element *currentChannel_ = nullptr;
     const simple_dmx::Element *currentTargetElement_ = nullptr;
     const simple_dmx::Element *currentLogElement_ = nullptr;
