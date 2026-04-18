@@ -3,6 +3,7 @@
 #include "DmxImportMesh.h"
 
 #include <common/ImportTransformCorrection.h>
+#include <common/SceneMergeStrategy.h>
 
 #include <string>
 
@@ -16,99 +17,6 @@
 
 namespace dmx_import_impl
 {
-
-namespace
-{
-MObject FindAppendTargetChild(
-    const dmx_import_translator::ImportContext &context,
-    const MObject &parent,
-    const std::string &nodeName,
-    bool requireJoint)
-{
-    MStatus status;
-    if (parent.isNull())
-    {
-        MItDag dagIterator(MItDag::kDepthFirst);
-        for (; !dagIterator.isDone(); dagIterator.next())
-        {
-            if (dagIterator.depth() != 1)
-            {
-                continue;
-            }
-
-            MDagPath dagPath;
-            if (dagIterator.getPath(dagPath) != MS::kSuccess)
-            {
-                continue;
-            }
-
-            MFnDagNode dagNode(dagPath, &status);
-            if (!status || !dcc_import_policy::MatchesNodeNameForAppend(context.scenePolicy, dagNode.name().asChar(), nodeName))
-            {
-                continue;
-            }
-
-            if (requireJoint)
-            {
-                if (dagPath.hasFn(MFn::kJoint))
-                {
-                    return dagPath.node();
-                }
-                continue;
-            }
-
-            if (dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint))
-            {
-                return dagPath.node();
-            }
-        }
-
-        return MObject::kNullObj;
-    }
-
-    MFnDagNode parentDagNode(parent, &status);
-    if (!status)
-    {
-        return MObject::kNullObj;
-    }
-
-    for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
-    {
-        const MObject childObject = parentDagNode.child(childIndex, &status);
-        if (!status)
-        {
-            status = MS::kSuccess;
-            continue;
-        }
-
-        if (!(childObject.hasFn(MFn::kTransform) || childObject.hasFn(MFn::kJoint)))
-        {
-            continue;
-        }
-
-        MFnDagNode childDagNode(childObject, &status);
-        if (!status || !dcc_import_policy::MatchesNodeNameForAppend(context.scenePolicy, childDagNode.name().asChar(), nodeName))
-        {
-            status = MS::kSuccess;
-            continue;
-        }
-
-        if (requireJoint)
-        {
-            if (childObject.hasFn(MFn::kJoint))
-            {
-                return childObject;
-            }
-            continue;
-        }
-
-        return childObject;
-    }
-
-    return MObject::kNullObj;
-}
-}
-
 
 MStatus ApplyTransform(
     const simple_dmx::Document &document,
@@ -205,12 +113,12 @@ MStatus ImportDagHierarchyRecursive(
 
     MStatus status;
     MObject nodeObject = MObject::kNullObj;
-    const bool reuseExistingMode = dcc_import_policy::UsesExistingObjectMerge(context.scenePolicy);
-    const bool appendMissingMode = dcc_import_policy::UsesAppendMissingObjects(context.scenePolicy);
-    const bool animationOnlyMode = dcc_import_policy::UsesAnimationOnlyImport(context.scenePolicy);
+    const dcc_import_policy::SceneMergeResolver mergeResolver(context.scenePolicy);
+    const bool reuseExistingMode = mergeResolver.usesExistingObjectMerge();
+    const bool animationOnlyMode = mergeResolver.usesAnimationOnlyImport();
     if (reuseExistingMode)
     {
-        nodeObject = FindAppendTargetChild(context, parent, nodeName, isJoint);
+        nodeObject = mergeResolver.findAppendTargetChild(parent, nodeName, isJoint);
     }
 
     const bool reusedExistingNode = !nodeObject.isNull();
@@ -262,10 +170,7 @@ MStatus ImportDagHierarchyRecursive(
         context.importedControlPaths.push_back(nodePath);
     }
 
-    if (!reusedExistingNode ||
-        (!appendMissingMode &&
-         !dcc_import_policy::UsesAnimationLayerImport(context.scenePolicy) &&
-         !animationOnlyMode))
+    if (mergeResolver.shouldApplyBaseTransformToNode(reusedExistingNode))
     {
         const bool topLevelNode = parent == context.sceneRoot;
         AppendImportDebugLog((std::string("dag: apply transform name=") + nodeName + " topLevel=" + (topLevelNode ? "1" : "0")).c_str());
@@ -301,7 +206,8 @@ MStatus ImportDagShapesRecursive(
     ImportContext &context,
     const simple_dmx::Element *dagElement)
 {
-    if (dcc_import_policy::UsesAnimationOnlyImport(context.scenePolicy))
+    const dcc_import_policy::SceneMergeResolver mergeResolver(context.scenePolicy);
+    if (!mergeResolver.shouldImportShapes())
     {
         return MS::kSuccess;
     }

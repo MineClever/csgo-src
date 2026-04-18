@@ -2,6 +2,7 @@
 
 #include "SmdImportSession.h"
 
+#include <common/SceneMergeStrategy.h>
 #include <common_smd/SimpleSmdDocument.h>
 
 #include <memory>
@@ -29,7 +30,6 @@ private:
     MStatus applyAnimation();
     MStatus createJoint(const simple_smd::Node &node);
     MObject findExistingJoint(const simple_smd::Node &node) const;
-    MObject findAppendTargetChild(const MObject &parent, const std::string &nodeName) const;
 
     MObject findParentObject(const simple_smd::Node &node) const;
     const simple_smd::SkeletonPose *findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const;
@@ -55,6 +55,7 @@ private:
 
     std::shared_ptr<const simple_smd::Document> document_;
     SmdImportOptions importOptions_;
+    dcc_import_policy::SceneMergeResolver mergeResolver_;
     MObject importRoot_ = MObject::kNullObj;
     std::unordered_map<int, MDagPath> jointPathsByBone_;
     std::unordered_set<int> reusedBoneIndices_;

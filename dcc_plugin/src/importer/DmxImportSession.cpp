@@ -8,6 +8,7 @@
 #include <common/ImportTransformCorrection.h>
 #include <common/SimpleDmxDocument.h>
 #include <common/MayaDmxCommon.h>
+#include <common/SceneMergeStrategy.h>
 #include <common/SimpleDmxText.h>
 
 #include <iomanip>
@@ -28,100 +29,90 @@ using namespace dmx_import_impl;
 
 namespace
 {
-std::string SanitizeLayerName(std::string value)
+struct DmxImportDocumentNormalizer
 {
-    for (char &character : value)
+    static MMatrix ComputeLegacyAxisCorrectionMatrix(const std::string &sourceUpAxis, MString &warning)
     {
-        if (!std::isalnum(static_cast<unsigned char>(character)) && character != '_')
+        const std::string normalizedSourceUpAxis = NormalizeAxisName(sourceUpAxis);
+        if (normalizedSourceUpAxis.empty())
         {
-            character = '_';
+            return MMatrix::identity;
         }
-    }
 
-    return value.empty() ? std::string("dmx_layer") : value;
-}
+        MStatus status;
+        const bool mayaYAxisUp = MGlobal::isYAxisUp(&status);
+        if (!status)
+        {
+            return MMatrix::identity;
+        }
 
-MMatrix ComputeLegacyAxisCorrectionMatrix(const std::string &sourceUpAxis, MString &warning)
-{
-    const std::string normalizedSourceUpAxis = NormalizeAxisName(sourceUpAxis);
-    if (normalizedSourceUpAxis.empty())
-    {
+        const bool mayaZAxisUp = MGlobal::isZAxisUp(&status);
+        if (!status)
+        {
+            return MMatrix::identity;
+        }
+
+        if (normalizedSourceUpAxis == "Z" && mayaYAxisUp)
+        {
+            dcc_import_transform::TransformCorrection correction;
+            correction.rotation.x = -1.57079632679;
+            warning = "maya_dmx: applied legacy Z-up to Y-up import correction.";
+            return correction.Matrix();
+        }
+
+        if (normalizedSourceUpAxis == "Y" && mayaZAxisUp)
+        {
+            dcc_import_transform::TransformCorrection correction;
+            correction.rotation.x = 1.57079632679;
+            warning = "maya_dmx: applied legacy Y-up to Z-up import correction.";
+            return correction.Matrix();
+        }
+
         return MMatrix::identity;
     }
 
-    MStatus status;
-    const bool mayaYAxisUp = MGlobal::isYAxisUp(&status);
-    if (!status)
+    static std::string FormatVector3(const MVector &value)
     {
-        return MMatrix::identity;
+        std::ostringstream stream;
+        stream << std::setprecision(17) << value.x << ' ' << value.y << ' ' << value.z;
+        return stream.str();
     }
 
-    const bool mayaZAxisUp = MGlobal::isZAxisUp(&status);
-    if (!status)
+    static std::string FormatQuaternion(const MQuaternion &value)
     {
-        return MMatrix::identity;
+        std::ostringstream stream;
+        stream << std::setprecision(17) << value.x << ' ' << value.y << ' ' << value.z << ' ' << value.w;
+        return stream.str();
     }
 
-    if (normalizedSourceUpAxis == "Z" && mayaYAxisUp)
+    static void SetScalarStringAttribute(simple_dmx::Element &element, const char *attributeName, const std::string &fallbackType, const std::string &value)
     {
-        dcc_import_transform::TransformCorrection correction;
-        correction.rotation.x = -1.57079632679;
-        warning = "maya_dmx: applied legacy Z-up to Y-up import correction.";
-        return correction.Matrix();
+        std::string declaredType = fallbackType;
+        auto attributeIt = element.attributes.find(attributeName);
+        if (attributeIt != element.attributes.end() && !attributeIt->second.declaredType.empty())
+        {
+            declaredType = attributeIt->second.declaredType;
+        }
+
+        simple_dmx::SetAttr(element, attributeName, simple_dmx::ScalarAttr(declaredType, value));
     }
 
-    if (normalizedSourceUpAxis == "Y" && mayaZAxisUp)
+    static void SetStringArrayAttribute(
+        simple_dmx::Element &element,
+        const char *attributeName,
+        const std::string &fallbackType,
+        std::vector<std::string> values)
     {
-        dcc_import_transform::TransformCorrection correction;
-        correction.rotation.x = 1.57079632679;
-        warning = "maya_dmx: applied legacy Y-up to Z-up import correction.";
-        return correction.Matrix();
+        std::string declaredType = fallbackType;
+        auto attributeIt = element.attributes.find(attributeName);
+        if (attributeIt != element.attributes.end() && !attributeIt->second.declaredType.empty())
+        {
+            declaredType = attributeIt->second.declaredType;
+        }
+
+        simple_dmx::SetAttr(element, attributeName, simple_dmx::ScalarArrayAttr(declaredType, std::move(values)));
     }
-
-    return MMatrix::identity;
-}
-
-std::string FormatVector3(const MVector &value)
-{
-    std::ostringstream stream;
-    stream << std::setprecision(17) << value.x << ' ' << value.y << ' ' << value.z;
-    return stream.str();
-}
-
-std::string FormatQuaternion(const MQuaternion &value)
-{
-    std::ostringstream stream;
-    stream << std::setprecision(17) << value.x << ' ' << value.y << ' ' << value.z << ' ' << value.w;
-    return stream.str();
-}
-
-void SetScalarStringAttribute(simple_dmx::Element &element, const char *attributeName, const std::string &fallbackType, const std::string &value)
-{
-    std::string declaredType = fallbackType;
-    auto attributeIt = element.attributes.find(attributeName);
-    if (attributeIt != element.attributes.end() && !attributeIt->second.declaredType.empty())
-    {
-        declaredType = attributeIt->second.declaredType;
-    }
-
-    simple_dmx::SetAttr(element, attributeName, simple_dmx::ScalarAttr(declaredType, value));
-}
-
-void SetStringArrayAttribute(
-    simple_dmx::Element &element,
-    const char *attributeName,
-    const std::string &fallbackType,
-    std::vector<std::string> values)
-{
-    std::string declaredType = fallbackType;
-    auto attributeIt = element.attributes.find(attributeName);
-    if (attributeIt != element.attributes.end() && !attributeIt->second.declaredType.empty())
-    {
-        declaredType = attributeIt->second.declaredType;
-    }
-
-    simple_dmx::SetAttr(element, attributeName, simple_dmx::ScalarArrayAttr(declaredType, std::move(values)));
-}
+};
 
 void ApplyCorrectionToTransformElement(
     simple_dmx::Element &transformElement,
@@ -145,12 +136,12 @@ void ApplyCorrectionToTransformElement(
                 correction,
                 MVector(positionValues[0], positionValues[1], positionValues[2]));
         }
-        SetScalarStringAttribute(transformElement, "position", "vector3", FormatVector3(correctedPosition));
+        DmxImportDocumentNormalizer::SetScalarStringAttribute(transformElement, "position", "vector3", DmxImportDocumentNormalizer::FormatVector3(correctedPosition));
     }
     else if (isTopLevelTransform && !correction.IsIdentity())
     {
         correctedPosition = dcc_import_transform::ApplyToTopLevelTranslation(correction, MVector::zero);
-        SetScalarStringAttribute(transformElement, "position", "vector3", FormatVector3(correctedPosition));
+        DmxImportDocumentNormalizer::SetScalarStringAttribute(transformElement, "position", "vector3", DmxImportDocumentNormalizer::FormatVector3(correctedPosition));
     }
 
     if (!isTopLevelTransform)
@@ -175,7 +166,7 @@ void ApplyCorrectionToTransformElement(
             correction,
             MEulerRotation().asQuaternion());
     }
-    SetScalarStringAttribute(transformElement, "orientation", "quaternion", FormatQuaternion(correctedOrientation));
+    DmxImportDocumentNormalizer::SetScalarStringAttribute(transformElement, "orientation", "quaternion", DmxImportDocumentNormalizer::FormatQuaternion(correctedOrientation));
 }
 
 void ApplyCorrectionToMeshVertexData(
@@ -196,12 +187,12 @@ void ApplyCorrectionToMeshVertexData(
                 continue;
             }
 
-            correctedPositions.push_back(FormatVector3(
+            correctedPositions.push_back(DmxImportDocumentNormalizer::FormatVector3(
                 dcc_import_transform::ApplyToTranslationScale(
                     scaleCorrection,
                     MVector(values[0], values[1], values[2]))));
         }
-        SetStringArrayAttribute(vertexData, "positions", "vector3_array", std::move(correctedPositions));
+        DmxImportDocumentNormalizer::SetStringArrayAttribute(vertexData, "positions", "vector3_array", std::move(correctedPositions));
     }
 
     const std::vector<std::string> normalStrings = simple_dmx::FindAttributeStringArray(&vertexData, "normals");
@@ -218,12 +209,12 @@ void ApplyCorrectionToMeshVertexData(
                 continue;
             }
 
-            correctedNormals.push_back(FormatVector3(
+            correctedNormals.push_back(DmxImportDocumentNormalizer::FormatVector3(
                 dcc_import_transform::ApplyToNormal(
                     scaleCorrection,
                     MVector(values[0], values[1], values[2]))));
         }
-        SetStringArrayAttribute(vertexData, "normals", "vector3_array", std::move(correctedNormals));
+        DmxImportDocumentNormalizer::SetStringArrayAttribute(vertexData, "normals", "vector3_array", std::move(correctedNormals));
     }
 }
 
@@ -248,13 +239,13 @@ void ApplyCorrectionToDeltaState(
             continue;
         }
 
-        correctedDeltaPositions.push_back(FormatVector3(
+        correctedDeltaPositions.push_back(DmxImportDocumentNormalizer::FormatVector3(
             dcc_import_transform::ApplyToTranslationScale(
                 scaleCorrection,
                 MVector(values[0], values[1], values[2]))));
     }
 
-    SetStringArrayAttribute(deltaState, "positions", "vector3_array", std::move(correctedDeltaPositions));
+    DmxImportDocumentNormalizer::SetStringArrayAttribute(deltaState, "positions", "vector3_array", std::move(correctedDeltaPositions));
 }
 
 void NormalizeDagHierarchyForImportCorrection(
@@ -381,9 +372,9 @@ void NormalizeAnimationForImportCorrection(
                             correction,
                             MVector(values[0], values[1], values[2]));
                     }
-                    correctedValues.push_back(FormatVector3(correctedPosition));
+                    correctedValues.push_back(DmxImportDocumentNormalizer::FormatVector3(correctedPosition));
                 }
-                SetStringArrayAttribute(*logLayer, "values", "vector3_array", std::move(correctedValues));
+                DmxImportDocumentNormalizer::SetStringArrayAttribute(*logLayer, "values", "vector3_array", std::move(correctedValues));
             }
             else if (targetAttribute == "orientation" && isTopLevelTransform)
             {
@@ -396,12 +387,12 @@ void NormalizeAnimationForImportCorrection(
                         continue;
                     }
 
-                    correctedValues.push_back(FormatQuaternion(
+                    correctedValues.push_back(DmxImportDocumentNormalizer::FormatQuaternion(
                         dcc_import_transform::ApplyToQuaternion(
                             correction,
                             MQuaternion(values[0], values[1], values[2], values[3]))));
                 }
-                SetStringArrayAttribute(*logLayer, "values", "quaternion_array", std::move(correctedValues));
+                DmxImportDocumentNormalizer::SetStringArrayAttribute(*logLayer, "values", "quaternion_array", std::move(correctedValues));
             }
         }
     }
@@ -534,38 +525,24 @@ MStatus DmxImportSession::LoadDocument()
     AppendImportDebugLog((std::string("session: import root type=") + importRoot_->type + " name=" + importRoot_->name).c_str());
 
     importOptions_ = ParseImportOptions(optionsText_);
-    dcc_import_policy::CaptureCurrentNamespace(importOptions_.scenePolicy);
-    if (dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy) &&
-        !dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy))
+    dcc_import_policy::SceneMergeStrategy sceneMergeStrategy(importOptions_.scenePolicy);
+    sceneMergeStrategy.captureCurrentNamespace();
+    const std::string resolvedPath = filePath_.asChar();
+    const size_t lastSeparator = resolvedPath.find_last_of("/\\");
+    const std::string baseName = lastSeparator == std::string::npos ? resolvedPath : resolvedPath.substr(lastSeparator + 1);
+    sceneMergeStrategy.normalizeForImport(baseName);
+    importOptions_.scenePolicy = sceneMergeStrategy.policy();
+    if (sceneMergeStrategy.usesAnimationOnlyImport() && !sceneMergeStrategy.usesSceneRoot())
     {
-        importOptions_.scenePolicy.rootMode = dcc_import_policy::RootMode::SceneRoot;
         maya_dmx::ReportWarning("maya_dmx: importMode=animationOnly forces useSceneRoot=1 so imported animation can target existing scene nodes.");
-    }
-
-    if (dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy))
-    {
-        importOptions_.scenePolicy.importAnimationToLayer = true;
-        if (importOptions_.scenePolicy.animationImportMode == dcc_import_policy::AnimationImportMode::None)
-        {
-            importOptions_.scenePolicy.animationImportMode = dcc_import_policy::AnimationImportMode::NewLayer;
-        }
-    }
-
-    if (importOptions_.scenePolicy.importAnimationToLayer && importOptions_.scenePolicy.animationLayerName.empty())
-    {
-        const std::string resolvedPath = filePath_.asChar();
-        const size_t lastSeparator = resolvedPath.find_last_of("/\\");
-        const std::string baseName = lastSeparator == std::string::npos ? resolvedPath : resolvedPath.substr(lastSeparator + 1);
-        importOptions_.scenePolicy.animationLayerName = SanitizeLayerName(baseName) +
-            (dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy) ? "_source_delta" : "_layer");
     }
     {
         std::ostringstream optionsSummary;
         optionsSummary
-            << "session: options useSceneRoot=" << (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy) ? "1" : "0")
-            << " update=" << (dcc_import_policy::UsesUpdateCurrentScene(importOptions_.scenePolicy) ? "1" : "0")
-            << " append=" << (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy) ? "1" : "0")
-            << " animationOnly=" << (dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy) ? "1" : "0")
+            << "session: options useSceneRoot=" << (sceneMergeStrategy.usesSceneRoot() ? "1" : "0")
+            << " update=" << (sceneMergeStrategy.usesUpdateCurrentScene() ? "1" : "0")
+            << " append=" << (sceneMergeStrategy.usesAppendMissingObjects() ? "1" : "0")
+            << " animationOnly=" << (sceneMergeStrategy.usesAnimationOnlyImport() ? "1" : "0")
             << " importSkin=" << (importOptions_.importSkin ? "1" : "0")
             << " importMaterials=" << (importOptions_.importMaterials ? "1" : "0")
             << " importDeltaStates=" << (importOptions_.importDeltaStates ? "1" : "0")
@@ -582,7 +559,7 @@ MStatus DmxImportSession::LoadDocument()
     if (importOptions_.applyLegacyAxisCorrection)
     {
         MString axisWarning;
-        const MMatrix legacyAxisMatrix = ComputeLegacyAxisCorrectionMatrix(FindAttributeString(importRoot_, "upAxis"), axisWarning);
+        const MMatrix legacyAxisMatrix = DmxImportDocumentNormalizer::ComputeLegacyAxisCorrectionMatrix(FindAttributeString(importRoot_, "upAxis"), axisWarning);
         if (!legacyAxisMatrix.isEquivalent(MMatrix::identity))
         {
             MTransformationMatrix legacyAxisTransform(legacyAxisMatrix);
@@ -601,15 +578,15 @@ MStatus DmxImportSession::LoadDocument()
     importOptions_.transformCorrection = dcc_import_transform::TransformCorrection();
     importOptions_.applyLegacyAxisCorrection = false;
 
-    if (dcc_import_policy::UsesUpdateCurrentScene(importOptions_.scenePolicy))
+    if (sceneMergeStrategy.usesUpdateCurrentScene())
     {
         maya_dmx::ReportWarning("maya_dmx: importMode=update now reuses matching hierarchy, overwrites reused transforms/base animation, and attempts in-place mesh/deformer updates when matching nodes already exist; fine-grained scene-merge is still not implemented yet.");
     }
-    else if (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy))
+    else if (sceneMergeStrategy.usesAppendMissingObjects())
     {
         maya_dmx::ReportWarning("maya_dmx: importMode=append currently reuses matching hierarchy and existing mesh carriers, but full scene-merge behavior is not implemented yet.");
     }
-    else if (dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy))
+    else if (sceneMergeStrategy.usesAnimationOnlyImport())
     {
         maya_dmx::ReportWarning("maya_dmx: importMode=animationOnly will only target matching existing scene nodes; missing DAG nodes, meshes and deformers are skipped.");
     }
@@ -618,7 +595,7 @@ MStatus DmxImportSession::LoadDocument()
     {
         maya_dmx::ReportWarning("maya_dmx: importAnimationToLayer writes imported animation to a Maya override animation layer. Base animation remains unchanged while the layer is muted.");
     }
-    if (dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy))
+    if (sceneMergeStrategy.usesSourceDeltaImport())
     {
         maya_dmx::ReportWarning("maya_dmx: sourceDeltaMode applies Source-style subtract/linear-delta semantics to transform channels and writes the resulting delta to an additive Maya animation layer. Use Clip samples an existing scene animation layer; when it is disabled, the current scene state is used as the reference. Float channels remain absolute.");
     }

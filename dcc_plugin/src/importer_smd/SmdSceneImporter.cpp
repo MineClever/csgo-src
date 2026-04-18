@@ -3,6 +3,7 @@
 
 #include <common/MayaCommandUtils.h>
 #include <common/ImportTransformCorrection.h>
+#include <common/SceneMergeStrategy.h>
 #include <common/SourceDeltaUtils.h>
 #include <common_smd/MayaSmdCommon.h>
 
@@ -213,6 +214,7 @@ MStatus SetLayerCurveKeys(
 SmdSceneImporter::SmdSceneImporter(std::shared_ptr<const simple_smd::Document> document, const SmdImportOptions &importOptions)
     : document_(document)
     , importOptions_(importOptions)
+    , mergeResolver_(importOptions.scenePolicy)
 {
 }
 
@@ -242,7 +244,7 @@ MStatus SmdSceneImporter::Import()
         return MStatus::kFailure;
     }
 
-    if (!dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy))
+    if (!mergeResolver_.usesAnimationOnlyImport())
     {
         auto jointPathsByBonePtr = std::shared_ptr<const std::unordered_map<int, MDagPath>>(
             &jointPathsByBone_,
@@ -265,8 +267,8 @@ MStatus SmdSceneImporter::Import()
 
 MStatus SmdSceneImporter::createImportRoot()
 {
-    if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy) ||
-        dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy))
+    if (mergeResolver_.usesSceneRoot() ||
+        mergeResolver_.usesAnimationOnlyImport())
     {
         importRoot_ = MObject::kNullObj;
         return MS::kSuccess;
@@ -310,14 +312,14 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
 
     const MObject parentObject = findParentObject(node);
     MObject jointObject = MObject::kNullObj;
-    const bool reuseExistingMode = dcc_import_policy::UsesExistingObjectMerge(importOptions_.scenePolicy);
+    const bool reuseExistingMode = mergeResolver_.usesExistingObjectMerge();
     if (reuseExistingMode)
     {
         jointObject = findExistingJoint(node);
     }
 
     const bool reusedExistingJoint = !jointObject.isNull();
-    if (dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy) && !reusedExistingJoint)
+    if (mergeResolver_.usesAnimationOnlyImport() && !reusedExistingJoint)
     {
         skippedBoneIndices_.insert(node.index);
         return MS::kSuccess;
@@ -352,57 +354,7 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
 
 MObject SmdSceneImporter::findExistingJoint(const simple_smd::Node &node) const
 {
-    return findAppendTargetChild(findParentObject(node), SanitizeNodeName(node.name));
-}
-
-MObject SmdSceneImporter::findAppendTargetChild(const MObject &parent, const std::string &nodeName) const
-{
-    MStatus status;
-    if (parent.isNull())
-    {
-        MItDag dagIterator(MItDag::kDepthFirst);
-        for (; !dagIterator.isDone(); dagIterator.next())
-        {
-            MDagPath dagPath;
-            if (dagIterator.getPath(dagPath) != MS::kSuccess || !dagPath.hasFn(MFn::kJoint))
-            {
-                continue;
-            }
-
-            MFnDagNode dagNode(dagPath, &status);
-            if (status && dcc_import_policy::MatchesNodeNameForAppend(importOptions_.scenePolicy, dagNode.name().asChar(), nodeName))
-            {
-                return dagPath.node();
-            }
-        }
-
-        return MObject::kNullObj;
-    }
-
-    MFnDagNode parentDagNode(parent, &status);
-    if (!status)
-    {
-        return MObject::kNullObj;
-    }
-
-    for (unsigned int childIndex = 0; childIndex < parentDagNode.childCount(); ++childIndex)
-    {
-        const MObject childObject = parentDagNode.child(childIndex, &status);
-        if (!status || !childObject.hasFn(MFn::kJoint))
-        {
-            status = MS::kSuccess;
-            continue;
-        }
-
-        MFnDagNode childDagNode(childObject, &status);
-        if (status && dcc_import_policy::MatchesNodeNameForAppend(importOptions_.scenePolicy, childDagNode.name().asChar(), nodeName))
-        {
-            return childObject;
-        }
-        status = MS::kSuccess;
-    }
-
-    return MObject::kNullObj;
+    return mergeResolver_.findAppendTargetChild(findParentObject(node), SanitizeNodeName(node.name), true);
 }
 
 MObject SmdSceneImporter::findParentObject(const simple_smd::Node &node) const
@@ -444,9 +396,9 @@ MStatus SmdSceneImporter::applyBindPose()
     for (const simple_smd::Node &node : document_->nodes)
     {
         if (reusedBoneIndices_.find(node.index) != reusedBoneIndices_.end() &&
-            (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy) ||
-             dcc_import_policy::UsesAnimationLayerImport(importOptions_.scenePolicy) ||
-             dcc_import_policy::UsesAnimationOnlyImport(importOptions_.scenePolicy)))
+            (mergeResolver_.usesAppendMissingObjects() ||
+             mergeResolver_.usesAnimationLayerImport() ||
+             mergeResolver_.usesAnimationOnlyImport()))
         {
             continue;
         }
@@ -484,7 +436,7 @@ MStatus SmdSceneImporter::applyAnimation()
 
     for (const simple_smd::Node &node : document_->nodes)
     {
-        if (dcc_import_policy::UsesAppendMissingObjects(importOptions_.scenePolicy) &&
+        if (mergeResolver_.usesAppendMissingObjects() &&
             reusedBoneIndices_.find(node.index) != reusedBoneIndices_.end())
         {
             continue;
@@ -600,7 +552,7 @@ MStatus SmdSceneImporter::applyAnimation()
             translateXPlug,
             times,
             txValues,
-            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(translateXPlug, times, txValues, MFnAnimCurve::kAnimCurveTL);
+            mergeResolver_.usesSourceDeltaImport()) : SetCurveKeys(translateXPlug, times, txValues, MFnAnimCurve::kAnimCurveTL);
         if (!status)
         {
             return maya_smd::ReportError("maya_smd: failed to find translateY plug for animated joint.", status);
@@ -615,7 +567,7 @@ MStatus SmdSceneImporter::applyAnimation()
             translateYPlug,
             times,
             tyValues,
-            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(translateYPlug, times, tyValues, MFnAnimCurve::kAnimCurveTL);
+            mergeResolver_.usesSourceDeltaImport()) : SetCurveKeys(translateYPlug, times, tyValues, MFnAnimCurve::kAnimCurveTL);
         if (!status)
         {
             return maya_smd::ReportError("maya_smd: failed to find rotateX plug for animated joint.", status);
@@ -630,7 +582,7 @@ MStatus SmdSceneImporter::applyAnimation()
             translateZPlug,
             times,
             tzValues,
-            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(translateZPlug, times, tzValues, MFnAnimCurve::kAnimCurveTL);
+            mergeResolver_.usesSourceDeltaImport()) : SetCurveKeys(translateZPlug, times, tzValues, MFnAnimCurve::kAnimCurveTL);
         if (!status)
         {
             return maya_smd::ReportError("maya_smd: failed to find rotateZ plug for animated joint.", status);
@@ -645,7 +597,7 @@ MStatus SmdSceneImporter::applyAnimation()
             rotateXPlug,
             times,
             rxValues,
-            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(rotateXPlug, times, rxValues, MFnAnimCurve::kAnimCurveTA);
+            mergeResolver_.usesSourceDeltaImport()) : SetCurveKeys(rotateXPlug, times, rxValues, MFnAnimCurve::kAnimCurveTA);
         if (!status)
         {
             return MStatus::kFailure;
@@ -660,7 +612,7 @@ MStatus SmdSceneImporter::applyAnimation()
             rotateYPlug,
             times,
             ryValues,
-            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(rotateYPlug, times, ryValues, MFnAnimCurve::kAnimCurveTA);
+            mergeResolver_.usesSourceDeltaImport()) : SetCurveKeys(rotateYPlug, times, ryValues, MFnAnimCurve::kAnimCurveTA);
         if (!status)
         {
             return MStatus::kFailure;
@@ -675,7 +627,7 @@ MStatus SmdSceneImporter::applyAnimation()
             rotateZPlug,
             times,
             rzValues,
-            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(rotateZPlug, times, rzValues, MFnAnimCurve::kAnimCurveTA);
+            mergeResolver_.usesSourceDeltaImport()) : SetCurveKeys(rotateZPlug, times, rzValues, MFnAnimCurve::kAnimCurveTA);
         if (!status)
         {
             return MStatus::kFailure;
@@ -949,7 +901,7 @@ MStatus SmdSceneImporter::applySourceDeltaToSamples(
 
 bool SmdSceneImporter::usesAnimationLayerForTransforms() const
 {
-    return dcc_import_policy::UsesAnimationLayerImport(importOptions_.scenePolicy);
+    return mergeResolver_.usesAnimationLayerImport();
 }
 
 MStatus SmdSceneImporter::ensureTransformAnimationLayer(MString &layerName) const

@@ -439,11 +439,12 @@
       - exporter 的骨架节点收集与 mesh 搜索根仍需继续收口
 
   - 里程碑 M4：统一导入模式升级
-    - 目标：把 DMX / SMD 的导入模型从“单次导入”升级到“可并入现有场景”。
+    - 目标：把 DMX / SMD 的导入模型从“单次导入”升级到“可并入现有场景”，并把场景根、名称空间、更新 / 附加 / 仅动画 等策略抽成统一的导入策略对象。
     - 出口条件：
       - DMX / SMD 都支持“包装根导入”和“场景根导入”
       - 允许读取 Maya 当前名称空间设置
       - 支持“更新当前场景 / 仅附加缺失对象”的基础对象合并策略
+      - DMX / SMD 共享同一个场景合并策略对象，避免各自维护重复分支
       - 对层级对象的同名父级附加行为可预测、可回归
     - 优先级说明：
       - 此里程碑优先级高于旋转/轴线兼容增强
@@ -789,11 +790,13 @@
           - 校验 `vcaanim_VertexAnim_dmx_delta` 存在、layer 上存在 transform animCurve、base plug `|vca_arm|pelvis.translateX` 未被直接覆写
         - 真实批回归已通过：
           - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases MostComplexSampleSet/vcaanim_VertexAnim`
-  - 2026-04-13~04-18：DMX/SMD 主线已收口到 `delta layer`、`append/update` 兼容与 animation layer 求值修正，剩余关注点转向复杂样例、材质网络、facial/rig 与 translator/common 收尾。
   - 2026-04-18：`forceDeltaAnimationLayer` 已从主线移除，当前只保留普通 `override` animation layer 与 `animationOnly`；DMX 复杂样例仍有宿主级崩溃待排查。
   - 2026-04-18：构建链路改为每次先重建 `dcc_plugin\build`，避免旧缓存干扰。
   - 2026-04-18：`update + animation layer` 的目标写入与角度单位问题已收口，`mechanic_model_merged.dmx` 样例 mismatch 归零。
   - 2026-04-18：Source delta 只保留 `SceneClip`，`Use Clip` 只切场景动画层 reference，公共差值逻辑已抽到 `SourceDeltaUtils.h`。
+  - 2026-04-18：已落地统一场景合并策略对象 `SceneMergeStrategy`，DMX / SMD 的 session 级别 scene root、namespace、update / append / animationOnly、source delta 规范化开始收口到同一入口。
+  - 2026-04-18：进一步把 DMX / SMD 的层级查找与归一化辅助收进 `SceneMergeResolver` 和文件内 struct，减少匿名命名空间自由函数，提升后续复用空间。
+  - 2026-04-18：`SceneMergeStrategy` 与 `SceneMergeResolver` 已合并到同一个头文件，避免双文件同步维护。
   - 当前待办：真正的 DMX clip 语义需要单独做 `sequence / animcmd` 对接，并继续收敛 `source delta` / `animation layer` 的验证边界。
 ## 环境与工具链说明
 
