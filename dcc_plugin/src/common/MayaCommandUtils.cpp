@@ -5,6 +5,7 @@
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnMesh.h>
 #include <maya/MFnSet.h>
+#include <maya/MFnUnitAttribute.h>
 #include <maya/MGlobal.h>
 #include <maya/MItDependencyGraph.h>
 #include <maya/MPlugArray.h>
@@ -60,6 +61,34 @@ MStatus ResolvePlugCommandNames(
     fullPlugName += ".";
     fullPlugName += attributeName;
     return MS::kSuccess;
+}
+
+bool PlugUsesAngleUnits(const MPlug &plug)
+{
+    if (plug.isNull())
+    {
+        return false;
+    }
+
+    MStatus status;
+    MFnAttribute attributeFn(plug.attribute(), &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    if (!plug.attribute().hasFn(MFn::kUnitAttribute))
+    {
+        return false;
+    }
+
+    MFnUnitAttribute unitAttributeFn(plug.attribute(), &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    return unitAttributeFn.unitType() == MFnUnitAttribute::kAngle;
 }
 
 } // namespace
@@ -861,6 +890,12 @@ MStatus SetKeyframesOnAnimationLayer(
 
     for (size_t keyIndex = 0; keyIndex < keyCount; ++keyIndex)
     {
+        double commandValue = values[keyIndex];
+        if (PlugUsesAngleUnits(plug))
+        {
+            commandValue = commandValue * (180.0 / 3.14159265358979323846);
+        }
+
         MString command("setKeyframe -animLayer \"");
         command += layerName;
         command += "\" -attribute \"";
@@ -872,7 +907,7 @@ MStatus SetKeyframesOnAnimationLayer(
             command += "sec";
         }
         command += " -value ";
-        command += values[keyIndex];
+        command += commandValue;
         command += " \"";
         command += nodeName;
         command += "\"";
