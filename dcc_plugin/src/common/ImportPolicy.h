@@ -309,4 +309,10 @@ inline bool UsesAnimationLayerImport(const SceneImportPolicy &policy)
     return policy.importAnimationToLayer;
 }
 
+inline bool UsesExistingAnimationTargetsOnly(const SceneImportPolicy &policy)
+{
+    return UsesAnimationOnlyImport(policy) ||
+        (UsesUpdateCurrentScene(policy) && UsesAnimationLayerImport(policy));
+}
+
 } // namespace dcc_import_policy
