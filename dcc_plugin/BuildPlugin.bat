@@ -24,12 +24,28 @@ if /I not "%PLATFORM%"=="x64" (
     exit /b 1
 )
 
-if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
+if exist "%BUILD_DIR%" (
+    echo Removing previous build directory...
+    rmdir /S /Q "%BUILD_DIR%"
+    if exist "%BUILD_DIR%" (
+        echo ERROR: failed to remove previous build directory "%BUILD_DIR%"
+        pause
+        exit /b 1
+    )
+)
+
+mkdir "%BUILD_DIR%"
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: failed to create build directory "%BUILD_DIR%"
+    pause
+    exit /b %ERRORLEVEL%
+)
 
 echo ============================================================ > "%BUILD_LOG%"
 echo  Maya DMX Plugin Build Log (%CONFIG%, %PLATFORM%) >> "%BUILD_LOG%"
 echo ============================================================ >> "%BUILD_LOG%"
 echo. >> "%BUILD_LOG%"
+echo Full rebuild: build directory recreated from scratch. >> "%BUILD_LOG%"
 
 echo Configuring CMake...
 echo [CONFIGURE] cmake -S "%PLUGIN_ROOT%" -B "%BUILD_DIR%" -A %PLATFORM% -DMAYA_DMX_BUILD_PDB=%BUILD_PDB% >> "%BUILD_LOG%"
