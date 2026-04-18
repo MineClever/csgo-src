@@ -3,6 +3,7 @@
 
 #include <common/MayaCommandUtils.h>
 #include <common/ImportTransformCorrection.h>
+#include <common/SourceDeltaUtils.h>
 #include <common_smd/MayaSmdCommon.h>
 
 #include <algorithm>
@@ -25,11 +26,6 @@
 
 namespace
 {
-double ApplySplineWeight(double t)
-{
-    return 3.0 * t * t - 2.0 * t * t * t;
-}
-
 struct CurrentTimeGuard
 {
     CurrentTimeGuard()
@@ -194,14 +190,22 @@ MStatus SetLayerCurveKeys(
     const MString &layerName,
     const MPlug &plug,
     const std::vector<double> &times,
-    const std::vector<double> &values)
+    const std::vector<double> &values,
+    bool keepAdditiveMode)
 {
     if (times.empty() || values.empty() || times.size() != values.size())
     {
         return MS::kSuccess;
     }
 
-    return maya_cmd::SetKeyframesOnAnimationLayer(layerName, plug, times.data(), values.data(), times.size(), false);
+    return maya_cmd::SetKeyframesOnAnimationLayer(
+        layerName,
+        plug,
+        times.data(),
+        values.data(),
+        times.size(),
+        false,
+        keepAdditiveMode);
 }
 
 }
@@ -591,7 +595,12 @@ MStatus SmdSceneImporter::applyAnimation()
             }
         }
 
-        status = useLayer ? SetLayerCurveKeys(layerName, translateXPlug, times, txValues) : SetCurveKeys(translateXPlug, times, txValues, MFnAnimCurve::kAnimCurveTL);
+        status = useLayer ? SetLayerCurveKeys(
+            layerName,
+            translateXPlug,
+            times,
+            txValues,
+            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(translateXPlug, times, txValues, MFnAnimCurve::kAnimCurveTL);
         if (!status)
         {
             return maya_smd::ReportError("maya_smd: failed to find translateY plug for animated joint.", status);
@@ -601,7 +610,12 @@ MStatus SmdSceneImporter::applyAnimation()
         {
             return maya_smd::ReportError("maya_smd: failed to find translateZ plug for animated joint.", status);
         }
-        status = useLayer ? SetLayerCurveKeys(layerName, translateYPlug, times, tyValues) : SetCurveKeys(translateYPlug, times, tyValues, MFnAnimCurve::kAnimCurveTL);
+        status = useLayer ? SetLayerCurveKeys(
+            layerName,
+            translateYPlug,
+            times,
+            tyValues,
+            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(translateYPlug, times, tyValues, MFnAnimCurve::kAnimCurveTL);
         if (!status)
         {
             return maya_smd::ReportError("maya_smd: failed to find rotateX plug for animated joint.", status);
@@ -611,7 +625,12 @@ MStatus SmdSceneImporter::applyAnimation()
         {
             return maya_smd::ReportError("maya_smd: failed to find rotateY plug for animated joint.", status);
         }
-        status = useLayer ? SetLayerCurveKeys(layerName, translateZPlug, times, tzValues) : SetCurveKeys(translateZPlug, times, tzValues, MFnAnimCurve::kAnimCurveTL);
+        status = useLayer ? SetLayerCurveKeys(
+            layerName,
+            translateZPlug,
+            times,
+            tzValues,
+            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(translateZPlug, times, tzValues, MFnAnimCurve::kAnimCurveTL);
         if (!status)
         {
             return maya_smd::ReportError("maya_smd: failed to find rotateZ plug for animated joint.", status);
@@ -621,7 +640,12 @@ MStatus SmdSceneImporter::applyAnimation()
         {
             return MStatus::kFailure;
         }
-        status = useLayer ? SetLayerCurveKeys(layerName, rotateXPlug, times, rxValues) : SetCurveKeys(rotateXPlug, times, rxValues, MFnAnimCurve::kAnimCurveTA);
+        status = useLayer ? SetLayerCurveKeys(
+            layerName,
+            rotateXPlug,
+            times,
+            rxValues,
+            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(rotateXPlug, times, rxValues, MFnAnimCurve::kAnimCurveTA);
         if (!status)
         {
             return MStatus::kFailure;
@@ -631,7 +655,12 @@ MStatus SmdSceneImporter::applyAnimation()
         {
             return MStatus::kFailure;
         }
-        status = useLayer ? SetLayerCurveKeys(layerName, rotateYPlug, times, ryValues) : SetCurveKeys(rotateYPlug, times, ryValues, MFnAnimCurve::kAnimCurveTA);
+        status = useLayer ? SetLayerCurveKeys(
+            layerName,
+            rotateYPlug,
+            times,
+            ryValues,
+            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(rotateYPlug, times, ryValues, MFnAnimCurve::kAnimCurveTA);
         if (!status)
         {
             return MStatus::kFailure;
@@ -641,7 +670,12 @@ MStatus SmdSceneImporter::applyAnimation()
         {
             return MStatus::kFailure;
         }
-        status = useLayer ? SetLayerCurveKeys(layerName, rotateZPlug, times, rzValues) : SetCurveKeys(rotateZPlug, times, rzValues, MFnAnimCurve::kAnimCurveTA);
+        status = useLayer ? SetLayerCurveKeys(
+            layerName,
+            rotateZPlug,
+            times,
+            rzValues,
+            dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy)) : SetCurveKeys(rotateZPlug, times, rzValues, MFnAnimCurve::kAnimCurveTA);
         if (!status)
         {
             return MStatus::kFailure;
@@ -849,8 +883,23 @@ MStatus SmdSceneImporter::applySourceDeltaToSamples(
         return MS::kSuccess;
     }
 
+    if (usesAnimationLayerForTransforms() &&
+        (mode == dcc_import_policy::SourceDeltaMode::Subtract ||
+         mode == dcc_import_policy::SourceDeltaMode::PreSubtract))
+    {
+        return MS::kSuccess;
+    }
+
     const bool useSceneClip = importOptions_.scenePolicy.sourceDeltaUseClip &&
         !IsEmptyLayerName(importOptions_.scenePolicy.sourceDeltaClip);
+
+    if (mode == dcc_import_policy::SourceDeltaMode::LinearDelta ||
+        mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
+    {
+        dcc_source_delta::ApplySourceDeltaLinearReferenceSamples(translations, mode);
+        dcc_source_delta::ApplySourceDeltaLinearReferenceSamples(rotations, mode);
+        return MS::kSuccess;
+    }
 
     if (useSceneClip &&
         (mode == dcc_import_policy::SourceDeltaMode::Subtract ||
@@ -872,21 +921,8 @@ MStatus SmdSceneImporter::applySourceDeltaToSamples(
         const size_t referenceIndex = std::min(
             static_cast<size_t>(importOptions_.scenePolicy.sourceDeltaReferenceFrame),
             referenceTranslations.size() - 1);
-        const MVector referenceTranslation = referenceTranslations[referenceIndex];
-        const MQuaternion referenceRotation = referenceRotations[referenceIndex];
-        for (size_t sampleIndex = 0; sampleIndex < translations.size(); ++sampleIndex)
-        {
-            if (mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
-            {
-                translations[sampleIndex] = referenceTranslation - translations[sampleIndex];
-                rotations[sampleIndex] = referenceRotation.inverse() * rotations[sampleIndex];
-            }
-            else
-            {
-                translations[sampleIndex] = translations[sampleIndex] - referenceTranslation;
-                rotations[sampleIndex] = rotations[sampleIndex] * referenceRotation.inverse();
-            }
-        }
+        dcc_source_delta::ApplySourceDeltaReferenceValue(translations, referenceTranslations[referenceIndex], mode);
+        dcc_source_delta::ApplySourceDeltaReferenceValue(rotations, referenceRotations[referenceIndex], mode);
 
         return MS::kSuccess;
     }
@@ -902,50 +938,13 @@ MStatus SmdSceneImporter::applySourceDeltaToSamples(
             return maya_smd::ReportError("maya_smd: sourceDelta reference scene samples were missing.");
         }
 
-        for (size_t sampleIndex = 0; sampleIndex < translations.size(); ++sampleIndex)
-        {
-            if (mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
-            {
-                translations[sampleIndex] = referenceTranslations[sampleIndex] - translations[sampleIndex];
-                rotations[sampleIndex] = referenceRotations[sampleIndex].inverse() * rotations[sampleIndex];
-            }
-            else
-            {
-                translations[sampleIndex] = translations[sampleIndex] - referenceTranslations[sampleIndex];
-                rotations[sampleIndex] = rotations[sampleIndex] * referenceRotations[sampleIndex].inverse();
-            }
-        }
+        dcc_source_delta::ApplySourceDeltaReferenceSamples(translations, referenceTranslations, mode);
+        dcc_source_delta::ApplySourceDeltaReferenceSamples(rotations, referenceRotations, mode);
 
         return MS::kSuccess;
     }
 
-    if (mode != dcc_import_policy::SourceDeltaMode::LinearDelta &&
-        mode != dcc_import_policy::SourceDeltaMode::SplineDelta)
-    {
-        return maya_smd::ReportError("maya_smd: sourceDelta currently only supports lineardelta and splinedelta for SMD transform import.");
-    }
-
-    const size_t sampleCount = translations.size();
-    const MVector firstTranslation = translations.front();
-    const MVector lastTranslation = translations.back();
-    const MQuaternion firstRotation = rotations.front();
-    const MQuaternion lastRotation = rotations.back();
-    for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
-    {
-        double t = sampleCount > 1 ? static_cast<double>(sampleIndex) / static_cast<double>(sampleCount - 1) : 1.0;
-        if (mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
-        {
-            t = ApplySplineWeight(t);
-        }
-
-        const MVector referenceTranslation = firstTranslation * (1.0 - t) + lastTranslation * t;
-        translations[sampleIndex] = translations[sampleIndex] - referenceTranslation;
-
-        const MQuaternion referenceRotation = slerp(firstRotation, lastRotation, t);
-        rotations[sampleIndex] = rotations[sampleIndex] * referenceRotation.inverse();
-    }
-
-    return MS::kSuccess;
+    return maya_smd::ReportError("maya_smd: sourceDelta currently only supports subtract, presubtract, lineardelta and splinedelta for SMD transform import.");
 }
 
 bool SmdSceneImporter::usesAnimationLayerForTransforms() const
@@ -968,6 +967,7 @@ MStatus SmdSceneImporter::ensureTransformAnimationLayer(MString &layerName) cons
     MStatus status = maya_cmd::EnsureAnimationLayer(
         configuredName.c_str(),
         importOptions_.scenePolicy.animationImportMode == dcc_import_policy::AnimationImportMode::ReplaceLayer,
+        dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy),
         true,
         &transformAnimationLayerName_);
     if (!status)

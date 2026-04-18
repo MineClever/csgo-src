@@ -238,7 +238,7 @@ SOURCE_DELTA_IMPORT_GATE_EXPECTATIONS = {
     "simple_source_delta_overlay": {
         "base_case": "simple_source_delta_base.dmx",
         "baseline_import_options": "useSceneRoot=1;importMode=create",
-        "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract;sourceDeltaReferenceClip=base_pose;sourceDeltaTargetClip=overlay_pose;sourceDeltaReferenceFrame=0",
+        "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract",
         "layer_name": "simple_source_delta_overlay_dmx_source_delta",
         "compare_plugs": [
             "|source_delta_joint.translateX",
@@ -248,8 +248,8 @@ SOURCE_DELTA_IMPORT_GATE_EXPECTATIONS = {
     },
     "simple_source_delta_overlay_scene_reference": {
         "base_case": "simple_source_delta_base.dmx",
-        "baseline_import_options": "useSceneRoot=1;importMode=create",
-        "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract;sourceDeltaTargetClip=overlay_pose;sourceDeltaReferenceFrame=0",
+        "baseline_import_options": "useSceneRoot=1;importMode=create;importAnimationToLayer=1;animationLayerMode=new",
+        "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract;sourceDeltaUseClip=1;sourceDeltaClip=simple_source_delta_base_dmx_layer;sourceDeltaReferenceFrame=0",
         "layer_name": "simple_source_delta_overlay_scene_reference_dmx_source_delta",
         "compare_plugs": [
             "|source_delta_joint.translateX",
@@ -1291,7 +1291,7 @@ def validate_source_delta_import_gate(cmds, plugin_paths_by_format, sample_dir, 
                 if isinstance(value, (list, tuple)):
                     value = value[0]
                 plug_values.append(float(value))
-            values[plug] = plug_values
+                values[plug] = plug_values
         return values
 
     def _sample_layer_curve_outputs(layer_name, plug_name, times):
@@ -1362,6 +1362,13 @@ def validate_source_delta_import_gate(cmds, plugin_paths_by_format, sample_dir, 
             f"missing expected source-delta animation layer: {expectation['layer_name']}"
         )
 
+    is_override = cmds.animLayer(expectation["layer_name"], query=True, override=True)
+    if is_override:
+        raise RuntimeError(
+            f"Source delta gate failed for {normalized_case_name}. "
+            f"source-delta layer is still override: {expectation['layer_name']}"
+        )
+
     layer_curves = cmds.animLayer(expectation["layer_name"], query=True, animCurves=True) or []
     if len(layer_curves) < len(expectation["compare_plugs"]):
         raise RuntimeError(
@@ -1369,8 +1376,7 @@ def validate_source_delta_import_gate(cmds, plugin_paths_by_format, sample_dir, 
             f"insufficient animCurves were attached to source-delta layer: {expectation['layer_name']} curves={layer_curves}"
         )
 
-    delta_mode = expectation["delta_import_options"].lower()
-    expect_pre_subtract = "sourcedeltamode=presubtract" in delta_mode
+    expect_pre_subtract = "sourcedeltamode=presubtract" in expectation["delta_import_options"].lower()
     for plug in expectation["compare_plugs"]:
         layer_values = _sample_layer_curve_outputs(expectation["layer_name"], plug, expectation["sample_times"])
         for direct_value, baseline_value, layer_value, time_value in zip(

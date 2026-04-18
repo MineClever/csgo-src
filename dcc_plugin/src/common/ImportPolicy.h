@@ -54,8 +54,6 @@ struct SceneImportPolicy
     SourceDeltaMode sourceDeltaMode = SourceDeltaMode::None;
     bool sourceDeltaUseClip = false;
     std::string sourceDeltaClip;
-    std::string sourceDeltaReferenceClip;
-    std::string sourceDeltaTargetClip;
     int sourceDeltaReferenceFrame = 0;
 };
 
@@ -197,18 +195,6 @@ inline SceneImportPolicy ParseSceneImportPolicy(const std::unordered_map<std::st
     if (sourceDeltaClipIt != optionMap.end())
     {
         policy.sourceDeltaClip = sourceDeltaClipIt->second;
-    }
-
-    auto sourceDeltaReferenceClipIt = optionMap.find("sourcedeltareferenceclip");
-    if (sourceDeltaReferenceClipIt != optionMap.end())
-    {
-        policy.sourceDeltaReferenceClip = sourceDeltaReferenceClipIt->second;
-    }
-
-    auto sourceDeltaTargetClipIt = optionMap.find("sourcedeltatargetclip");
-    if (sourceDeltaTargetClipIt != optionMap.end())
-    {
-        policy.sourceDeltaTargetClip = sourceDeltaTargetClipIt->second;
     }
 
     auto sourceDeltaReferenceFrameIt = optionMap.find("sourcedeltareferenceframe");

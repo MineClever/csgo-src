@@ -175,7 +175,7 @@ MStatus SmdImportSession::Run()
     }
     if (dcc_import_policy::UsesSourceDeltaImport(importOptions.scenePolicy))
     {
-        maya_smd::ReportWarning("maya_smd: sourceDelta for SMD writes transform channels into a Maya animation layer; subtract / preSubtract use the current scene state by default, and Use Clip can sample a scene animation layer reference with the configured Reference Frame.");
+        maya_smd::ReportWarning("maya_smd: sourceDelta for SMD writes transform channels into an additive Maya animation layer; subtract / preSubtract use the current scene state by default, and Use Clip can sample a scene animation layer reference with the configured Reference Frame.");
     }
 
     SmdSceneImporter importer(document, normalizedImportOptions);

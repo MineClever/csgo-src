@@ -40,8 +40,12 @@ MStatus EnsureSkinClusterBindPose(
 MStatus EnsureAnimationLayer(
     const MString &layerName,
     bool replaceExisting,
+    bool additiveLayer,
     bool overrideLayer,
     MString *resolvedLayerName = nullptr);
+MStatus SetAnimationLayerOverrideMode(
+    const MString &layerName,
+    bool overrideLayer);
 MStatus FindAnimationLayerCurvesForPlug(
     const MString &layerName,
     const MPlug &plug,
@@ -58,6 +62,7 @@ MStatus SetKeyframesOnAnimationLayer(
     const double *times,
     const double *values,
     size_t keyCount,
-    bool timesAreSeconds);
+    bool timesAreSeconds,
+    bool keepAdditiveMode = false);
 
 } // namespace maya_cmd

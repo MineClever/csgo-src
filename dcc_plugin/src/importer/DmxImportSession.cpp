@@ -572,8 +572,8 @@ MStatus DmxImportSession::LoadDocument()
             << " importAnimationToLayer=" << (importOptions_.scenePolicy.importAnimationToLayer ? "1" : "0")
             << " animationLayerName=" << (importOptions_.scenePolicy.animationLayerName.empty() ? "<empty>" : importOptions_.scenePolicy.animationLayerName)
             << " sourceDelta=" << static_cast<int>(importOptions_.scenePolicy.sourceDeltaMode)
-            << " sourceDeltaReferenceClip=" << (importOptions_.scenePolicy.sourceDeltaReferenceClip.empty() ? "<empty>" : importOptions_.scenePolicy.sourceDeltaReferenceClip)
-            << " sourceDeltaTargetClip=" << (importOptions_.scenePolicy.sourceDeltaTargetClip.empty() ? "<empty>" : importOptions_.scenePolicy.sourceDeltaTargetClip)
+            << " sourceDeltaUseClip=" << (importOptions_.scenePolicy.sourceDeltaUseClip ? "1" : "0")
+            << " sourceDeltaClip=" << (importOptions_.scenePolicy.sourceDeltaClip.empty() ? "<empty>" : importOptions_.scenePolicy.sourceDeltaClip)
             << " sourceDeltaReferenceFrame=" << importOptions_.scenePolicy.sourceDeltaReferenceFrame;
         AppendImportDebugLog(optionsSummary.str().c_str());
     }
@@ -620,7 +620,7 @@ MStatus DmxImportSession::LoadDocument()
     }
     if (dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy))
     {
-        maya_dmx::ReportWarning("maya_dmx: sourceDeltaMode applies Source-style subtract/linear-delta semantics to transform channels and writes the resulting delta to a Maya animation layer. When sourceDeltaReferenceClip is empty, the current scene state is used as the reference. Float channels remain absolute.");
+        maya_dmx::ReportWarning("maya_dmx: sourceDeltaMode applies Source-style subtract/linear-delta semantics to transform channels and writes the resulting delta to an additive Maya animation layer. Use Clip samples an existing scene animation layer; when it is disabled, the current scene state is used as the reference. Float channels remain absolute.");
     }
 
     AppendImportDebugLog("session: load document end success");

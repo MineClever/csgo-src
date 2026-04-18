@@ -57,17 +57,10 @@ private:
         dcc_import_policy::SourceDeltaMode mode = dcc_import_policy::SourceDeltaMode::None;
         bool useClip = false;
         std::string sceneClipName;
-        std::string referenceClipName;
-        std::string targetClipName;
         int referenceFrame = 0;
     };
 
     const simple_dmx::Element *findFirstLogLayer(const simple_dmx::Element *logElement) const;
-    const simple_dmx::Element *findAnimationClipByName(const std::string &clipName) const;
-    const simple_dmx::Element *findMatchingChannel(
-        const simple_dmx::Element *channelsClip,
-        const simple_dmx::Element *targetElement,
-        const std::string &targetAttribute) const;
     SourceDeltaSettings resolveSourceDeltaSettings(const simple_dmx::Element *channelsClip) const;
     bool shouldImportChannelsClip(const simple_dmx::Element *channelsClip, const SourceDeltaSettings &settings) const;
     MStatus extractVector3AnimationSamples(

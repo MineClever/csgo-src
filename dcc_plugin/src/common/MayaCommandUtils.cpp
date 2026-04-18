@@ -91,6 +91,53 @@ bool PlugUsesAngleUnits(const MPlug &plug)
     return unitAttributeFn.unitType() == MFnUnitAttribute::kAngle;
 }
 
+MStatus SetAnimationLayerOverrideModeImpl(
+    const MString &layerName,
+    bool overrideLayer)
+{
+    if (layerName.length() == 0)
+    {
+        return MS::kFailure;
+    }
+
+    MObject layerObject;
+    if (!TryGetNodeByName(layerName, layerObject) || layerObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status;
+    MFnDependencyNode layerFn(layerObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug overridePlug = layerFn.findPlug("override", true, &status);
+    if (!status || overridePlug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    status = overridePlug.setBool(overrideLayer);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug passthroughPlug = layerFn.findPlug("passthrough", true, &status);
+    if (status && !passthroughPlug.isNull() && !overrideLayer)
+    {
+        status = passthroughPlug.setBool(false);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+    }
+
+    return MS::kSuccess;
+}
+
 } // namespace
 
 bool TryGetNodeByName(const MString &nodeName, MObject &nodeObject)
@@ -702,6 +749,7 @@ MStatus EnsureSkinClusterBindPose(
 MStatus EnsureAnimationLayer(
     const MString &layerName,
     bool replaceExisting,
+    bool additiveLayer,
     bool overrideLayer,
     MString *resolvedLayerName)
 {
@@ -750,12 +798,17 @@ MStatus EnsureAnimationLayer(
         {
             *resolvedLayerName = createdLayerName;
         }
-        if (overrideLayer)
+        if (additiveLayer)
         {
-            MString overrideCommand("animLayer -e -override true \"");
-            overrideCommand += createdLayerName;
-            overrideCommand += "\"";
-            status = MGlobal::executeCommand(overrideCommand, false, false);
+            status = SetAnimationLayerOverrideModeImpl(createdLayerName, false);
+            if (!status)
+            {
+                return MS::kFailure;
+            }
+        }
+        else if (overrideLayer)
+        {
+            status = SetAnimationLayerOverrideModeImpl(createdLayerName, true);
             if (!status)
             {
                 return MS::kFailure;
@@ -766,12 +819,17 @@ MStatus EnsureAnimationLayer(
     }
 
     MString resolvedName = layerName;
-    if (overrideLayer)
+    if (additiveLayer)
     {
-        MString overrideCommand("animLayer -e -override true \"");
-        overrideCommand += resolvedName;
-        overrideCommand += "\"";
-        status = MGlobal::executeCommand(overrideCommand, false, false);
+        status = SetAnimationLayerOverrideModeImpl(resolvedName, false);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+    }
+    else if (overrideLayer)
+    {
+        status = SetAnimationLayerOverrideModeImpl(resolvedName, true);
         if (!status)
         {
             return MS::kFailure;
@@ -854,6 +912,13 @@ MStatus ClearAnimationLayerCurve(
     return MS::kSuccess;
 }
 
+MStatus SetAnimationLayerOverrideMode(
+    const MString &layerName,
+    bool overrideLayer)
+{
+    return SetAnimationLayerOverrideModeImpl(layerName, overrideLayer);
+}
+
 MStatus FindAnimationLayerCurvesForPlug(
     const MString &layerName,
     const MPlug &plug,
@@ -890,7 +955,8 @@ MStatus SetKeyframesOnAnimationLayer(
     const double *times,
     const double *values,
     size_t keyCount,
-    bool timesAreSeconds)
+    bool timesAreSeconds,
+    bool keepAdditiveMode)
 {
     if (layerName.length() == 0 || plug.isNull() || !times || !values || keyCount == 0)
     {
@@ -942,6 +1008,15 @@ MStatus SetKeyframesOnAnimationLayer(
         command += nodeName;
         command += "\"";
         status = MGlobal::executeCommand(command, false, false);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+    }
+
+    if (keepAdditiveMode)
+    {
+        status = SetAnimationLayerOverrideModeImpl(layerName, false);
         if (!status)
         {
             return MS::kFailure;

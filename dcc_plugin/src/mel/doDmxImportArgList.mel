@@ -19,9 +19,7 @@ global proc MayaDmxImport_syncOptionVars(string $version, string $args[])
     if (size($args) > 16) { optionVar -stringValue MayaDmx_sourceDeltaMode $args[16]; }
     if (size($args) > 17) { optionVar -intValue MayaDmx_sourceDeltaUseClip $args[17]; }
     if (size($args) > 18) { optionVar -stringValue MayaDmx_sourceDeltaClip $args[18]; }
-    if (size($args) > 19) { optionVar -stringValue MayaDmx_sourceDeltaReferenceClip $args[19]; }
-    if (size($args) > 20) { optionVar -stringValue MayaDmx_sourceDeltaTargetClip $args[20]; }
-    if (size($args) > 21) { optionVar -intValue MayaDmx_sourceDeltaReferenceFrame $args[21]; }
+    if (size($args) > 19) { optionVar -intValue MayaDmx_sourceDeltaReferenceFrame $args[19]; }
 }
 
 global proc doDmxImportArgList(string $version, string $args[])
@@ -83,11 +81,7 @@ global proc doDmxImportArgList(string $version, string $args[])
         + ";sourceDeltaUseClip=" + `optionVar -q MayaDmx_sourceDeltaUseClip`
         + ";sourceDeltaReferenceFrame=" + `optionVar -q MayaDmx_sourceDeltaReferenceFrame`);
     string $sceneClip = `optionVar -q MayaDmx_sourceDeltaClip`;
-    string $referenceClip = `optionVar -q MayaDmx_sourceDeltaReferenceClip`;
-    string $targetClip = `optionVar -q MayaDmx_sourceDeltaTargetClip`;
     if (size($sceneClip) > 0) { $options += (";sourceDeltaClip=" + $sceneClip); }
-    if (size($referenceClip) > 0) { $options += (";sourceDeltaReferenceClip=" + $referenceClip); }
-    if (size($targetClip) > 0) { $options += (";sourceDeltaTargetClip=" + $targetClip); }
 
     file
         -import

@@ -3,6 +3,7 @@
 
 #include <common/MayaCommandUtils.h>
 #include <common/ImportTransformCorrection.h>
+#include <common/SourceDeltaUtils.h>
 
 #include <algorithm>
 #include <cctype>
@@ -56,11 +57,6 @@ dcc_import_policy::SourceDeltaMode ParseSourceDeltaModeValue(const std::string &
         return dcc_import_policy::SourceDeltaMode::SplineDelta;
     }
     return dcc_import_policy::SourceDeltaMode::None;
-}
-
-double ApplySplineWeight(double t)
-{
-    return 3.0 * t * t - 2.0 * t * t * t;
 }
 
 bool IsEmptyLayerName(const std::string &layerName)
@@ -216,65 +212,12 @@ const simple_dmx::Element *AnimationImporter::findFirstLogLayer(const simple_dmx
     return layers.empty() ? nullptr : layers.front();
 }
 
-const simple_dmx::Element *AnimationImporter::findAnimationClipByName(const std::string &clipName) const
-{
-    if (!animationList_ || clipName.empty())
-    {
-        return nullptr;
-    }
-
-    for (const simple_dmx::Element *animation : FindAttributeElementArray(context_->document, animationList_, "animations"))
-    {
-        if (animation && animation->name == clipName)
-        {
-            return animation;
-        }
-    }
-
-    return nullptr;
-}
-
-const simple_dmx::Element *AnimationImporter::findMatchingChannel(
-    const simple_dmx::Element *channelsClip,
-    const simple_dmx::Element *targetElement,
-    const std::string &targetAttribute) const
-{
-    if (!channelsClip || !targetElement || targetAttribute.empty())
-    {
-        return nullptr;
-    }
-
-    const std::string targetKey = ElementKey(targetElement);
-    for (const simple_dmx::Element *channel : FindAttributeElementArray(context_->document, channelsClip, "channels"))
-    {
-        if (!channel)
-        {
-            continue;
-        }
-
-        const simple_dmx::Element *candidateTarget = FindAttributeElement(context_->document, channel, "toElement");
-        if (!candidateTarget || ElementKey(candidateTarget) != targetKey)
-        {
-            continue;
-        }
-
-        if (FindAttributeString(channel, "toAttribute") == targetAttribute)
-        {
-            return channel;
-        }
-    }
-
-    return nullptr;
-}
-
 AnimationImporter::SourceDeltaSettings AnimationImporter::resolveSourceDeltaSettings(const simple_dmx::Element *channelsClip) const
 {
     SourceDeltaSettings settings;
     settings.mode = context_->scenePolicy.sourceDeltaMode;
     settings.useClip = context_->scenePolicy.sourceDeltaUseClip;
     settings.sceneClipName = context_->scenePolicy.sourceDeltaClip;
-    settings.referenceClipName = context_->scenePolicy.sourceDeltaReferenceClip;
-    settings.targetClipName = context_->scenePolicy.sourceDeltaTargetClip;
     settings.referenceFrame = std::max(0, context_->scenePolicy.sourceDeltaReferenceFrame);
 
     if (!channelsClip)
@@ -304,36 +247,15 @@ AnimationImporter::SourceDeltaSettings AnimationImporter::resolveSourceDeltaSett
         settings.sceneClipName = sceneClipValue;
     }
 
-    const std::string referenceClipValue = FindAttributeString(channelsClip, "sourceDeltaReferenceClip");
-    if (!referenceClipValue.empty())
-    {
-        settings.referenceClipName = referenceClipValue;
-    }
-
-    const std::string targetClipValue = FindAttributeString(channelsClip, "sourceDeltaTargetClip");
-    if (!targetClipValue.empty())
-    {
-        settings.targetClipName = targetClipValue;
-    }
-
     const std::string referenceFrameValue = FindAttributeString(channelsClip, "sourceDeltaReferenceFrame");
     if (!referenceFrameValue.empty())
     {
         settings.referenceFrame = std::max(0, std::atoi(referenceFrameValue.c_str()));
     }
 
-    if (!settings.useClip)
+    if (settings.sceneClipName == "None" || settings.sceneClipName == "none")
     {
         settings.sceneClipName.clear();
-    }
-    else if (settings.sceneClipName == "None" || settings.sceneClipName == "none")
-    {
-        settings.sceneClipName.clear();
-        settings.targetClipName.clear();
-    }
-    else
-    {
-        settings.targetClipName.clear();
     }
 
     return settings;
@@ -349,16 +271,6 @@ bool AnimationImporter::shouldImportChannelsClip(const simple_dmx::Element *chan
     if (settings.mode == dcc_import_policy::SourceDeltaMode::None)
     {
         return true;
-    }
-
-    if (!settings.targetClipName.empty())
-    {
-        return channelsClip->name == settings.targetClipName;
-    }
-
-    if (!settings.referenceClipName.empty() && channelsClip->name == settings.referenceClipName)
-    {
-        return false;
     }
 
     return true;
@@ -482,22 +394,17 @@ MStatus AnimationImporter::buildSourceDeltaVector3Samples(
         return status;
     }
 
+    if (usesAnimationLayerForTransforms() &&
+        (settings.mode == dcc_import_policy::SourceDeltaMode::Subtract ||
+         settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract))
+    {
+        return MS::kSuccess;
+    }
+
     if (settings.mode == dcc_import_policy::SourceDeltaMode::LinearDelta ||
         settings.mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
     {
-        const MVector firstValue = samples.values.front();
-        const MVector lastValue = samples.values.back();
-        const size_t sampleCount = samples.values.size();
-        for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
-        {
-            double t = sampleCount > 1 ? static_cast<double>(sampleIndex) / static_cast<double>(sampleCount - 1) : 1.0;
-            if (settings.mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
-            {
-                t = ApplySplineWeight(t);
-            }
-            const MVector referenceValue = firstValue * (1.0 - t) + lastValue * t;
-            samples.values[sampleIndex] = samples.values[sampleIndex] - referenceValue;
-        }
+        dcc_source_delta::ApplySourceDeltaLinearReferenceSamples(samples.values, settings.mode);
         return MS::kSuccess;
     }
 
@@ -510,77 +417,20 @@ MStatus AnimationImporter::buildSourceDeltaVector3Samples(
             return maya_dmx::ReportError(MString("maya_dmx: sourceDelta scene layer was not usable: ") + settings.sceneClipName.c_str());
         }
 
-        for (size_t sampleIndex = 0; sampleIndex < samples.values.size(); ++sampleIndex)
-        {
-            if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
-            {
-                samples.values[sampleIndex] = referenceSamples.values[sampleIndex] - samples.values[sampleIndex];
-            }
-            else
-            {
-                samples.values[sampleIndex] = samples.values[sampleIndex] - referenceSamples.values[sampleIndex];
-            }
-        }
+        const size_t referenceIndex = std::min(static_cast<size_t>(settings.referenceFrame), referenceSamples.values.size() - 1);
+        dcc_source_delta::ApplySourceDeltaReferenceValue(samples.values, referenceSamples.values[referenceIndex], settings.mode);
 
         return MS::kSuccess;
-    }
-
-    if (settings.referenceClipName.empty())
-    {
-        Vector3AnimationSamples referenceSamples;
-        status = buildSceneReferenceVector3Samples(targetPath, samples.times, referenceSamples);
-        if (!status || referenceSamples.values.empty() || referenceSamples.values.size() != samples.values.size())
-        {
-            return maya_dmx::ReportError("maya_dmx: sourceDelta reference scene samples were missing.");
-        }
-
-        for (size_t sampleIndex = 0; sampleIndex < samples.values.size(); ++sampleIndex)
-        {
-            if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
-            {
-                samples.values[sampleIndex] = referenceSamples.values[sampleIndex] - samples.values[sampleIndex];
-            }
-            else
-            {
-                samples.values[sampleIndex] = samples.values[sampleIndex] - referenceSamples.values[sampleIndex];
-            }
-        }
-
-        return MS::kSuccess;
-    }
-
-    const simple_dmx::Element *referenceClip = findAnimationClipByName(settings.referenceClipName);
-    if (!referenceClip)
-    {
-        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference clip was not found: ") + settings.referenceClipName.c_str());
-    }
-
-    const simple_dmx::Element *referenceChannel = findMatchingChannel(referenceClip, targetElement, currentTargetAttribute_);
-    if (!referenceChannel)
-    {
-        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference channel was missing for attribute ") + currentTargetAttribute_.c_str());
     }
 
     Vector3AnimationSamples referenceSamples;
-    status = extractVector3AnimationSamples(targetPath, findFirstLogLayer(FindAttributeElement(context_->document, referenceChannel, "log")), referenceSamples);
-    if (!status || referenceSamples.values.empty())
+    status = buildSceneReferenceVector3Samples(targetPath, samples.times, referenceSamples);
+    if (!status || referenceSamples.values.empty() || referenceSamples.values.size() != samples.values.size())
     {
-        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference samples were missing for clip ") + settings.referenceClipName.c_str());
+        return maya_dmx::ReportError("maya_dmx: sourceDelta reference scene samples were missing.");
     }
 
-    const size_t referenceIndex = std::min(static_cast<size_t>(settings.referenceFrame), referenceSamples.values.size() - 1);
-    const MVector referenceValue = referenceSamples.values[referenceIndex];
-    for (MVector &sampleValue : samples.values)
-    {
-        if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
-        {
-            sampleValue = referenceValue - sampleValue;
-        }
-        else
-        {
-            sampleValue = sampleValue - referenceValue;
-        }
-    }
+    dcc_source_delta::ApplySourceDeltaReferenceSamples(samples.values, referenceSamples.values, settings.mode);
 
     return MS::kSuccess;
 }
@@ -828,22 +678,17 @@ MStatus AnimationImporter::buildSourceDeltaQuaternionSamples(
         return status;
     }
 
+    if (usesAnimationLayerForTransforms() &&
+        (settings.mode == dcc_import_policy::SourceDeltaMode::Subtract ||
+         settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract))
+    {
+        return MS::kSuccess;
+    }
+
     if (settings.mode == dcc_import_policy::SourceDeltaMode::LinearDelta ||
         settings.mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
     {
-        const MQuaternion firstValue = samples.values.front();
-        const MQuaternion lastValue = samples.values.back();
-        const size_t sampleCount = samples.values.size();
-        for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
-        {
-            double t = sampleCount > 1 ? static_cast<double>(sampleIndex) / static_cast<double>(sampleCount - 1) : 1.0;
-            if (settings.mode == dcc_import_policy::SourceDeltaMode::SplineDelta)
-            {
-                t = ApplySplineWeight(t);
-            }
-            const MQuaternion referenceValue = slerp(firstValue, lastValue, t);
-            samples.values[sampleIndex] = samples.values[sampleIndex] * referenceValue.inverse();
-        }
+        dcc_source_delta::ApplySourceDeltaLinearReferenceSamples(samples.values, settings.mode);
         return MS::kSuccess;
     }
 
@@ -856,77 +701,20 @@ MStatus AnimationImporter::buildSourceDeltaQuaternionSamples(
             return maya_dmx::ReportError(MString("maya_dmx: sourceDelta scene layer was not usable: ") + settings.sceneClipName.c_str());
         }
 
-        for (size_t sampleIndex = 0; sampleIndex < samples.values.size(); ++sampleIndex)
-        {
-            if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
-            {
-                samples.values[sampleIndex] = referenceSamples.values[sampleIndex].inverse() * samples.values[sampleIndex];
-            }
-            else
-            {
-                samples.values[sampleIndex] = samples.values[sampleIndex] * referenceSamples.values[sampleIndex].inverse();
-            }
-        }
+        const size_t referenceIndex = std::min(static_cast<size_t>(settings.referenceFrame), referenceSamples.values.size() - 1);
+        dcc_source_delta::ApplySourceDeltaReferenceValue(samples.values, referenceSamples.values[referenceIndex], settings.mode);
 
         return MS::kSuccess;
-    }
-
-    if (settings.referenceClipName.empty())
-    {
-        QuaternionAnimationSamples referenceSamples;
-        status = buildSceneReferenceQuaternionSamples(targetPath, samples.times, referenceSamples);
-        if (!status || referenceSamples.values.empty() || referenceSamples.values.size() != samples.values.size())
-        {
-            return maya_dmx::ReportError("maya_dmx: sourceDelta reference scene samples were missing.");
-        }
-
-        for (size_t sampleIndex = 0; sampleIndex < samples.values.size(); ++sampleIndex)
-        {
-            if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
-            {
-                samples.values[sampleIndex] = referenceSamples.values[sampleIndex].inverse() * samples.values[sampleIndex];
-            }
-            else
-            {
-                samples.values[sampleIndex] = samples.values[sampleIndex] * referenceSamples.values[sampleIndex].inverse();
-            }
-        }
-
-        return MS::kSuccess;
-    }
-
-    const simple_dmx::Element *referenceClip = findAnimationClipByName(settings.referenceClipName);
-    if (!referenceClip)
-    {
-        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference clip was not found: ") + settings.referenceClipName.c_str());
-    }
-
-    const simple_dmx::Element *referenceChannel = findMatchingChannel(referenceClip, targetElement, currentTargetAttribute_);
-    if (!referenceChannel)
-    {
-        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference channel was missing for attribute ") + currentTargetAttribute_.c_str());
     }
 
     QuaternionAnimationSamples referenceSamples;
-    status = extractQuaternionAnimationSamples(targetPath, findFirstLogLayer(FindAttributeElement(context_->document, referenceChannel, "log")), referenceSamples);
-    if (!status || referenceSamples.values.empty())
+    status = buildSceneReferenceQuaternionSamples(targetPath, samples.times, referenceSamples);
+    if (!status || referenceSamples.values.empty() || referenceSamples.values.size() != samples.values.size())
     {
-        return maya_dmx::ReportError(MString("maya_dmx: sourceDelta reference samples were missing for clip ") + settings.referenceClipName.c_str());
+        return maya_dmx::ReportError("maya_dmx: sourceDelta reference scene samples were missing.");
     }
 
-    const size_t referenceIndex = std::min(static_cast<size_t>(settings.referenceFrame), referenceSamples.values.size() - 1);
-    const MQuaternion referenceValue = referenceSamples.values[referenceIndex];
-    for (MQuaternion &sampleValue : samples.values)
-    {
-        if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
-        {
-            sampleValue = referenceValue.inverse() * sampleValue;
-        }
-        else
-        {
-            sampleValue = sampleValue * referenceValue.inverse();
-        }
-    }
+    dcc_source_delta::ApplySourceDeltaReferenceSamples(samples.values, referenceSamples.values, settings.mode);
 
     return MS::kSuccess;
 }
@@ -1033,7 +821,14 @@ MStatus AnimationImporter::setTransformCurveKeys(
     }
 
     AppendImportDebugLog((std::string("animLayer: set keys for ") + plug.name().asChar() + " on " + layerName.asChar()).c_str());
-    return maya_cmd::SetKeyframesOnAnimationLayer(layerName, plug, times.data(), values.data(), times.size(), true);
+    return maya_cmd::SetKeyframesOnAnimationLayer(
+        layerName,
+        plug,
+        times.data(),
+        values.data(),
+        times.size(),
+        true,
+        dcc_import_policy::UsesSourceDeltaImport(context_->scenePolicy));
 }
 
 MStatus AnimationImporter::applyVector3Animation(
@@ -1409,7 +1204,14 @@ MStatus AnimationImporter::applyFloatAnimation(const MPlug &targetPlug, const si
         return MStatus::kFailure;
     }
 
-    return maya_cmd::SetKeyframesOnAnimationLayer(layerName, targetPlug, times.data(), values.data(), times.size(), true);
+    return maya_cmd::SetKeyframesOnAnimationLayer(
+        layerName,
+        targetPlug,
+        times.data(),
+        values.data(),
+        times.size(),
+        true,
+        dcc_import_policy::UsesSourceDeltaImport(context_->scenePolicy));
 }
 
 MStatus AnimationImporter::applyFloatAnimation(const std::vector<MPlug> &targetPlugs, const simple_dmx::Element *logLayer) const
@@ -1688,6 +1490,7 @@ MStatus AnimationImporter::ensureAnimationLayer(MString &layerName) const
     MStatus status = maya_cmd::EnsureAnimationLayer(
         configuredName.c_str(),
         context_->scenePolicy.animationImportMode == dcc_import_policy::AnimationImportMode::ReplaceLayer,
+        dcc_import_policy::UsesSourceDeltaImport(context_->scenePolicy),
         true,
         &transformAnimationLayerName_);
     if (!status)

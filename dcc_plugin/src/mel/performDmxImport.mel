@@ -19,8 +19,6 @@ global proc MayaDmxImport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaMode`) { optionVar -stringValue MayaDmx_sourceDeltaMode "none"; }
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaUseClip`) { optionVar -intValue MayaDmx_sourceDeltaUseClip 0; }
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaClip`) { optionVar -stringValue MayaDmx_sourceDeltaClip ""; }
-    if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaReferenceClip`) { optionVar -stringValue MayaDmx_sourceDeltaReferenceClip ""; }
-    if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaTargetClip`) { optionVar -stringValue MayaDmx_sourceDeltaTargetClip ""; }
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaReferenceFrame`) { optionVar -intValue MayaDmx_sourceDeltaReferenceFrame 0; }
 }
 
@@ -52,11 +50,7 @@ global proc string MayaDmxImport_collectOptionVarString()
         + ";sourceDeltaUseClip=" + `optionVar -q MayaDmx_sourceDeltaUseClip`
         + ";sourceDeltaReferenceFrame=" + `optionVar -q MayaDmx_sourceDeltaReferenceFrame`);
     string $sceneClip = `optionVar -q MayaDmx_sourceDeltaClip`;
-    string $referenceClip = `optionVar -q MayaDmx_sourceDeltaReferenceClip`;
-    string $targetClip = `optionVar -q MayaDmx_sourceDeltaTargetClip`;
     if (size($sceneClip) > 0) { $options += (";sourceDeltaClip=" + $sceneClip); }
-    if (size($referenceClip) > 0) { $options += (";sourceDeltaReferenceClip=" + $referenceClip); }
-    if (size($targetClip) > 0) { $options += (";sourceDeltaTargetClip=" + $targetClip); }
     return $options;
 }
 
@@ -148,8 +142,6 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     string $sourceDeltaMode = "none";
     int $sourceDeltaUseClip = 0;
     string $sourceDeltaClip = "";
-    string $sourceDeltaReferenceClip = "";
-    string $sourceDeltaTargetClip = "";
     int $sourceDeltaReferenceFrame = 0;
 
     string $optionList[]; tokenize($effectiveOptions, ";", $optionList);
@@ -175,8 +167,6 @@ global proc MayaDmxImport_applyOptionsString(string $options)
         else if ($parts[0] == "sourceDeltaMode") { $sourceDeltaMode = $parts[1]; }
         else if ($parts[0] == "sourceDeltaUseClip") { $sourceDeltaUseClip = $parts[1]; }
         else if ($parts[0] == "sourceDeltaClip") { $sourceDeltaClip = $parts[1]; }
-        else if ($parts[0] == "sourceDeltaReferenceClip") { $sourceDeltaReferenceClip = $parts[1]; }
-        else if ($parts[0] == "sourceDeltaTargetClip") { $sourceDeltaTargetClip = $parts[1]; }
         else if ($parts[0] == "sourceDeltaReferenceFrame") { $sourceDeltaReferenceFrame = $parts[1]; }
     }
 
@@ -215,12 +205,6 @@ global proc MayaDmxImport_applyOptionsString(string $options)
         else if ($sourceDeltaMode == "lineardelta") { optionMenuGrp -e -select 4 dmxImportSourceDeltaMode; }
         else if ($sourceDeltaMode == "splinedelta") { optionMenuGrp -e -select 5 dmxImportSourceDeltaMode; }
         else { optionMenuGrp -e -select 1 dmxImportSourceDeltaMode; }
-    }
-    if (`textFieldGrp -exists dmxImportSourceDeltaReferenceClip`) {
-        textFieldGrp -e -text $sourceDeltaReferenceClip dmxImportSourceDeltaReferenceClip;
-    }
-    if (`textFieldGrp -exists dmxImportSourceDeltaTargetClip`) {
-        textFieldGrp -e -text $sourceDeltaTargetClip dmxImportSourceDeltaTargetClip;
     }
     if (`intFieldGrp -exists dmxImportSourceDeltaReferenceFrame`) {
         intFieldGrp -e -value1 $sourceDeltaReferenceFrame dmxImportSourceDeltaReferenceFrame;
@@ -288,15 +272,7 @@ global proc string MayaDmxImport_collectOptionsString()
     if (`optionMenuGrp -exists dmxImportSourceDeltaClip`) {
         $sourceDeltaClip = MayaDmxImport_sourceDeltaClipFromControl("dmxImportSourceDeltaClip");
     }
-    string $sourceDeltaReferenceClip = "";
-    string $sourceDeltaTargetClip = "";
     int $sourceDeltaReferenceFrame = 0;
-    if (`textFieldGrp -exists dmxImportSourceDeltaReferenceClip`) {
-        $sourceDeltaReferenceClip = `textFieldGrp -q -text dmxImportSourceDeltaReferenceClip`;
-    }
-    if (`textFieldGrp -exists dmxImportSourceDeltaTargetClip`) {
-        $sourceDeltaTargetClip = `textFieldGrp -q -text dmxImportSourceDeltaTargetClip`;
-    }
     if (`intFieldGrp -exists dmxImportSourceDeltaReferenceFrame`) {
         $sourceDeltaReferenceFrame = `intFieldGrp -q -value1 dmxImportSourceDeltaReferenceFrame`;
     }
@@ -321,8 +297,6 @@ global proc string MayaDmxImport_collectOptionsString()
         + ";sourceDeltaUseClip=" + $sourceDeltaUseClip
         + ";sourceDeltaReferenceFrame=" + $sourceDeltaReferenceFrame);
     if (size($sourceDeltaClip) > 0) { $options += (";sourceDeltaClip=" + $sourceDeltaClip); }
-    if (size($sourceDeltaReferenceClip) > 0) { $options += (";sourceDeltaReferenceClip=" + $sourceDeltaReferenceClip); }
-    if (size($sourceDeltaTargetClip) > 0) { $options += (";sourceDeltaTargetClip=" + $sourceDeltaTargetClip); }
     return $options;
 }
 
@@ -361,8 +335,6 @@ global proc MayaDmx_importCallback(string $parent, int $doIt)
         else if ($parts[0] == "sourceDeltaMode") { optionVar -stringValue MayaDmx_sourceDeltaMode $parts[1]; }
         else if ($parts[0] == "sourceDeltaUseClip") { optionVar -intValue MayaDmx_sourceDeltaUseClip $parts[1]; }
         else if ($parts[0] == "sourceDeltaClip") { optionVar -stringValue MayaDmx_sourceDeltaClip $parts[1]; }
-        else if ($parts[0] == "sourceDeltaReferenceClip") { optionVar -stringValue MayaDmx_sourceDeltaReferenceClip $parts[1]; }
-        else if ($parts[0] == "sourceDeltaTargetClip") { optionVar -stringValue MayaDmx_sourceDeltaTargetClip $parts[1]; }
         else if ($parts[0] == "sourceDeltaReferenceFrame") { optionVar -intValue MayaDmx_sourceDeltaReferenceFrame $parts[1]; }
     }
     if ($doIt) { performDmxImport 0; }
@@ -450,7 +422,7 @@ global proc string DmxImportOptionsUI(string $parent)
             text -align "left" -label "Source Delta  (Update Only)";
             optionMenuGrp
                 -label "Delta Mode"
-                -annotation "Interprets imported transform animation as Source-style delta data and routes it through an animation layer. Leave Reference Clip blank to use the current scene state as the reference."
+                -annotation "Interprets imported transform animation as Source-style delta data and routes it through an animation layer. Use Clip switches the reference source to a scene animation layer."
                 -changeCommand "MayaDmxImport_updateAnimationLayerUI"
                 dmxImportSourceDeltaMode;
                 menuItem -label "Disabled";
@@ -469,8 +441,6 @@ global proc string DmxImportOptionsUI(string $parent)
                 -annotation "Select a scene animation layer to use as the source delta reference. None falls back to the current scene state."
                 dmxImportSourceDeltaClip;
                 menuItem -label "None";
-            textFieldGrp -label "Reference Clip" -annotation "Optional imported clip name. Leave blank to use the current scene state as the reference." dmxImportSourceDeltaReferenceClip;
-            textFieldGrp -label "Target Clip" -annotation "Optional imported clip name filter. When set, only this target clip is imported as source delta." dmxImportSourceDeltaTargetClip;
             intFieldGrp -numberOfFields 1 -label "Reference Frame" -annotation "Reference frame index used when sampling an imported reference clip." dmxImportSourceDeltaReferenceFrame;
             separator -style "in";
             text -align "left" -label "Transform Correction";
@@ -527,9 +497,7 @@ global proc string[] captureDmxImportOptionVars(string $version)
     $args[16] = `optionVar -q MayaDmx_sourceDeltaMode`;
     $args[17] = `optionVar -q MayaDmx_sourceDeltaUseClip`;
     $args[18] = `optionVar -q MayaDmx_sourceDeltaClip`;
-    $args[19] = `optionVar -q MayaDmx_sourceDeltaReferenceClip`;
-    $args[20] = `optionVar -q MayaDmx_sourceDeltaTargetClip`;
-    $args[21] = `optionVar -q MayaDmx_sourceDeltaReferenceFrame`;
+    $args[19] = `optionVar -q MayaDmx_sourceDeltaReferenceFrame`;
     return $args;
 }
 
