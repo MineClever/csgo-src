@@ -30,6 +30,80 @@ double ApplySplineWeight(double t)
     return 3.0 * t * t - 2.0 * t * t * t;
 }
 
+struct CurrentTimeGuard
+{
+    CurrentTimeGuard()
+        : previousTime(MAnimControl::currentTime())
+    {
+    }
+
+    ~CurrentTimeGuard()
+    {
+        MAnimControl::setCurrentTime(previousTime);
+    }
+
+    MTime previousTime;
+};
+
+bool IsEmptyLayerName(const std::string &layerName)
+{
+    return layerName.empty() || layerName == "None" || layerName == "none";
+}
+
+MStatus SampleLayerPlugValue(
+    const MString &layerName,
+    const MPlug &plug,
+    double time,
+    double &value)
+{
+    value = 0.0;
+    if (plug.isNull())
+    {
+        return MStatus::kFailure;
+    }
+
+    if (IsEmptyLayerName(layerName.asChar()))
+    {
+        MTime previousTime = MAnimControl::currentTime();
+        MAnimControl::setCurrentTime(MTime(time, MTime::uiUnit()));
+        value = plug.asDouble();
+        MAnimControl::setCurrentTime(previousTime);
+        return MS::kSuccess;
+    }
+
+    MStringArray curveNames;
+    MStatus status = maya_cmd::FindAnimationLayerCurvesForPlug(layerName, plug, curveNames);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    if (curveNames.length() == 0)
+    {
+        MTime previousTime = MAnimControl::currentTime();
+        MAnimControl::setCurrentTime(MTime(time, MTime::uiUnit()));
+        value = plug.asDouble();
+        MAnimControl::setCurrentTime(previousTime);
+        return MS::kSuccess;
+    }
+
+    MObject curveObject;
+    const bool curveFound = maya_cmd::TryGetNodeByName(curveNames[0], curveObject);
+    if (!curveFound || curveObject.isNull() || !curveObject.hasFn(MFn::kAnimCurve))
+    {
+        return MStatus::kFailure;
+    }
+
+    MFnAnimCurve curveFn(curveObject, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    value = curveFn.evaluate(MTime(time, MTime::uiUnit()));
+    return MS::kSuccess;
+}
+
 std::string SanitizeNodeName(std::string value)
 {
     for (char &character : value)
@@ -467,7 +541,7 @@ MStatus SmdSceneImporter::applyAnimation()
             continue;
         }
 
-        status = applySourceDeltaToSamples(sampledTranslations, sampledRotations);
+        status = applySourceDeltaToSamples(pathIt->second, times, sampledTranslations, sampledRotations);
         if (!status)
         {
             return MStatus::kFailure;
@@ -580,7 +654,187 @@ MStatus SmdSceneImporter::applyAnimation()
     return MS::kSuccess;
 }
 
+MStatus SmdSceneImporter::buildSceneReferenceSamples(
+    const MDagPath &jointPath,
+    const std::vector<double> &times,
+    std::vector<MVector> &translations,
+    std::vector<MQuaternion> &rotations) const
+{
+    translations.clear();
+    rotations.clear();
+    translations.reserve(times.size());
+    rotations.reserve(times.size());
+    if (times.empty())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MFnDependencyNode dependencyNodeFn(jointPath.node(), &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MPlug translateXPlug = dependencyNodeFn.findPlug("translateX", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug translateYPlug = dependencyNodeFn.findPlug("translateY", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug translateZPlug = dependencyNodeFn.findPlug("translateZ", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MFnTransform transformFn(jointPath, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    CurrentTimeGuard currentTimeGuard;
+    for (double time : times)
+    {
+        MAnimControl::setCurrentTime(MTime(time, MTime::uiUnit()));
+        translations.emplace_back(
+            translateXPlug.asDouble(),
+            translateYPlug.asDouble(),
+            translateZPlug.asDouble());
+
+        MEulerRotation currentEulerRotation;
+        status = transformFn.getRotation(currentEulerRotation);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        rotations.push_back(currentEulerRotation.asQuaternion());
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus SmdSceneImporter::buildSceneLayerSamples(
+    const MString &layerName,
+    const MDagPath &jointPath,
+    const std::vector<double> &times,
+    std::vector<MVector> &translations,
+    std::vector<MQuaternion> &rotations) const
+{
+    translations.clear();
+    rotations.clear();
+    if (times.empty())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MFnTransform transformFn(jointPath, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MEulerRotation currentEulerRotation;
+    status = transformFn.getRotation(currentEulerRotation);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MFnDependencyNode dependencyNodeFn(jointPath.node(), &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MPlug translateXPlug = dependencyNodeFn.findPlug("translateX", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug translateYPlug = dependencyNodeFn.findPlug("translateY", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug translateZPlug = dependencyNodeFn.findPlug("translateZ", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug rotateXPlug = dependencyNodeFn.findPlug("rotateX", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug rotateYPlug = dependencyNodeFn.findPlug("rotateY", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug rotateZPlug = dependencyNodeFn.findPlug("rotateZ", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    for (double time : times)
+    {
+        double tx = 0.0;
+        double ty = 0.0;
+        double tz = 0.0;
+        double rx = 0.0;
+        double ry = 0.0;
+        double rz = 0.0;
+        status = SampleLayerPlugValue(layerName, translateXPlug, time, tx);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = SampleLayerPlugValue(layerName, translateYPlug, time, ty);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = SampleLayerPlugValue(layerName, translateZPlug, time, tz);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = SampleLayerPlugValue(layerName, rotateXPlug, time, rx);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = SampleLayerPlugValue(layerName, rotateYPlug, time, ry);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = SampleLayerPlugValue(layerName, rotateZPlug, time, rz);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+
+        translations.emplace_back(tx, ty, tz);
+        MEulerRotation eulerRotation(rx, ry, rz);
+        eulerRotation.reorderIt(currentEulerRotation.order);
+        rotations.push_back(eulerRotation.asQuaternion());
+    }
+
+    return MS::kSuccess;
+}
+
 MStatus SmdSceneImporter::applySourceDeltaToSamples(
+    const MDagPath &jointPath,
+    const std::vector<double> &times,
     std::vector<MVector> &translations,
     std::vector<MQuaternion> &rotations) const
 {
@@ -592,6 +846,76 @@ MStatus SmdSceneImporter::applySourceDeltaToSamples(
 
     if (translations.empty() || rotations.empty() || translations.size() != rotations.size())
     {
+        return MS::kSuccess;
+    }
+
+    const bool useSceneClip = importOptions_.scenePolicy.sourceDeltaUseClip &&
+        !IsEmptyLayerName(importOptions_.scenePolicy.sourceDeltaClip);
+
+    if (useSceneClip &&
+        (mode == dcc_import_policy::SourceDeltaMode::Subtract ||
+         mode == dcc_import_policy::SourceDeltaMode::PreSubtract))
+    {
+        std::vector<MVector> referenceTranslations;
+        std::vector<MQuaternion> referenceRotations;
+        MStatus status = buildSceneLayerSamples(
+            importOptions_.scenePolicy.sourceDeltaClip.c_str(),
+            jointPath,
+            times,
+            referenceTranslations,
+            referenceRotations);
+        if (!status || referenceTranslations.size() != translations.size() || referenceRotations.size() != rotations.size())
+        {
+            return maya_smd::ReportError("maya_smd: sourceDelta scene layer samples were missing.");
+        }
+
+        const size_t referenceIndex = std::min(
+            static_cast<size_t>(importOptions_.scenePolicy.sourceDeltaReferenceFrame),
+            referenceTranslations.size() - 1);
+        const MVector referenceTranslation = referenceTranslations[referenceIndex];
+        const MQuaternion referenceRotation = referenceRotations[referenceIndex];
+        for (size_t sampleIndex = 0; sampleIndex < translations.size(); ++sampleIndex)
+        {
+            if (mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
+            {
+                translations[sampleIndex] = referenceTranslation - translations[sampleIndex];
+                rotations[sampleIndex] = referenceRotation.inverse() * rotations[sampleIndex];
+            }
+            else
+            {
+                translations[sampleIndex] = translations[sampleIndex] - referenceTranslation;
+                rotations[sampleIndex] = rotations[sampleIndex] * referenceRotation.inverse();
+            }
+        }
+
+        return MS::kSuccess;
+    }
+
+    if (mode == dcc_import_policy::SourceDeltaMode::Subtract ||
+        mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
+    {
+        std::vector<MVector> referenceTranslations;
+        std::vector<MQuaternion> referenceRotations;
+        MStatus status = buildSceneReferenceSamples(jointPath, times, referenceTranslations, referenceRotations);
+        if (!status || referenceTranslations.size() != translations.size() || referenceRotations.size() != rotations.size())
+        {
+            return maya_smd::ReportError("maya_smd: sourceDelta reference scene samples were missing.");
+        }
+
+        for (size_t sampleIndex = 0; sampleIndex < translations.size(); ++sampleIndex)
+        {
+            if (mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
+            {
+                translations[sampleIndex] = referenceTranslations[sampleIndex] - translations[sampleIndex];
+                rotations[sampleIndex] = referenceRotations[sampleIndex].inverse() * rotations[sampleIndex];
+            }
+            else
+            {
+                translations[sampleIndex] = translations[sampleIndex] - referenceTranslations[sampleIndex];
+                rotations[sampleIndex] = rotations[sampleIndex] * referenceRotations[sampleIndex].inverse();
+            }
+        }
+
         return MS::kSuccess;
     }
 

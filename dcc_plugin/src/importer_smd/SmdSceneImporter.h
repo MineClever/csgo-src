@@ -34,7 +34,22 @@ private:
     MObject findParentObject(const simple_smd::Node &node) const;
     const simple_smd::SkeletonPose *findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const;
     bool isTopLevelNode(const simple_smd::Node &node) const;
-    MStatus applySourceDeltaToSamples(std::vector<MVector> &translations, std::vector<MQuaternion> &rotations) const;
+    MStatus applySourceDeltaToSamples(
+        const MDagPath &jointPath,
+        const std::vector<double> &times,
+        std::vector<MVector> &translations,
+        std::vector<MQuaternion> &rotations) const;
+    MStatus buildSceneReferenceSamples(
+        const MDagPath &jointPath,
+        const std::vector<double> &times,
+        std::vector<MVector> &translations,
+        std::vector<MQuaternion> &rotations) const;
+    MStatus buildSceneLayerSamples(
+        const MString &layerName,
+        const MDagPath &jointPath,
+        const std::vector<double> &times,
+        std::vector<MVector> &translations,
+        std::vector<MQuaternion> &rotations) const;
     MStatus ensureTransformAnimationLayer(MString &layerName) const;
     bool usesAnimationLayerForTransforms() const;
 

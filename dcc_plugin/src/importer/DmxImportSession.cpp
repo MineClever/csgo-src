@@ -620,7 +620,7 @@ MStatus DmxImportSession::LoadDocument()
     }
     if (dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy))
     {
-        maya_dmx::ReportWarning("maya_dmx: sourceDeltaMode applies Source-style subtract/linear-delta semantics to transform channels and writes the resulting delta to a Maya animation layer. Float channels remain absolute.");
+        maya_dmx::ReportWarning("maya_dmx: sourceDeltaMode applies Source-style subtract/linear-delta semantics to transform channels and writes the resulting delta to a Maya animation layer. When sourceDeltaReferenceClip is empty, the current scene state is used as the reference. Float channels remain absolute.");
     }
 
     AppendImportDebugLog("session: load document end success");

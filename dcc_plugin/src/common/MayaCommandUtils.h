@@ -42,6 +42,10 @@ MStatus EnsureAnimationLayer(
     bool replaceExisting,
     bool overrideLayer,
     MString *resolvedLayerName = nullptr);
+MStatus FindAnimationLayerCurvesForPlug(
+    const MString &layerName,
+    const MPlug &plug,
+    MStringArray &curveNames);
 MStatus AddPlugToAnimationLayer(
     const MString &layerName,
     const MPlug &plug);

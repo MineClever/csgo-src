@@ -63,6 +63,80 @@ double ApplySplineWeight(double t)
     return 3.0 * t * t - 2.0 * t * t * t;
 }
 
+bool IsEmptyLayerName(const std::string &layerName)
+{
+    return layerName.empty() || layerName == "None" || layerName == "none";
+}
+
+MStatus SampleLayerPlugValue(
+    const MString &layerName,
+    const MPlug &plug,
+    double time,
+    double &value)
+{
+    value = 0.0;
+    if (plug.isNull())
+    {
+        return MStatus::kFailure;
+    }
+
+    if (IsEmptyLayerName(layerName.asChar()))
+    {
+        MTime previousTime = MAnimControl::currentTime();
+        MAnimControl::setCurrentTime(MTime(time, MTime::kSeconds));
+        value = plug.asDouble();
+        MAnimControl::setCurrentTime(previousTime);
+        return MS::kSuccess;
+    }
+
+    MStringArray curveNames;
+    MStatus status = maya_cmd::FindAnimationLayerCurvesForPlug(layerName, plug, curveNames);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    if (curveNames.length() == 0)
+    {
+        MTime previousTime = MAnimControl::currentTime();
+        MAnimControl::setCurrentTime(MTime(time, MTime::kSeconds));
+        value = plug.asDouble();
+        MAnimControl::setCurrentTime(previousTime);
+        return MS::kSuccess;
+    }
+
+    MObject curveObject;
+    const bool curveFound = maya_cmd::TryGetNodeByName(curveNames[0], curveObject);
+    if (!curveFound || curveObject.isNull() || !curveObject.hasFn(MFn::kAnimCurve))
+    {
+        return MStatus::kFailure;
+    }
+
+    MFnAnimCurve curveFn(curveObject, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    value = curveFn.evaluate(MTime(time, MTime::kSeconds));
+    return MS::kSuccess;
+}
+
+struct CurrentTimeGuard
+{
+    CurrentTimeGuard()
+        : previousTime(MAnimControl::currentTime())
+    {
+    }
+
+    ~CurrentTimeGuard()
+    {
+        MAnimControl::setCurrentTime(previousTime);
+    }
+
+    MTime previousTime;
+};
+
 } // namespace
 
 static MStatus ClearExistingAnimationCurve(const MPlug &plug)
@@ -197,6 +271,8 @@ AnimationImporter::SourceDeltaSettings AnimationImporter::resolveSourceDeltaSett
 {
     SourceDeltaSettings settings;
     settings.mode = context_->scenePolicy.sourceDeltaMode;
+    settings.useClip = context_->scenePolicy.sourceDeltaUseClip;
+    settings.sceneClipName = context_->scenePolicy.sourceDeltaClip;
     settings.referenceClipName = context_->scenePolicy.sourceDeltaReferenceClip;
     settings.targetClipName = context_->scenePolicy.sourceDeltaTargetClip;
     settings.referenceFrame = std::max(0, context_->scenePolicy.sourceDeltaReferenceFrame);
@@ -210,6 +286,22 @@ AnimationImporter::SourceDeltaSettings AnimationImporter::resolveSourceDeltaSett
     if (!modeValue.empty())
     {
         settings.mode = ParseSourceDeltaModeValue(modeValue);
+    }
+
+    const std::string useClipValue = FindAttributeString(channelsClip, "sourceDeltaUseClip");
+    if (!useClipValue.empty())
+    {
+        std::string normalizedUseClip = useClipValue;
+        std::transform(normalizedUseClip.begin(), normalizedUseClip.end(), normalizedUseClip.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        settings.useClip = normalizedUseClip == "1" || normalizedUseClip == "true" || normalizedUseClip == "yes";
+    }
+
+    const std::string sceneClipValue = FindAttributeString(channelsClip, "sourceDeltaClip");
+    if (!sceneClipValue.empty())
+    {
+        settings.sceneClipName = sceneClipValue;
     }
 
     const std::string referenceClipValue = FindAttributeString(channelsClip, "sourceDeltaReferenceClip");
@@ -228,6 +320,20 @@ AnimationImporter::SourceDeltaSettings AnimationImporter::resolveSourceDeltaSett
     if (!referenceFrameValue.empty())
     {
         settings.referenceFrame = std::max(0, std::atoi(referenceFrameValue.c_str()));
+    }
+
+    if (!settings.useClip)
+    {
+        settings.sceneClipName.clear();
+    }
+    else if (settings.sceneClipName == "None" || settings.sceneClipName == "none")
+    {
+        settings.sceneClipName.clear();
+        settings.targetClipName.clear();
+    }
+    else
+    {
+        settings.targetClipName.clear();
     }
 
     return settings;
@@ -395,6 +501,54 @@ MStatus AnimationImporter::buildSourceDeltaVector3Samples(
         return MS::kSuccess;
     }
 
+    if (settings.useClip && !IsEmptyLayerName(settings.sceneClipName))
+    {
+        Vector3AnimationSamples referenceSamples;
+        status = buildSceneLayerVector3Samples(MString(settings.sceneClipName.c_str()), targetPath, samples.times, referenceSamples);
+        if (!status || referenceSamples.values.empty() || referenceSamples.values.size() != samples.values.size())
+        {
+            return maya_dmx::ReportError(MString("maya_dmx: sourceDelta scene layer was not usable: ") + settings.sceneClipName.c_str());
+        }
+
+        for (size_t sampleIndex = 0; sampleIndex < samples.values.size(); ++sampleIndex)
+        {
+            if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
+            {
+                samples.values[sampleIndex] = referenceSamples.values[sampleIndex] - samples.values[sampleIndex];
+            }
+            else
+            {
+                samples.values[sampleIndex] = samples.values[sampleIndex] - referenceSamples.values[sampleIndex];
+            }
+        }
+
+        return MS::kSuccess;
+    }
+
+    if (settings.referenceClipName.empty())
+    {
+        Vector3AnimationSamples referenceSamples;
+        status = buildSceneReferenceVector3Samples(targetPath, samples.times, referenceSamples);
+        if (!status || referenceSamples.values.empty() || referenceSamples.values.size() != samples.values.size())
+        {
+            return maya_dmx::ReportError("maya_dmx: sourceDelta reference scene samples were missing.");
+        }
+
+        for (size_t sampleIndex = 0; sampleIndex < samples.values.size(); ++sampleIndex)
+        {
+            if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
+            {
+                samples.values[sampleIndex] = referenceSamples.values[sampleIndex] - samples.values[sampleIndex];
+            }
+            else
+            {
+                samples.values[sampleIndex] = samples.values[sampleIndex] - referenceSamples.values[sampleIndex];
+            }
+        }
+
+        return MS::kSuccess;
+    }
+
     const simple_dmx::Element *referenceClip = findAnimationClipByName(settings.referenceClipName);
     if (!referenceClip)
     {
@@ -426,6 +580,231 @@ MStatus AnimationImporter::buildSourceDeltaVector3Samples(
         {
             sampleValue = sampleValue - referenceValue;
         }
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus AnimationImporter::buildSceneReferenceVector3Samples(
+    const MDagPath &targetPath,
+    const std::vector<double> &times,
+    Vector3AnimationSamples &samples) const
+{
+    samples.times = times;
+    samples.values.clear();
+    if (times.empty())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MFnDependencyNode targetNodeFn(targetPath.node(), &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MPlug translateXPlug = targetNodeFn.findPlug("translateX", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug translateYPlug = targetNodeFn.findPlug("translateY", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug translateZPlug = targetNodeFn.findPlug("translateZ", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    CurrentTimeGuard currentTimeGuard;
+    for (double time : times)
+    {
+        MAnimControl::setCurrentTime(MTime(time, MTime::kSeconds));
+        samples.values.emplace_back(
+            translateXPlug.asDouble(),
+            translateYPlug.asDouble(),
+            translateZPlug.asDouble());
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus AnimationImporter::buildSceneLayerVector3Samples(
+    const MString &layerName,
+    const MDagPath &targetPath,
+    const std::vector<double> &times,
+    Vector3AnimationSamples &samples) const
+{
+    samples.times = times;
+    samples.values.clear();
+    if (times.empty())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MFnDependencyNode targetNodeFn(targetPath.node(), &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MPlug translateXPlug = targetNodeFn.findPlug("translateX", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug translateYPlug = targetNodeFn.findPlug("translateY", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug translateZPlug = targetNodeFn.findPlug("translateZ", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    for (double time : times)
+    {
+        double x = 0.0;
+        double y = 0.0;
+        double z = 0.0;
+        status = SampleLayerPlugValue(layerName, translateXPlug, time, x);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = SampleLayerPlugValue(layerName, translateYPlug, time, y);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = SampleLayerPlugValue(layerName, translateZPlug, time, z);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+
+        samples.values.emplace_back(x, y, z);
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus AnimationImporter::buildSceneReferenceQuaternionSamples(
+    const MDagPath &targetPath,
+    const std::vector<double> &times,
+    QuaternionAnimationSamples &samples) const
+{
+    samples.times = times;
+    samples.values.clear();
+    if (times.empty())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MFnTransform transformFn(targetPath, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    CurrentTimeGuard currentTimeGuard;
+    for (double time : times)
+    {
+        MAnimControl::setCurrentTime(MTime(time, MTime::kSeconds));
+        MEulerRotation currentEulerRotation;
+        status = transformFn.getRotation(currentEulerRotation);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+
+        samples.values.push_back(currentEulerRotation.asQuaternion());
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus AnimationImporter::buildSceneLayerQuaternionSamples(
+    const MString &layerName,
+    const MDagPath &targetPath,
+    const std::vector<double> &times,
+    QuaternionAnimationSamples &samples) const
+{
+    samples.times = times;
+    samples.values.clear();
+    if (times.empty())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MFnTransform transformFn(targetPath, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MEulerRotation currentEulerRotation;
+    status = transformFn.getRotation(currentEulerRotation);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MFnDependencyNode targetNodeFn(targetPath.node(), &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MPlug rotateXPlug = targetNodeFn.findPlug("rotateX", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug rotateYPlug = targetNodeFn.findPlug("rotateY", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+    MPlug rotateZPlug = targetNodeFn.findPlug("rotateZ", true, &status);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    for (double time : times)
+    {
+        double x = 0.0;
+        double y = 0.0;
+        double z = 0.0;
+        status = SampleLayerPlugValue(layerName, rotateXPlug, time, x);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = SampleLayerPlugValue(layerName, rotateYPlug, time, y);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+        status = SampleLayerPlugValue(layerName, rotateZPlug, time, z);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+
+        MEulerRotation eulerRotation(x, y, z);
+        eulerRotation.reorderIt(currentEulerRotation.order);
+        samples.values.push_back(eulerRotation.asQuaternion());
     }
 
     return MS::kSuccess;
@@ -465,6 +844,54 @@ MStatus AnimationImporter::buildSourceDeltaQuaternionSamples(
             const MQuaternion referenceValue = slerp(firstValue, lastValue, t);
             samples.values[sampleIndex] = samples.values[sampleIndex] * referenceValue.inverse();
         }
+        return MS::kSuccess;
+    }
+
+    if (settings.useClip && !IsEmptyLayerName(settings.sceneClipName))
+    {
+        QuaternionAnimationSamples referenceSamples;
+        status = buildSceneLayerQuaternionSamples(MString(settings.sceneClipName.c_str()), targetPath, samples.times, referenceSamples);
+        if (!status || referenceSamples.values.empty() || referenceSamples.values.size() != samples.values.size())
+        {
+            return maya_dmx::ReportError(MString("maya_dmx: sourceDelta scene layer was not usable: ") + settings.sceneClipName.c_str());
+        }
+
+        for (size_t sampleIndex = 0; sampleIndex < samples.values.size(); ++sampleIndex)
+        {
+            if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
+            {
+                samples.values[sampleIndex] = referenceSamples.values[sampleIndex].inverse() * samples.values[sampleIndex];
+            }
+            else
+            {
+                samples.values[sampleIndex] = samples.values[sampleIndex] * referenceSamples.values[sampleIndex].inverse();
+            }
+        }
+
+        return MS::kSuccess;
+    }
+
+    if (settings.referenceClipName.empty())
+    {
+        QuaternionAnimationSamples referenceSamples;
+        status = buildSceneReferenceQuaternionSamples(targetPath, samples.times, referenceSamples);
+        if (!status || referenceSamples.values.empty() || referenceSamples.values.size() != samples.values.size())
+        {
+            return maya_dmx::ReportError("maya_dmx: sourceDelta reference scene samples were missing.");
+        }
+
+        for (size_t sampleIndex = 0; sampleIndex < samples.values.size(); ++sampleIndex)
+        {
+            if (settings.mode == dcc_import_policy::SourceDeltaMode::PreSubtract)
+            {
+                samples.values[sampleIndex] = referenceSamples.values[sampleIndex].inverse() * samples.values[sampleIndex];
+            }
+            else
+            {
+                samples.values[sampleIndex] = samples.values[sampleIndex] * referenceSamples.values[sampleIndex].inverse();
+            }
+        }
+
         return MS::kSuccess;
     }
 

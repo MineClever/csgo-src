@@ -52,6 +52,8 @@ struct SceneImportPolicy
     AnimationImportMode animationImportMode = AnimationImportMode::None;
     std::string animationLayerName;
     SourceDeltaMode sourceDeltaMode = SourceDeltaMode::None;
+    bool sourceDeltaUseClip = false;
+    std::string sourceDeltaClip;
     std::string sourceDeltaReferenceClip;
     std::string sourceDeltaTargetClip;
     int sourceDeltaReferenceFrame = 0;
@@ -185,6 +187,16 @@ inline SceneImportPolicy ParseSceneImportPolicy(const std::unordered_map<std::st
         {
             policy.sourceDeltaMode = SourceDeltaMode::SplineDelta;
         }
+    }
+
+    policy.sourceDeltaUseClip =
+        ParseBoolOption(optionMap, "sourcedeltauseclip", false) ||
+        ParseBoolOption(optionMap, "sourceclip", false);
+
+    auto sourceDeltaClipIt = optionMap.find("sourcedeltaclip");
+    if (sourceDeltaClipIt != optionMap.end())
+    {
+        policy.sourceDeltaClip = sourceDeltaClipIt->second;
     }
 
     auto sourceDeltaReferenceClipIt = optionMap.find("sourcedeltareferenceclip");

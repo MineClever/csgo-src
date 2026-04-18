@@ -194,6 +194,9 @@
     - importer 已支持 `DmeVector3Log / DmeQuaternionLog`，可把 `position` / `orientation` 通道写成 Maya `animCurveTL/animCurveTA`；[vcaanim_VertexAnim.dmx](dcc_plugin/samples/MostComplexSampleSet/vcaanim_VertexAnim.dmx) 已验证能导入骨骼平移与旋转关键帧。
     - importer 已支持基础 `DmeFloatLog` 标量动画；[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx) 已验证在 `|float_anim_root|float_anim_joint.scaleX` 上生成 3 个关键帧。
     - importer 已支持最小 `flexWeight` facial 通道：同一条 `DmeFloatLog` 现在可同时驱动已导入 `blendShape` 权重与最小 `DmeCombinationOperator` 控制节点属性；[simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 已验证会同时生成 `combinationOperator_controls.smile` 与 `blendshapeAnimMeshShape_blendShape.smile` 两条 3 帧动画曲线。
+    - 2026-04-18 已补齐 DMX/SMD source delta 的 `Use Clip` 布尔选项与 scene animation layer reference 入口；当 `Use Clip` 关闭时，reference 仍回退到当前场景状态。对应的回归样例已加入 `simple_source_delta_overlay.dmx`、`simple_source_delta_overlay_scene_reference.dmx`、`simple_source_delta_base.smd`、`simple_source_delta_overlay.smd`，并已用 `mayapy` 跑通三条新增 case。运行时会有 `VaccineKiller.mod` 的外部权限警告，但未阻塞回归结果。
+    - 2026-04-18 补充修正：当 `Use Clip` 启用时，`Target Clip` 现在会被禁用并清空，`Reference Frame` 保持可编辑；`Scene Clip` 下拉改为直接列出当前场景可用的动画层，避免 UI 中出现错误的 `menuItem` 占位文本。
+    - 2026-04-18 进一步同步 SMD SourceDelta UI：新增 `Use Clip`、`Scene Clip` 与 `Reference Frame`，其中 `Use Clip` 可切换为使用当前场景动画层作为参考；SMD 不引入文件内 `Target Clip` 语义，但会与 DMX 保持一致的联动与持久化方式。已对 `simple_source_delta_overlay.smd` 做 MEL 载入检查与回归验证。
     - exporter 已开始补最小动画导出。当前 [DmxExportTranslator.cpp](dcc_plugin/src/exporter/DmxExportTranslator.cpp) 已支持导出单个 `animationList`，覆盖 `position`、`orientation`、transform 标量通道以及最小 `flexWeight` 通道；私有 binary serializer 也已补上 `time/time_array`。用 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 实测时，[simple_float_animation.dmx](dcc_plugin/samples/simple_float_animation.dmx) 的 text/binary 动画 roundtrip 已通过。
     - translator 结构拆分已开始：（旧 DmxExportTextModel 已删除，见下）把 importer 的 DMX 查询、数值解析和命名清洗 helper 拆到 [DmxImportUtils.h](dcc_plugin/src/importer/DmxImportUtils.h) / [DmxImportUtils.cpp](dcc_plugin/src/importer/DmxImportUtils.cpp)，为后续继续拆 animation / mesh / material / skin 逻辑打基础。
     - 第二轮 translator 拆分已把 animation 相关 context/option 结构与 helper 群从主文件移出：新增 [DmxExportTranslatorTypes.h](dcc_plugin/src/exporter/DmxExportTranslatorTypes.h)、[DmxExportAnimation.hpp](dcc_plugin/src/exporter/DmxExportAnimation.hpp)、[DmxImportTranslatorTypes.h](dcc_plugin/src/importer/DmxImportTranslatorTypes.h)、[DmxImportAnimation.hpp](dcc_plugin/src/importer/DmxImportAnimation.hpp)，当前主 translator 已明显收缩，动画导入导出逻辑可在不触碰 mesh/skin 主流程的前提下继续迭代。
@@ -973,9 +976,12 @@
       - 完整重建 `maya_dmx / maya_smd` 通过。
       - 在真实 `mayapy` 下，用 `ctm_fbi.smd` 作为基础场景，再以 `useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=lineardelta` 导入 `ctm_fbi_anims/rom_skin.smd`，已确认会生成 `rom_skin_smd_source_delta`。
       - 对 `|pelvis.translateX` 与 `|pelvis.rotateX` 的 layer curve 逐项检查后，当前满足“首尾关键帧归零、中间关键帧非零”，说明 SMD source delta 的最小 layer 写入路径已经工作。
-    - 当前残余：
+      - 当前残余：
       - SMD 侧还没有像 DMX 那样补入“可重建绝对结果”的 subtract / presubtract 参考 clip 机制。
       - UI 这轮只补到 file-specific options 和 MEL option box，尚未单独增加更高层 workflow/preset 封装。
+  - 2026-04-18：任务同步（DMX/SMD Source delta 参考源回退与 Layer Replace 收口）。已把 DMX 的 `sourceDeltaReferenceClip` 调整为可选项：留空时，transform delta 会直接以当前场景状态作为 reference；SMD 侧也补上了 `Subtract / PreSubtract` 入口，并在没有 file clip 的情况下复用当前场景 state 作为 reference。对应的 DMX/SMD MEL 文案已同步更新，SMD delta 菜单也不再只暴露 `Linear Delta / Spline Delta`。同时复核 `animationLayerMode=replace` 路径仍是先删除同名 `animLayer` 再重新创建，`maya_dmx / maya_smd` 的 Release 构建已通过。
+  - 2026-04-18：回归样例补充。已新增 `simple_source_delta_overlay_scene_reference.dmx`、`simple_source_delta_base.smd` 与 `simple_source_delta_overlay.smd`，并把 [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 的 source-delta gate 扩成两条路径：一条覆盖 DMX 文件内 reference clip，另一条覆盖 DMX/SMD 在 reference 为空时回退到当前场景状态的行为。
+  - 2026-04-18：继续补强 SMD source delta 回归。已新增 `simple_source_delta_overlay_scene_reference.smd`，专门覆盖 `Use Clip` 启用时从场景动画层取 reference 的路径；回归 gate 也改为直接检查 source-delta layer 上的 curve 输出值，避免 composed plug 结果干扰差值校验。`simple_source_delta_overlay.smd` 与新样例已在 `mayapy` 下通过验证。
   - 2026-04-13：已复核 SourceEngine / studiomdl 对 delta animation 的真实处理方式，并据此修正插件当前语义表述：
     - Source 侧结论：
       - 原始 DMX `DmeAnimationList / DmeChannelsClip / DmeChannel / Dme*Log` 在 `studiomdl` 读入阶段先被当作绝对通道求值得到逐帧骨骼 pose；见 [dmxsupport.cpp](src/utils/studiomdl/dmxsupport.cpp) 的 `LoadAnimations()` / `ComputeFramePose()`。

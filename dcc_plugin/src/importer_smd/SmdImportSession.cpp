@@ -175,7 +175,7 @@ MStatus SmdImportSession::Run()
     }
     if (dcc_import_policy::UsesSourceDeltaImport(importOptions.scenePolicy))
     {
-        maya_smd::ReportWarning("maya_smd: sourceDelta for SMD currently only supports transform channels with lineardelta/splinedelta and always writes into a Maya animation layer.");
+        maya_smd::ReportWarning("maya_smd: sourceDelta for SMD writes transform channels into a Maya animation layer; subtract / preSubtract use the current scene state by default, and Use Clip can sample a scene animation layer reference with the configured Reference Frame.");
     }
 
     SmdSceneImporter importer(document, normalizedImportOptions);
@@ -206,12 +206,6 @@ SmdImportOptions SmdImportSession::parseOptions() const
     if (dcc_import_policy::UsesSourceDeltaImport(parsedOptions.scenePolicy))
     {
         parsedOptions.scenePolicy.importAnimationToLayer = true;
-        if (parsedOptions.scenePolicy.sourceDeltaMode != dcc_import_policy::SourceDeltaMode::LinearDelta &&
-            parsedOptions.scenePolicy.sourceDeltaMode != dcc_import_policy::SourceDeltaMode::SplineDelta)
-        {
-            maya_smd::ReportWarning("maya_smd: sourceDelta currently only supports lineardelta and splinedelta for SMD import; subtract/presubtract will be ignored.");
-            parsedOptions.scenePolicy.sourceDeltaMode = dcc_import_policy::SourceDeltaMode::None;
-        }
     }
     if (parsedOptions.scenePolicy.importAnimationToLayer && parsedOptions.scenePolicy.animationLayerName.empty())
     {

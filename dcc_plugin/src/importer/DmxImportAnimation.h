@@ -55,6 +55,8 @@ private:
     struct SourceDeltaSettings
     {
         dcc_import_policy::SourceDeltaMode mode = dcc_import_policy::SourceDeltaMode::None;
+        bool useClip = false;
+        std::string sceneClipName;
         std::string referenceClipName;
         std::string targetClipName;
         int referenceFrame = 0;
@@ -87,6 +89,24 @@ private:
         const simple_dmx::Element *targetElement,
         const MDagPath &targetPath,
         const SourceDeltaSettings &settings,
+        QuaternionAnimationSamples &samples) const;
+    MStatus buildSceneLayerVector3Samples(
+        const MString &layerName,
+        const MDagPath &targetPath,
+        const std::vector<double> &times,
+        Vector3AnimationSamples &samples) const;
+    MStatus buildSceneLayerQuaternionSamples(
+        const MString &layerName,
+        const MDagPath &targetPath,
+        const std::vector<double> &times,
+        QuaternionAnimationSamples &samples) const;
+    MStatus buildSceneReferenceVector3Samples(
+        const MDagPath &targetPath,
+        const std::vector<double> &times,
+        Vector3AnimationSamples &samples) const;
+    MStatus buildSceneReferenceQuaternionSamples(
+        const MDagPath &targetPath,
+        const std::vector<double> &times,
         QuaternionAnimationSamples &samples) const;
     MStatus setCurveKeys(
         const MPlug &plug,

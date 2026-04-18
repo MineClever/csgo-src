@@ -854,6 +854,36 @@ MStatus ClearAnimationLayerCurve(
     return MS::kSuccess;
 }
 
+MStatus FindAnimationLayerCurvesForPlug(
+    const MString &layerName,
+    const MPlug &plug,
+    MStringArray &curveNames)
+{
+    curveNames.clear();
+    if (layerName.length() == 0 || plug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MString nodeName;
+    MString attributeName;
+    MString fullPlugName;
+    MStatus status = ResolvePlugCommandNames(plug, nodeName, attributeName, fullPlugName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MString queryCommand("animLayer -q -findCurveForPlug \"");
+    queryCommand += fullPlugName;
+    queryCommand += "\" \"";
+    queryCommand += layerName;
+    queryCommand += "\"";
+
+    status = MGlobal::executeCommand(queryCommand, curveNames, false, false);
+    return status ? MS::kSuccess : MS::kFailure;
+}
+
 MStatus SetKeyframesOnAnimationLayer(
     const MString &layerName,
     const MPlug &plug,

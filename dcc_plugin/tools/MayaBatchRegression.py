@@ -246,6 +246,39 @@ SOURCE_DELTA_IMPORT_GATE_EXPECTATIONS = {
         ],
         "sample_times": [0.0, 0.5, 1.0],
     },
+    "simple_source_delta_overlay_scene_reference": {
+        "base_case": "simple_source_delta_base.dmx",
+        "baseline_import_options": "useSceneRoot=1;importMode=create",
+        "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract;sourceDeltaTargetClip=overlay_pose;sourceDeltaReferenceFrame=0",
+        "layer_name": "simple_source_delta_overlay_scene_reference_dmx_source_delta",
+        "compare_plugs": [
+            "|source_delta_joint.translateX",
+            "|source_delta_joint.rotateZ",
+        ],
+        "sample_times": [0.0, 0.5, 1.0],
+    },
+    "simple_source_delta_overlay.smd": {
+        "base_case": "simple_source_delta_base.smd",
+        "baseline_import_options": "useSceneRoot=1;importMode=create",
+        "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract",
+        "layer_name": "simple_source_delta_overlay_smd_source_delta",
+        "compare_plugs": [
+            "|source_delta_joint.translateX",
+            "|source_delta_joint.rotateZ",
+        ],
+        "sample_times": [0.0, 1.0, 2.0],
+    },
+    "simple_source_delta_overlay_scene_reference.smd": {
+        "base_case": "simple_source_delta_base.smd",
+        "baseline_import_options": "useSceneRoot=1;importMode=create;importAnimationToLayer=1;animationLayerMode=new",
+        "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract;sourceDeltaUseClip=1;sourceDeltaClip=simple_source_delta_base_smd_layer;sourceDeltaReferenceFrame=0",
+        "layer_name": "simple_source_delta_overlay_scene_reference_smd_source_delta",
+        "compare_plugs": [
+            "|source_delta_joint.translateX",
+            "|source_delta_joint.rotateZ",
+        ],
+        "sample_times": [0.0, 1.0, 2.0],
+    },
 }
 
 
@@ -1261,6 +1294,34 @@ def validate_source_delta_import_gate(cmds, plugin_paths_by_format, sample_dir, 
             values[plug] = plug_values
         return values
 
+    def _sample_layer_curve_outputs(layer_name, plug_name, times):
+        curve_names = cmds.animLayer(layer_name, query=True, findCurveForPlug=plug_name) or []
+        if isinstance(curve_names, str):
+            curve_names = [curve_names]
+        if len(curve_names) != 1:
+            raise RuntimeError(
+                f"Source delta gate failed for {normalized_case_name}. "
+                f"expected a single curve for plug {plug_name} on layer {layer_name}, got {curve_names}"
+            )
+
+        curve_name = curve_names[0]
+        if not cmds.objExists(curve_name):
+            raise RuntimeError(
+                f"Source delta gate failed for {normalized_case_name}. "
+                f"missing source-delta curve: {curve_name}"
+            )
+
+        values = []
+        for time_value in times:
+            cmds.currentTime(f"{time_value}sec", edit=True)
+            value = cmds.getAttr(curve_name + ".output")
+            if isinstance(value, (list, tuple)):
+                value = value[0]
+            if isinstance(value, (list, tuple)):
+                value = value[0]
+            values.append(float(value))
+        return values
+
     direct_import_kwargs = dict(
         i=True,
         type=format_config["import_type"],
@@ -1274,7 +1335,12 @@ def validate_source_delta_import_gate(cmds, plugin_paths_by_format, sample_dir, 
     cmds.file(new=True, force=True)
     ensure_plugins_loaded(cmds, [plugin_path])
     cmds.file(input_path, **direct_import_kwargs)
-    direct_values = _sample_plugs(expectation["compare_plugs"], expectation["sample_times"])
+    input_values = _sample_plugs(expectation["compare_plugs"], expectation["sample_times"])
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, [plugin_path])
+    cmds.file(base_input_path, **direct_import_kwargs)
+    baseline_values = _sample_plugs(expectation["compare_plugs"], expectation["sample_times"])
 
     cmds.file(new=True, force=True)
     ensure_plugins_loaded(cmds, [plugin_path])
@@ -1296,13 +1362,28 @@ def validate_source_delta_import_gate(cmds, plugin_paths_by_format, sample_dir, 
             f"missing expected source-delta animation layer: {expectation['layer_name']}"
         )
 
-    delta_values = _sample_plugs(expectation["compare_plugs"], expectation["sample_times"])
+    layer_curves = cmds.animLayer(expectation["layer_name"], query=True, animCurves=True) or []
+    if len(layer_curves) < len(expectation["compare_plugs"]):
+        raise RuntimeError(
+            f"Source delta gate failed for {normalized_case_name}. "
+            f"insufficient animCurves were attached to source-delta layer: {expectation['layer_name']} curves={layer_curves}"
+        )
+
+    delta_mode = expectation["delta_import_options"].lower()
+    expect_pre_subtract = "sourcedeltamode=presubtract" in delta_mode
     for plug in expectation["compare_plugs"]:
-        for baseline_value, delta_value, time_value in zip(direct_values[plug], delta_values[plug], expectation["sample_times"]):
-            if abs(baseline_value - delta_value) > 1.0e-5:
+        layer_values = _sample_layer_curve_outputs(expectation["layer_name"], plug, expectation["sample_times"])
+        for direct_value, baseline_value, layer_value, time_value in zip(
+            input_values[plug],
+            baseline_values[plug],
+            layer_values,
+            expectation["sample_times"],
+        ):
+            expected_value = baseline_value - direct_value if expect_pre_subtract else direct_value - baseline_value
+            if abs(expected_value - layer_value) > 1.0e-5:
                 raise RuntimeError(
                     f"Source delta gate failed for {normalized_case_name}. "
-                    f"value mismatch on {plug} at time {time_value}: baseline={baseline_value} delta={delta_value}"
+                    f"value mismatch on {plug} at time {time_value}: expected={expected_value} layer={layer_value}"
                 )
 
 
