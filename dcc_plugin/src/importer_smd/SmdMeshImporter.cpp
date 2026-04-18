@@ -591,14 +591,6 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
         }
     }
 
-    MIntArray lockedFaceIds = normalFaceIds;
-    MIntArray lockedVertexIds = normalVertexIds;
-    status = meshFn.lockFaceVertexNormals(lockedFaceIds, lockedVertexIds);
-    if (!status)
-    {
-        return maya_smd::ReportError(MString("maya_smd: failed to lock normals for material group ") + materialName.c_str(), status);
-    }
-
     return MS::kSuccess;
 }
 
