@@ -1,4 +1,4 @@
-add_library(maya_dmx_workflow STATIC
+add_library(maya_workflow_dmx STATIC
     BatchManifestStore.cpp
     BatchManifestStore.h
     MayaDmxWorkflow.cpp
@@ -13,5 +13,5 @@ add_library(maya_dmx_workflow STATIC
     WorkflowSupport.h
 )
 
-target_link_libraries(maya_dmx_workflow PUBLIC maya_dmx_common)
-maya_dmx_apply_common_target_settings(maya_dmx_workflow)
+target_link_libraries(maya_workflow_dmx PUBLIC maya_common_dmx)
+maya_dmx_apply_common_target_settings(maya_workflow_dmx)

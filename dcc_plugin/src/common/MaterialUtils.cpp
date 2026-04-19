@@ -174,4 +174,98 @@ MStatus AssignFacesToShadingGroup(
     return maya_cmd::AddComponentToSet(meshPath, faceComponent, shadingGroupObject);
 }
 
+MStatus AssignFileTextureToPlug(
+    const MString &fileNodeName,
+    const MString &texturePath,
+    const MPlug &destinationPlug,
+    bool useAlphaOutput)
+{
+    if (texturePath.length() == 0 || destinationPlug.isNull())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MObject fileNodeObject = EnsureDependencyNodeOfType("file", fileNodeName, status);
+    if (!status || fileNodeObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MFnDependencyNode fileNodeFn(fileNodeObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug fileTextureNamePlug = fileNodeFn.findPlug("fileTextureName", true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+    status = fileTextureNamePlug.setString(texturePath);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug outputPlug = fileNodeFn.findPlug(useAlphaOutput ? "outAlpha" : "outColor", true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    return maya_cmd::ConnectPlugsForce(outputPlug, destinationPlug);
+}
+
+MStatus AssignNormalTextureToShader(
+    const MString &shaderBaseName,
+    const MString &texturePath,
+    const MPlug &normalCameraPlug)
+{
+    if (texturePath.length() == 0 || normalCameraPlug.isNull())
+    {
+        return MS::kSuccess;
+    }
+
+    MStatus status;
+    MObject bumpNodeObject = EnsureDependencyNodeOfType("bump2d", shaderBaseName + "_normalBump", status);
+    if (!status || bumpNodeObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MFnDependencyNode bumpNodeFn(bumpNodeObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug bumpInterpPlug = bumpNodeFn.findPlug("bumpInterp", true, &status);
+    if (status)
+    {
+        bumpInterpPlug.setInt(1);
+    }
+
+    MPlug bumpValuePlug = bumpNodeFn.findPlug("bumpValue", true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    status = AssignFileTextureToPlug(shaderBaseName + "_normalFile", texturePath, bumpValuePlug, true);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug outNormalPlug = bumpNodeFn.findPlug("outNormal", true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    return maya_cmd::ConnectPlugsForce(outNormalPlug, normalCameraPlug);
+}
+
 } // namespace dcc_material

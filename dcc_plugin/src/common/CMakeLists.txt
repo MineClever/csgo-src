@@ -1,34 +1,20 @@
-add_library(maya_dmx_serialization STATIC
-    SimpleDmxBinary.cpp
-    SimpleDmxBinary.h
-    SimpleDmxDocument.cpp
-    SimpleDmxDocument.h
-    SimpleDmxText.cpp
-    SimpleDmxText.h
-    SimpleDmxTypes.cpp
-    SimpleDmxTypes.h
-    SimpleDmxWrite.cpp
-    SimpleDmxWrite.h
-)
-
-maya_dmx_apply_common_target_settings(maya_dmx_serialization)
-
-add_library(maya_dmx_common STATIC
+add_library(maya_common STATIC
     AnimationCurveUtils.cpp
     AnimationCurveUtils.h
     AnimationSampleUtils.cpp
     AnimationSampleUtils.h
+    ExportAnimationUtils.cpp
+    ExportAnimationUtils.h
     ImportTransformCorrection.cpp
     ImportTransformCorrection.h
+    MaterialExportUtils.cpp
+    MaterialExportUtils.h
     MaterialUtils.cpp
     MaterialUtils.h
     MayaCommandUtils.cpp
     MayaCommandUtils.h
-    MayaDmxCommon.cpp
-    MayaDmxCommon.h
     SkinClusterUtils.cpp
     SkinClusterUtils.h
 )
 
-target_link_libraries(maya_dmx_common PUBLIC maya_dmx_serialization)
-maya_dmx_apply_common_target_settings(maya_dmx_common)
+maya_dmx_apply_common_target_settings(maya_common)

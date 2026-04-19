@@ -1,6 +1,6 @@
 #include "WorkflowExecutor.h"
 
-#include <common/MayaDmxCommon.h>
+#include <common_dmx/MayaDmxCommon.h>
 #include "BatchManifestStore.h"
 #include "WorkflowSupport.h"
 

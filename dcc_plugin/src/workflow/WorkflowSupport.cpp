@@ -1,7 +1,7 @@
 #include "WorkflowSupport.h"
 
 #include <common/MayaCommandUtils.h>
-#include <common/MayaDmxCommon.h>
+#include <common_dmx/MayaDmxCommon.h>
 
 #include <maya/MGlobal.h>
 

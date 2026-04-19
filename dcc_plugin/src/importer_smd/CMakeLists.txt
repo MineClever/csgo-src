@@ -1,4 +1,4 @@
-add_library(maya_smd_import STATIC
+add_library(maya_import_smd STATIC
     SmdAnimationImporter.cpp
     SmdAnimationImporter.h
     SmdMeshImporter.cpp
@@ -15,5 +15,5 @@ add_library(maya_smd_import STATIC
     SmdImportTranslator.h
 )
 
-target_link_libraries(maya_smd_import PUBLIC maya_smd_common)
-maya_dmx_apply_common_target_settings(maya_smd_import)
+target_link_libraries(maya_import_smd PUBLIC maya_common_smd)
+maya_dmx_apply_common_target_settings(maya_import_smd)

@@ -2,7 +2,7 @@ add_executable(maya_dmx_sample_tool
     DmxSampleTool.cpp
 )
 
-target_link_libraries(maya_dmx_sample_tool PRIVATE maya_dmx_serialization)
+target_link_libraries(maya_dmx_sample_tool PRIVATE maya_serialization_dmx)
 maya_dmx_apply_common_target_settings(maya_dmx_sample_tool)
 
 set_target_properties(maya_dmx_sample_tool PROPERTIES

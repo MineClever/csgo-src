@@ -1,4 +1,4 @@
-add_library(maya_smd_export STATIC
+add_library(maya_export_smd STATIC
     SmdSceneExporter.cpp
     SmdSceneExporter.h
     SmdExportSession.cpp
@@ -7,5 +7,5 @@ add_library(maya_smd_export STATIC
     SmdExportTranslator.h
 )
 
-target_link_libraries(maya_smd_export PUBLIC maya_smd_common)
-maya_dmx_apply_common_target_settings(maya_smd_export)
+target_link_libraries(maya_export_smd PUBLIC maya_common_smd)
+maya_dmx_apply_common_target_settings(maya_export_smd)

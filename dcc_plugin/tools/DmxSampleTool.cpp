@@ -1,5 +1,5 @@
-#include <common/SimpleDmxText.h>
-#include <common/SimpleDmxWrite.h>
+#include <common_dmx/SimpleDmxText.h>
+#include <common_dmx/SimpleDmxWrite.h>
 
 #include <fstream>
 #include <iostream>

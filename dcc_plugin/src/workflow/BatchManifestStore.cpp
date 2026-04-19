@@ -1,6 +1,6 @@
 #include "BatchManifestStore.h"
 
-#include <common/MayaDmxCommon.h>
+#include <common_dmx/MayaDmxCommon.h>
 #include "WorkflowSupport.h"
 
 #include <maya/MGlobal.h>

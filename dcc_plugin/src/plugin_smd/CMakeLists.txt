@@ -1,11 +1,11 @@
-add_library(maya_smd MODULE
+add_library(maya_plugin_smd MODULE
     PluginMain.cpp
 )
 
-target_link_libraries(maya_smd PRIVATE
-    maya_smd_common
-    maya_smd_import
-    maya_smd_export
+target_link_libraries(maya_plugin_smd PRIVATE
+    maya_common_smd
+    maya_import_smd
+    maya_export_smd
 )
 
-maya_dmx_configure_plugin_target(maya_smd maya_smd)
+maya_dmx_configure_plugin_target(maya_plugin_smd maya_smd)
