@@ -67,7 +67,7 @@ set MAYA_SKIP_USERSETUP_PY=1
     --plugin-smd "%SMD_PLUGIN_BINARY%" ^
     --samples "%SAMPLE_DIR%" ^
     --output "%OUTPUT_DIR%" ^
-    --cases simple_hierarchy simple_blendshape simple_mesh simple_skinned_mesh complex_chr_mesh MostComplexSampleSet/chr_mesh simple_ngon_mesh MostComplexSampleSet/vcaanim_VertexAnim simple_float_animation simple_blendshape_animation MostComplexSampleSet/chr_mesh.smd MostComplexSampleSet/vcaanim_VertexAnim.smd Ellis/DMX/RAGDOLL.smd ctm_fbi/ctm_fbi.smd ctm_fbi/ctm_fbi_physics.smd ctm_fbi/ctm_fbi_w_ct_base_glove.smd ctm_fbi/ctm_fbi_anims/default.smd ctm_fbi/ctm_fbi_anims/ragdoll.smd ctm_fbi/ctm_fbi_anims/rom_skin.smd ctm_fbi/ctm_fbi_anims/shield_deploy.smd Ellis/DMX/animation/c1m1_intro_mechanic.dmx
+    --cases simple_hierarchy simple_blendshape simple_mesh simple_skinned_mesh complex_chr_mesh MostComplexSampleSet/chr_mesh simple_ngon_mesh MostComplexSampleSet/vcaanim_VertexAnim simple_float_animation simple_blendshape_animation simple_source_delta_overlay simple_source_delta_overlay_scene_reference simple_source_delta_overlay.smd simple_source_delta_overlay_scene_reference.smd MostComplexSampleSet/chr_mesh.smd MostComplexSampleSet/vcaanim_VertexAnim.smd Ellis/DMX/RAGDOLL.smd ctm_fbi/ctm_fbi.smd ctm_fbi/ctm_fbi_physics.smd ctm_fbi/ctm_fbi_w_ct_base_glove.smd ctm_fbi/ctm_fbi_anims/default.smd ctm_fbi/ctm_fbi_anims/ragdoll.smd ctm_fbi/ctm_fbi_anims/rom_skin.smd ctm_fbi/ctm_fbi_anims/shield_deploy.smd Ellis/DMX/animation/c1m1_intro_mechanic.dmx Ellis/DMX/animation/c2m1_mechanic_intro.dmx Ellis/DMX/animation/c5m1_intro_mechanic.dmx humans_sdk/male_sdk/male_06_expressions.vta
 if errorlevel 1 (
     echo.
     echo Maya batch regression failed.

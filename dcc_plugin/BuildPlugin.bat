@@ -62,7 +62,7 @@ echo.
 echo Building plugin...
 echo. >> "%BUILD_LOG%"
 echo [BUILD] cmake --build "%BUILD_DIR%" --config %CONFIG% >> "%BUILD_LOG%"
-cmake --build "%BUILD_DIR%" --config %CONFIG% --target maya_dmx maya_smd >> "%BUILD_LOG%" 2>&1
+cmake --build "%BUILD_DIR%" --config %CONFIG% >> "%BUILD_LOG%" 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo ERROR: Build failed. See "%BUILD_LOG%"

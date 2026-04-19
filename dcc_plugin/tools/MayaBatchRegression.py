@@ -92,6 +92,27 @@ ANIMATION_GATE_EXPECTATIONS = {
             [".rotateX", ".rotateY", ".rotateZ"],
         ],
     },
+    "Ellis/DMX/animation/c1m1_intro_mechanic.dmx": {
+        "min_animated_plugs": 2,
+        "required_any_suffix_groups": [
+            [".translateX", ".translateY", ".translateZ"],
+            [".rotateX", ".rotateY", ".rotateZ"],
+        ],
+    },
+    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx": {
+        "min_animated_plugs": 2,
+        "required_any_suffix_groups": [
+            [".translateX", ".translateY", ".translateZ"],
+            [".rotateX", ".rotateY", ".rotateZ"],
+        ],
+    },
+    "Ellis/DMX/animation/c5m1_intro_mechanic.dmx": {
+        "min_animated_plugs": 2,
+        "required_any_suffix_groups": [
+            [".translateX", ".translateY", ".translateZ"],
+            [".rotateX", ".rotateY", ".rotateZ"],
+        ],
+    },
 }
 
 APPEND_GATE_EXPECTATIONS = {
@@ -173,6 +194,24 @@ PAIRED_UPDATE_GATE_EXPECTATIONS = {
             "|ValveBiped_Bip01_Pelvis.rotateX",
         ],
     },
+    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx": {
+        "base_case": "Ellis/DMX/mechanic_model.dmx",
+        "base_import_options": "useSceneRoot=1;importMode=create",
+        "update_import_options": "useSceneRoot=1;importMode=update",
+        "required_animated_plugs": [
+            "|ValveBiped_Bip01_Pelvis.translateX",
+            "|ValveBiped_Bip01_Pelvis.rotateX",
+        ],
+    },
+    "Ellis/DMX/animation/c5m1_intro_mechanic.dmx": {
+        "base_case": "Ellis/DMX/mechanic_model.dmx",
+        "base_import_options": "useSceneRoot=1;importMode=create",
+        "update_import_options": "useSceneRoot=1;importMode=update",
+        "required_animated_plugs": [
+            "|ValveBiped_Bip01_Pelvis.translateX",
+            "|ValveBiped_Bip01_Pelvis.rotateX",
+        ],
+    },
 }
 
 SKIN_INFLUENCE_UPDATE_GATE_EXPECTATIONS = {
@@ -221,6 +260,22 @@ ANIMATION_LAYER_IMPORT_GATE_EXPECTATIONS = {
         "base_import_options": "useSceneRoot=1;importMode=create",
         "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
         "layer_name": "c1m1_intro_mechanic_dmx_layer",
+        "base_plug": "|ValveBiped_Bip01_Pelvis.translateX",
+        "min_curve_count": 6,
+    },
+    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx": {
+        "base_case": "Ellis/DMX/mechanic_model.dmx",
+        "base_import_options": "useSceneRoot=1;importMode=create",
+        "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+        "layer_name": "c2m1_mechanic_intro_dmx_layer",
+        "base_plug": "|ValveBiped_Bip01_Pelvis.translateX",
+        "min_curve_count": 6,
+    },
+    "Ellis/DMX/animation/c5m1_intro_mechanic.dmx": {
+        "base_case": "Ellis/DMX/mechanic_model.dmx",
+        "base_import_options": "useSceneRoot=1;importMode=create",
+        "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+        "layer_name": "c5m1_intro_mechanic_dmx_layer",
         "base_plug": "|ValveBiped_Bip01_Pelvis.translateX",
         "min_curve_count": 6,
     },
