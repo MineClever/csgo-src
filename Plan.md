@@ -1226,6 +1226,27 @@
     - [SmdSourceDeltaProcessor.cpp](dcc_plugin/src/importer_smd/SmdSourceDeltaProcessor.cpp)
     - [AnimationCurveUtils.cpp](dcc_plugin/src/common/AnimationCurveUtils.cpp)
     - [AnimationSampleUtils.cpp](dcc_plugin/src/common/AnimationSampleUtils.cpp)
+  - 2026-04-20 任务同步：
+    - [BuildPlugin.bat](dcc_plugin/BuildPlugin.bat) 已修复当前 VS2022/CMake 组合下的构建失败。原脚本把两个插件目标透传给 `cmake --build ... --target ...` 时会在 MSBuild 侧误落成 `MSB1009`；现已改为直接构建默认 solution 配置，并在真实脚本链路下重新验证 `Release` 构建通过，可稳定产出 `maya_dmx.mll` 与 `maya_smd.mll`。
+    - [RunMayaBatchRegression.bat](dcc_plugin/RunMayaBatchRegression.bat) 的默认完整回归入口已补齐先前未纳入的专项 case：
+      - `simple_source_delta_overlay`
+      - `simple_source_delta_overlay_scene_reference`
+      - `simple_source_delta_overlay.smd`
+      - `simple_source_delta_overlay_scene_reference.smd`
+      - `Ellis/DMX/animation/c1m1_intro_mechanic.dmx`
+      - `Ellis/DMX/animation/c2m1_mechanic_intro.dmx`
+      - `Ellis/DMX/animation/c5m1_intro_mechanic.dmx`
+      - `humans_sdk/male_sdk/male_06_expressions.vta`
+    - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已同步补 gate：
+      - 为 `c1m1_intro_mechanic`、`c2m1_mechanic_intro`、`c5m1_intro_mechanic` 新增复杂 DMX 动画 `ANIMATION_GATE`、`PAIRED_UPDATE_GATE` 与 `ANIMATION_LAYER_IMPORT_GATE`，以 `mechanic_model.dmx` 作为基线收口“真实骨骼动画 + update + animation layer”三条主路径。
+      - 已修正 `MostComplexSampleSet/vcaanim_VertexAnim` 的动画层 gate 期望，使其与当前 `animationOnly` 会强制落到 `sceneRoot` 的行为一致；旧 gate 的 `|vca_arm|pelvis.translateX` 期望已过时，现改为以 `|pelvis.translateX` 为基线。
+    - 已在真实 `mayapy` 宿主下执行完整回归：
+      - `cmd /c dcc_plugin\RunMayaBatchRegression.bat Release`
+      - 结果：通过。
+    - 本轮仍能稳定复现但未阻塞回归通过的 warning：
+      - 部分 `append/update` case 仍会出现 shading set / `materialInfo` rename warning。
+      - `complex_chr_mesh`、`ctm_fbi/ctm_fbi.smd` 的 `skin influence update` 过程中仍会出现 bind pose 缺失 warning。
+      - 宿主环境中的 `VaccineKiller.mod` 权限 warning 仍存在，但本轮默认完整回归未被其阻塞。
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。

@@ -241,10 +241,10 @@ SKIN_CLUSTER_REUSE_GATE_EXPECTATIONS = {
 ANIMATION_LAYER_IMPORT_GATE_EXPECTATIONS = {
     "MostComplexSampleSet/vcaanim_VertexAnim": {
         "base_case": "MostComplexSampleSet/vcaanim_VertexAnim.dmx",
-        "base_import_options": "useSceneRoot=0;importMode=create",
-        "update_import_options": "useSceneRoot=0;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+        "base_import_options": "useSceneRoot=1;importMode=create",
+        "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
         "layer_name": "vcaanim_VertexAnim_dmx_layer",
-        "base_plug": "|vca_arm|pelvis.translateX",
+        "base_plug": "|pelvis.translateX",
         "min_curve_count": 6,
     },
     "ctm_fbi/ctm_fbi_anims/rom_skin.smd": {
