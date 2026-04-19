@@ -56,7 +56,12 @@ MStatus SmdSceneImporter::Import()
         auto jointPathsByBonePtr = std::shared_ptr<const std::unordered_map<int, MDagPath>>(
             &jointPathsByBone_,
             [](const std::unordered_map<int, MDagPath> *) {});
-        SmdMeshImporter meshImporter(document_, jointPathsByBonePtr, importOptions_.scenePolicy, importOptions_.transformCorrection);
+        SmdMeshImporter meshImporter(
+            document_,
+            jointPathsByBonePtr,
+            importOptions_.scenePolicy,
+            importOptions_.transformCorrection,
+            importOptions_.flipUvV);
         status = meshImporter.Import(importRoot_);
         if (!status)
         {

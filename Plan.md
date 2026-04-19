@@ -816,6 +816,8 @@
   - 2026-04-18：当前可直接用 OpenMayaAnim 保留的仅是 `MFnAnimCurve` 这类普通曲线写入；动画层创建、挂接、查曲线仍需要 MEL 过桥，后续若升级到更高 Maya 版本再评估替换。
   - 2026-04-18：帧率自适应不宜默认接入导入流程。DMX 有 `frameRate` / `timeFrame` 元数据，理论上可作为可选覆盖；SMD 只有帧序号，没有可靠 fps 来源。若要切 Maya time unit，应作为显式导入选项而不是自动行为。
   - 2026-04-18：导出侧轴向统一可以评估，但不能直接复用导入侧校正矩阵原样下沉。DMX 当前有显式 `upAxis` UI / optionVar，SMD 导出没有轴向选项；若要统一，需要先抽出一套“导出方向”的校正层，再决定是保留默认输出轴还是彻底移除导出轴向选择。
+  - 2026-04-18：SMD mesh 导入已改为共享几何顶点构建，不再把每个 face-vertex 都展开成独立 mesh vertex；焊点条件同时约束位置、法线连续性、骨骼权重集合和材质分组。UV 仍保持 face-vertex 赋值，但同一共享顶点上的相同 UV 坐标现在会复用同一个 UV id，修复“完全破碎”的 UV seam。
+  - 2026-04-18：SMD 导入已追加 `Animation FPS` 与 `Flip UV V`。`Animation FPS` 在 UI 默认读取当前 Maya 时间单位对应的 FPS，并通过 option 串下沉为 `animationFps`；导入时会先把 SMD frame index 统一换算成当前 UI 时间值，再用于 base curve、animation layer、source delta 采样和播放区间设置，不改全局 time unit。`Flip UV V` 下沉为 `flipUvV`，默认保持旧行为 `1`，关闭后直接使用原始 `v`。宿主回归已通过：在 `film` 时间单位下，`ctm_fbi/ctm_fbi_anims/rom_skin.smd` 默认导入的 key 间隔为 `1.0`，显式 `animationFps=30` 时为 `0.8`；`ctm_fbi/ctm_fbi.smd` 的首个 UV 在 `flipUvV=1/0` 下分别为 `(0.595830, 0.928641)` 与 `(0.595830, 0.071359)`，满足 `Vflip + Vraw = 1.0`。
   - 当前待办：真正的 DMX clip 语义需要单独做 `sequence / animcmd` 对接，并继续收敛 `source delta` / `animation layer` 的验证边界。
 ## 环境与工具链说明
 

@@ -29,6 +29,26 @@ bool IsEmptyLayerName(const std::string &layerName)
     return layerName.empty() || layerName == "None" || layerName == "none";
 }
 
+double ResolveCurrentFramesPerSecond()
+{
+    return MTime(1.0, MTime::kSeconds).as(MTime::uiUnit());
+}
+
+MTime FrameIndexToTime(double frameIndex, double animationFps)
+{
+    if (animationFps > 1.0e-6)
+    {
+        return MTime(frameIndex / animationFps, MTime::kSeconds);
+    }
+
+    return MTime(frameIndex, MTime::uiUnit());
+}
+
+double FrameIndexToUiTimeValue(double frameIndex, double animationFps)
+{
+    return FrameIndexToTime(frameIndex, animationFps).as(MTime::uiUnit());
+}
+
 std::string SanitizeNodeName(std::string value)
 {
     for (char &character : value)

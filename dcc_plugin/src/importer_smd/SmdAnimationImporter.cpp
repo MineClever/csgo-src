@@ -1,4 +1,5 @@
 #include "SmdAnimationImporter.h"
+#include "SmdImportUtils.h"
 
 #include <common/MayaCommandUtils.h>
 #include <common/ImportTransformCorrection.h>
@@ -90,7 +91,9 @@ MStatus SmdAnimationImporter::Apply()
                 correctedRotation = correctionRotation * correctedRotation;
             }
 
-            times.push_back(static_cast<double>(frame.time));
+            times.push_back(smd_import_impl::FrameIndexToUiTimeValue(
+                static_cast<double>(frame.time),
+                importOptions_.animationFps));
             sampledTranslations.push_back(correctedTranslation);
             sampledRotations.push_back(correctedRotation);
         }
@@ -243,9 +246,15 @@ MStatus SmdAnimationImporter::Apply()
         }
     }
 
-    MAnimControl::setMinTime(MTime(static_cast<double>(document_->skeletonFrames.front().time), MTime::uiUnit()));
-    MAnimControl::setMaxTime(MTime(static_cast<double>(document_->skeletonFrames.back().time), MTime::uiUnit()));
-    MAnimControl::setCurrentTime(MTime(static_cast<double>(document_->skeletonFrames.front().time), MTime::uiUnit()));
+    const double startTime = smd_import_impl::FrameIndexToUiTimeValue(
+        static_cast<double>(document_->skeletonFrames.front().time),
+        importOptions_.animationFps);
+    const double endTime = smd_import_impl::FrameIndexToUiTimeValue(
+        static_cast<double>(document_->skeletonFrames.back().time),
+        importOptions_.animationFps);
+    MAnimControl::setMinTime(MTime(startTime, MTime::uiUnit()));
+    MAnimControl::setMaxTime(MTime(endTime, MTime::uiUnit()));
+    MAnimControl::setCurrentTime(MTime(startTime, MTime::uiUnit()));
     return MS::kSuccess;
 }
 

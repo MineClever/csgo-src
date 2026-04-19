@@ -23,6 +23,9 @@ private:
 };
 
 bool IsEmptyLayerName(const std::string &layerName);
+double ResolveCurrentFramesPerSecond();
+MTime FrameIndexToTime(double frameIndex, double animationFps);
+double FrameIndexToUiTimeValue(double frameIndex, double animationFps);
 std::string SanitizeNodeName(std::string value);
 MStatus SetPoseOnObject(
     MObject object,

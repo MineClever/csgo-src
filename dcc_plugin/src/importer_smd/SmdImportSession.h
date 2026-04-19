@@ -11,6 +11,8 @@ struct SmdImportOptions
 {
     dcc_import_transform::TransformCorrection transformCorrection;
     dcc_import_policy::SceneImportPolicy scenePolicy;
+    double animationFps = 0.0;
+    bool flipUvV = true;
 };
 
 class SmdImportSession

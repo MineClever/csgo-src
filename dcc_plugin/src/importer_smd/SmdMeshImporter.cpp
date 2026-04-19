@@ -6,6 +6,8 @@
 
 #include <cctype>
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <string>
@@ -38,6 +40,241 @@
 namespace smd_mesh_import_impl
 {
 constexpr const char *kSmdMaterialNameAttribute = "mayaSmdMaterialName";
+constexpr double kPositionEpsilon = 1.0e-6;
+constexpr double kUvEpsilon = 1.0e-6;
+constexpr double kWeightEpsilon = 1.0e-6;
+constexpr double kNormalContinuityDotThreshold = 0.999;
+
+struct QuantizedPointKey
+{
+    int64_t x = 0;
+    int64_t y = 0;
+    int64_t z = 0;
+
+    bool operator==(const QuantizedPointKey &other) const
+    {
+        return x == other.x && y == other.y && z == other.z;
+    }
+};
+
+struct QuantizedUvKey
+{
+    unsigned int vertexIndex = 0;
+    int64_t u = 0;
+    int64_t v = 0;
+
+    bool operator==(const QuantizedUvKey &other) const
+    {
+        return vertexIndex == other.vertexIndex && u == other.u && v == other.v;
+    }
+};
+
+struct InfluenceSignature
+{
+    std::vector<std::pair<int, double>> entries;
+
+    bool operator==(const InfluenceSignature &other) const
+    {
+        if (entries.size() != other.entries.size())
+        {
+            return false;
+        }
+
+        for (size_t index = 0; index < entries.size(); ++index)
+        {
+            if (entries[index].first != other.entries[index].first ||
+                std::abs(entries[index].second - other.entries[index].second) > kWeightEpsilon)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+};
+
+struct SharedVertexCandidate
+{
+    unsigned int vertexIndex = 0;
+    MPoint point;
+    MVector normal;
+    InfluenceSignature influenceSignature;
+};
+
+struct QuantizedPointKeyHasher
+{
+    size_t operator()(const QuantizedPointKey &key) const
+    {
+        const size_t hx = std::hash<int64_t>()(key.x);
+        const size_t hy = std::hash<int64_t>()(key.y);
+        const size_t hz = std::hash<int64_t>()(key.z);
+        return hx ^ (hy << 1) ^ (hz << 2);
+    }
+};
+
+struct QuantizedUvKeyHasher
+{
+    size_t operator()(const QuantizedUvKey &key) const
+    {
+        const size_t hv = std::hash<unsigned int>()(key.vertexIndex);
+        const size_t hu = std::hash<int64_t>()(key.u);
+        const size_t hvv = std::hash<int64_t>()(key.v);
+        return hv ^ (hu << 1) ^ (hvv << 2);
+    }
+};
+
+int64_t QuantizeValue(double value, double epsilon)
+{
+    return static_cast<int64_t>(std::llround(value / epsilon));
+}
+
+QuantizedPointKey BuildPointKey(const simple_smd::TriangleVertex &vertex)
+{
+    QuantizedPointKey key;
+    key.x = QuantizeValue(vertex.px, kPositionEpsilon);
+    key.y = QuantizeValue(vertex.py, kPositionEpsilon);
+    key.z = QuantizeValue(vertex.pz, kPositionEpsilon);
+    return key;
+}
+
+QuantizedUvKey BuildUvKey(unsigned int vertexIndex, const simple_smd::TriangleVertex &vertex)
+{
+    QuantizedUvKey key;
+    key.vertexIndex = vertexIndex;
+    key.u = QuantizeValue(vertex.u, kUvEpsilon);
+    key.v = QuantizeValue(vertex.v, kUvEpsilon);
+    return key;
+}
+
+std::vector<simple_smd::TriangleWeight> BuildNormalizedWeights(const simple_smd::TriangleVertex &vertex)
+{
+    std::vector<simple_smd::TriangleWeight> normalizedWeights = vertex.links;
+    std::sort(normalizedWeights.begin(), normalizedWeights.end(), [](const simple_smd::TriangleWeight &left, const simple_smd::TriangleWeight &right) {
+        return left.boneIndex < right.boneIndex;
+    });
+
+    std::vector<simple_smd::TriangleWeight> mergedWeights;
+    for (const simple_smd::TriangleWeight &weight : normalizedWeights)
+    {
+        if (weight.weight <= kWeightEpsilon)
+        {
+            continue;
+        }
+
+        if (!mergedWeights.empty() && mergedWeights.back().boneIndex == weight.boneIndex)
+        {
+            mergedWeights.back().weight += weight.weight;
+            continue;
+        }
+
+        mergedWeights.push_back(weight);
+    }
+
+    if (!mergedWeights.empty())
+    {
+        return mergedWeights;
+    }
+
+    if (vertex.parentBoneIndex >= 0)
+    {
+        simple_smd::TriangleWeight rigidWeight;
+        rigidWeight.boneIndex = vertex.parentBoneIndex;
+        rigidWeight.weight = 1.0;
+        mergedWeights.push_back(rigidWeight);
+    }
+
+    return mergedWeights;
+}
+
+InfluenceSignature BuildInfluenceSignature(const simple_smd::TriangleVertex &vertex)
+{
+    InfluenceSignature signature;
+    const std::vector<simple_smd::TriangleWeight> normalizedWeights = BuildNormalizedWeights(vertex);
+    signature.entries.reserve(normalizedWeights.size());
+    for (const simple_smd::TriangleWeight &weight : normalizedWeights)
+    {
+        signature.entries.emplace_back(weight.boneIndex, weight.weight);
+    }
+    return signature;
+}
+
+bool PointsMatch(const MPoint &left, const simple_smd::TriangleVertex &right)
+{
+    return std::abs(left.x - right.px) <= kPositionEpsilon &&
+        std::abs(left.y - right.py) <= kPositionEpsilon &&
+        std::abs(left.z - right.pz) <= kPositionEpsilon;
+}
+
+bool NormalsAreContinuous(const MVector &left, const simple_smd::TriangleVertex &right)
+{
+    MVector rightNormal(right.nx, right.ny, right.nz);
+    const double leftLength = left.length();
+    const double rightLength = rightNormal.length();
+    if (leftLength <= 1.0e-8 || rightLength <= 1.0e-8)
+    {
+        return (left - rightNormal).length() <= 1.0e-4;
+    }
+
+    const double dot = (left / leftLength) * (rightNormal / rightLength);
+    return dot >= kNormalContinuityDotThreshold;
+}
+
+unsigned int ResolveSharedVertexIndex(
+    const simple_smd::TriangleVertex &vertex,
+    const std::vector<simple_smd::TriangleWeight> &normalizedWeights,
+    const InfluenceSignature &influenceSignature,
+    MPointArray &points,
+    std::vector<std::vector<simple_smd::TriangleWeight>> &vertexLinks,
+    std::unordered_map<QuantizedPointKey, std::vector<SharedVertexCandidate>, QuantizedPointKeyHasher> &candidatesByPoint)
+{
+    const QuantizedPointKey pointKey = BuildPointKey(vertex);
+    std::vector<SharedVertexCandidate> &candidates = candidatesByPoint[pointKey];
+    for (const SharedVertexCandidate &candidate : candidates)
+    {
+        if (!(candidate.influenceSignature == influenceSignature) ||
+            !PointsMatch(candidate.point, vertex) ||
+            !NormalsAreContinuous(candidate.normal, vertex))
+        {
+            continue;
+        }
+
+        return candidate.vertexIndex;
+    }
+
+    const unsigned int newVertexIndex = points.length();
+    points.append(vertex.px, vertex.py, vertex.pz);
+    vertexLinks.push_back(normalizedWeights);
+
+    SharedVertexCandidate candidate;
+    candidate.vertexIndex = newVertexIndex;
+    candidate.point = MPoint(vertex.px, vertex.py, vertex.pz);
+    candidate.normal = MVector(vertex.nx, vertex.ny, vertex.nz);
+    candidate.influenceSignature = influenceSignature;
+    candidates.push_back(candidate);
+    return newVertexIndex;
+}
+
+unsigned int ResolveUvIndex(
+    unsigned int sharedVertexIndex,
+    const simple_smd::TriangleVertex &vertex,
+    bool flipUvV,
+    MFloatArray &uValues,
+    MFloatArray &vValues,
+    std::unordered_map<QuantizedUvKey, unsigned int, QuantizedUvKeyHasher> &uvIndexByKey)
+{
+    const QuantizedUvKey uvKey = BuildUvKey(sharedVertexIndex, vertex);
+    auto existingIt = uvIndexByKey.find(uvKey);
+    if (existingIt != uvIndexByKey.end())
+    {
+        return existingIt->second;
+    }
+
+    const unsigned int uvIndex = uValues.length();
+    uValues.append(static_cast<float>(vertex.u));
+    vValues.append(static_cast<float>(flipUvV ? (1.0 - vertex.v) : vertex.v));
+    uvIndexByKey[uvKey] = uvIndex;
+    return uvIndex;
+}
 
 std::string SanitizeMeshName(std::string value)
 {
@@ -353,11 +590,13 @@ SmdMeshImporter::SmdMeshImporter(
     std::shared_ptr<const simple_smd::Document> document,
     std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone,
     dcc_import_policy::SceneImportPolicy scenePolicy,
-    dcc_import_transform::TransformCorrection transformCorrection)
+    dcc_import_transform::TransformCorrection transformCorrection,
+    bool flipUvV)
     : document_(document)
     , jointPathsByBone_(jointPathsByBone)
     , scenePolicy_(std::move(scenePolicy))
     , transformCorrection_(std::move(transformCorrection))
+    , flipUvV_(flipUvV)
 {
 }
 
@@ -402,9 +641,16 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
     MIntArray normalVertexIds;
     MVectorArray normals;
     std::vector<std::vector<simple_smd::TriangleWeight>> vertexLinks;
+    std::unordered_map<
+        smd_mesh_import_impl::QuantizedPointKey,
+        std::vector<smd_mesh_import_impl::SharedVertexCandidate>,
+        smd_mesh_import_impl::QuantizedPointKeyHasher> candidatesByPoint;
+    std::unordered_map<
+        smd_mesh_import_impl::QuantizedUvKey,
+        unsigned int,
+        smd_mesh_import_impl::QuantizedUvKeyHasher> uvIndexByKey;
 
     bool hasWeights = false;
-    int nextVertexIndex = 0;
     int faceIndex = 0;
     for (const simple_smd::Triangle &triangle : document_->triangles)
     {
@@ -417,17 +663,29 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
         for (int vertexInFace = 0; vertexInFace < 3; ++vertexInFace)
         {
             const simple_smd::TriangleVertex &vertex = triangle.vertices[vertexInFace];
-            points.append(vertex.px, vertex.py, vertex.pz);
-            polygonConnects.append(nextVertexIndex);
-            uValues.append(static_cast<float>(vertex.u));
-            vValues.append(static_cast<float>(1.0 - vertex.v));
-            uvIds.append(nextVertexIndex);
+            const std::vector<simple_smd::TriangleWeight> normalizedWeights =
+                smd_mesh_import_impl::BuildNormalizedWeights(vertex);
+            const smd_mesh_import_impl::InfluenceSignature influenceSignature =
+                smd_mesh_import_impl::BuildInfluenceSignature(vertex);
+            const unsigned int sharedVertexIndex = smd_mesh_import_impl::ResolveSharedVertexIndex(
+                vertex,
+                normalizedWeights,
+                influenceSignature,
+                points,
+                vertexLinks,
+                candidatesByPoint);
+            polygonConnects.append(static_cast<int>(sharedVertexIndex));
+            uvIds.append(static_cast<int>(smd_mesh_import_impl::ResolveUvIndex(
+                sharedVertexIndex,
+                vertex,
+                flipUvV_,
+                uValues,
+                vValues,
+                uvIndexByKey)));
             normals.append(MVector(vertex.nx, vertex.ny, vertex.nz));
             normalFaceIds.append(faceIndex);
-            normalVertexIds.append(nextVertexIndex);
-            vertexLinks.push_back(vertex.links);
-            hasWeights = hasWeights || !vertex.links.empty();
-            ++nextVertexIndex;
+            normalVertexIds.append(static_cast<int>(sharedVertexIndex));
+            hasWeights = hasWeights || !normalizedWeights.empty();
         }
         ++faceIndex;
     }

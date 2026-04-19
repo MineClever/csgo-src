@@ -19,7 +19,8 @@ public:
         std::shared_ptr<const simple_smd::Document> document,
         std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone,
         dcc_import_policy::SceneImportPolicy scenePolicy,
-        dcc_import_transform::TransformCorrection transformCorrection);
+        dcc_import_transform::TransformCorrection transformCorrection,
+        bool flipUvV);
 
     MStatus Import(MObject parent) const;
 
@@ -50,4 +51,5 @@ private:
     std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone_;
     dcc_import_policy::SceneImportPolicy scenePolicy_;
     dcc_import_transform::TransformCorrection transformCorrection_;
+    bool flipUvV_ = true;
 };

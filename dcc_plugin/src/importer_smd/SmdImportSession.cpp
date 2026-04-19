@@ -1,4 +1,5 @@
 #include "SmdImportSession.h"
+#include "SmdImportUtils.h"
 #include "SmdSceneImporter.h"
 
 #include <common/SceneMergeStrategy.h>
@@ -6,6 +7,7 @@
 #include <common_smd/SimpleSmdDocument.h>
 
 #include <memory>
+#include <cstdlib>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -187,6 +189,7 @@ MStatus SmdImportSession::validateInputFile() const
 SmdImportOptions SmdImportSession::parseOptions() const
 {
     SmdImportOptions parsedOptions;
+    parsedOptions.animationFps = smd_import_impl::ResolveCurrentFramesPerSecond();
     if (options_.length() == 0)
     {
         return parsedOptions;
@@ -198,5 +201,20 @@ SmdImportOptions SmdImportSession::parseOptions() const
     sceneMergeStrategy.normalizeForImport(fileObject_.rawName().asChar());
     parsedOptions.scenePolicy = sceneMergeStrategy.policy();
     parsedOptions.transformCorrection = dcc_import_transform::ParseTransformCorrection(optionMap);
+    auto animationFpsIt = optionMap.find("animationfps");
+    if (animationFpsIt != optionMap.end())
+    {
+        const double parsedFps = std::atof(animationFpsIt->second.c_str());
+        if (parsedFps > 1.0e-6)
+        {
+            parsedOptions.animationFps = parsedFps;
+        }
+    }
+
+    auto flipUvVIt = optionMap.find("flipuvv");
+    if (flipUvVIt != optionMap.end())
+    {
+        parsedOptions.flipUvV = dcc_import_policy::ParseBoolOption(optionMap, "flipuvv", true);
+    }
     return parsedOptions;
 }
