@@ -1145,6 +1145,68 @@
         - `ctm_fbi/ctm_fbi.smd`：已确认 SMD text export 在带 `TransformCorrection` 时，首条 skeleton pose 平移与首个 triangle vertex 位置按预期写出
       - 为适配文本导出序列化精度，`MayaBatchRegression.py` 中这两条 gate 的 triplet 比较容差已放宽到 `1e-3`；这只用于文本导出数据层验证，不影响导入导出主流程逻辑
 
+- `M-SMD-5` 评估并引入 VTA 导入导出：
+  - 主要代码入口：
+    - [SimpleSmdDocument.h](dcc_plugin/src/common_smd/SimpleSmdDocument.h)
+    - [SimpleSmdDocument.cpp](dcc_plugin/src/common_smd/SimpleSmdDocument.cpp)
+    - [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp)
+    - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)
+    - [plugin_smd/PluginMain.cpp](dcc_plugin/src/plugin_smd/PluginMain.cpp)
+  - 2026-04-19 评估结论：
+    - 仓库内已存在真实 VTA 样例 [flex.vta](dcc_plugin/samples/MostComplexSampleSet/flex.vta)。
+    - 当前 common_smd 解析层只会识别 `vertexanimation` 段并把 [SimpleSmdDocument.h](dcc_plugin/src/common_smd/SimpleSmdDocument.h) 中的 `hasVertexAnimation` 置为 `true`，但不会保存任何 `time -> vertex sample` 数据。
+    - 当前 [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 在检测到 `document_->hasVertexAnimation` 后只会报 `vertexanimation section detected but not implemented yet` warning，说明 importer 主线尚未真正进入 VTA 处理。
+    - 当前 SMD translator 只识别 `.smd` 扩展名；[MayaSmdCommon.cpp](dcc_plugin/src/common_smd/MayaSmdCommon.cpp) 的 `HasSmdExtension()` 也只接受 `.smd`。如果要支持 `.vta`，更合适的方向是新增独立 `Valve VTA Import/Export` translator，而不是把 VTA 直接混进现有 SMD 文件类型名下。
+    - 基于现有样例与当前解析实现，VTA 更接近“按 time block 存储的顶点动画/shape 帧集”，不是当前 SMD 那条 `skeleton + triangles + skin` 主路径的轻量变体；它与 DMX 的 `deltaStates/blendShape` 子域更接近，而不是与 SMD mesh 主路径接近。
+    - 由于现有 VTA 样例不带 `triangles`，VTA importer 很难像 SMD 一样在 `create` 模式下独立重建完整 mesh 拓扑；第一阶段更现实的承诺边界应是“把 VTA 导入到已存在且拓扑匹配的 mesh 上，恢复为 blendShape targets 或等价的顶点动画载体”，而不是“单文件独立完整建模”。
+  - 建议分阶段：
+    - 第一阶段：只做 VTA importer，要求目标 mesh 已存在且顶点数/顺序匹配；先把 `time 1..N` 解析成 Maya blendShape target 或等价静态 target 集，不先承诺更高层 facial 控制器。
+    - 第二阶段：补独立 VTA exporter，把 Maya blendShape target 或指定采样帧写回 `vertexanimation`；同时明确导出策略到底是“按 target 导出”还是“按时间采样 bake 导出”。
+    - 第三阶段：再评估是否需要把 VTA 与 SMD 组合成更完整的 Source facial roundtrip（例如 SMD 负责骨架/mesh，VTA 负责 shape/flex）。
+  - 2026-04-19 第一阶段进展：
+    - [SimpleSmdDocument.h](dcc_plugin/src/common_smd/SimpleSmdDocument.h) / [SimpleSmdDocument.cpp](dcc_plugin/src/common_smd/SimpleSmdDocument.cpp) 已不再只保留 `hasVertexAnimation` 布尔标记，当前会真正解析并保存：
+      - `VertexAnimationSample`
+      - `VertexAnimationFrame`
+      - `Document::vertexAnimationFrames`
+    - [plugin_smd/PluginMain.cpp](dcc_plugin/src/plugin_smd/PluginMain.cpp) 已新增独立 `Valve VTA Import` translator 注册，当前不会把 `.vta` 混进现有 `Valve SMD Import` 文件类型名。
+    - 已新增 [VtaImportTranslator.h](dcc_plugin/src/importer_smd/VtaImportTranslator.h) / [VtaImportTranslator.cpp](dcc_plugin/src/importer_smd/VtaImportTranslator.cpp) 与 [VtaSceneImporter.h](dcc_plugin/src/importer_smd/VtaSceneImporter.h) / [VtaSceneImporter.cpp](dcc_plugin/src/importer_smd/VtaSceneImporter.cpp)。
+    - 当前最小 importer 语义已经可用：
+      - 要求场景中先有拓扑匹配的 mesh，并在导入前选中该 mesh 或其 transform
+      - `.vta` 的 `time 0` 视为 base，不导成 target
+      - `time 1..N` 会导入为该 mesh 上的 `blendShape` targets
+      - 若目标 mesh 上已有 `blendShape`，当前会复用首个上游 `blendShape`；否则创建新的 `mayaVtaBlendShape#`
+      - target alias 当前按 `vta_frame_<time>` 生成
+      - 为兼容真实多材质样例，SMD importer 现在会把“原始 triangle-vertex 索引 -> 当前 dedup 后 mesh 顶点索引”的映射写到 mesh metadata；VTA importer 会从当前选择的 mesh 集或 import root 中收集这份映射，并把全局 VTA 顶点索引分发到多个 mesh 上，而不是再假设 VTA 只对应单个 mesh
+    - 当前明确未做：
+      - `.vta` 独立 create 模式下的 mesh 重建
+      - `.vta` exporter
+      - VTA normal/flex controller 更高层语义恢复
+  - 当前验证：
+    - `cmake --build dcc_plugin\build --config Release --target maya_plugin_smd` 已通过
+    - 真实 `mayapy` 最小验证已通过：
+      - 先导入 [chr_mesh.smd](dcc_plugin/samples/MostComplexSampleSet/chr_mesh.smd)
+      - 再选中导入 mesh，导入 [flex.vta](dcc_plugin/samples/MostComplexSampleSet/flex.vta)
+      - 已确认生成 `mayaVtaBlendShape1`，当前样例得到 3 个 target
+    - 2026-04-19 已继续用新增真实样例 [humans_sdk](dcc_plugin/samples/humans_sdk) 验证多材质 VTA：
+      - 先导入 [male_06_reference.smd](dcc_plugin/samples/humans_sdk/male_sdk/male_06_reference.smd)
+      - 再选中 `smd_import_root`，导入 [male_06_expressions.vta](dcc_plugin/samples/humans_sdk/male_sdk/male_06_expressions.vta)
+      - 当前已确认 VTA target 会正确分发到 4 个 mesh：
+        - `eyeball_l_tgaShape1` -> 11 targets
+        - `eyeball_r_tgaShape1` -> 11 targets
+        - `mouth_tgaShape1` -> 21 targets
+        - `sandro_facemap_tgaShape1` -> 32 targets
+      - `citizen_sheet_tgaShape1` 当前不会再被错误创建空的 `blendShape`
+    - 批回归层已补 gate：
+      - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已新增 `VTA_IMPORT_GATE_EXPECTATIONS`
+      - 当前 gate case：`humans_sdk/male_sdk/male_06_expressions.vta`
+      - gate 会先导 `male_06_reference.smd`，再选中 import root 导入 `.vta`，最后检查多 mesh 上的 `blendShape` target 数量
+      - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases humans_sdk/male_sdk/male_06_expressions.vta` 已通过
+    - 运行时仍会看到宿主环境中的 `VaccineKiller.mod` 外部权限警告，但没有阻塞本轮 VTA importer 验证结果
+  - 完成判据：
+    - 至少一条 VTA 样例可在真实 Maya 宿主下完成“导入到现有 mesh -> 生成可见 blendShape target / 顶点动画载体”。
+    - 至少一条最小 exporter gate 可把 Maya 侧 target 稳定写回 `.vta` 文本。
+    - `VTA` 支持不会破坏现有 `SMD` `.smd` 导入导出与回归 gate。
+
 - `M-SHARED-1` 剩余 common / exporter 抽象：
   - 主要代码入口：
     - [MaterialExportUtils.cpp](dcc_plugin/src/common/MaterialExportUtils.cpp)

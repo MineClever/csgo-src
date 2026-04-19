@@ -2,7 +2,7 @@
 
 #include <common_smd/SimpleSmdDocument.h>
 #include <common/ImportPolicy.h>
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 
 #include <memory>
 

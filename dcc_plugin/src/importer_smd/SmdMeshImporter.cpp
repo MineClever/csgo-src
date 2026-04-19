@@ -1,7 +1,7 @@
 #include "SmdMeshImporter.h"
 
 #include <common/MayaCommandUtils.h>
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 #include <common/MaterialUtils.h>
 #include <common/SkinClusterUtils.h>
 #include <common_smd/MayaSmdCommon.h>
@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <string>
@@ -42,6 +43,7 @@
 namespace smd_mesh_import_impl
 {
 constexpr const char *kSmdMaterialNameAttribute = "mayaSmdMaterialName";
+constexpr const char *kSmdRawVertexMapAttribute = "mayaSmdRawVertexMap";
 constexpr double kPositionEpsilon = 1.0e-6;
 constexpr double kUvEpsilon = 1.0e-6;
 constexpr double kWeightEpsilon = 1.0e-6;
@@ -498,6 +500,16 @@ MObject FindNodeByName(const MString &nodeName)
 
 }
 
+std::string SerializeRawVertexMap(const std::vector<std::pair<int, unsigned int>> &rawToSharedVertexIndex)
+{
+    std::ostringstream stream;
+    for (const auto &entry : rawToSharedVertexIndex)
+    {
+        stream << entry.first << ' ' << entry.second << '\n';
+    }
+    return stream.str();
+}
+
 SmdMeshImporter::SmdMeshImporter(
     std::shared_ptr<const simple_smd::Document> document,
     std::shared_ptr<const std::unordered_map<int, MDagPath>> jointPathsByBone,
@@ -561,13 +573,17 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
         smd_mesh_import_impl::QuantizedUvKey,
         unsigned int,
         smd_mesh_import_impl::QuantizedUvKeyHasher> uvIndexByKey;
+    std::vector<std::pair<int, unsigned int>> rawToSharedVertexIndex;
 
     bool hasWeights = false;
     int faceIndex = 0;
+    int globalRawVertexIndex = 0;
     for (const simple_smd::Triangle &triangle : document_->triangles)
     {
-        if (triangle.materialName != materialName || triangle.vertices.size() != 3)
+        const bool matchesMaterial = triangle.materialName == materialName && triangle.vertices.size() == 3;
+        if (!matchesMaterial)
         {
+            globalRawVertexIndex += static_cast<int>(triangle.vertices.size());
             continue;
         }
 
@@ -586,6 +602,7 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
                 points,
                 vertexLinks,
                 candidatesByPoint);
+            rawToSharedVertexIndex.emplace_back(globalRawVertexIndex, sharedVertexIndex);
             polygonConnects.append(static_cast<int>(sharedVertexIndex));
             uvIds.append(static_cast<int>(smd_mesh_import_impl::ResolveUvIndex(
                 sharedVertexIndex,
@@ -598,6 +615,7 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
             normalFaceIds.append(faceIndex);
             normalVertexIds.append(static_cast<int>(sharedVertexIndex));
             hasWeights = hasWeights || !normalizedWeights.empty();
+            ++globalRawVertexIndex;
         }
         ++faceIndex;
     }
@@ -750,6 +768,18 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
     if (!status)
     {
         return MStatus::kFailure;
+    }
+
+    status = smd_mesh_import_impl::SetStringAttribute(
+        meshObject,
+        smd_mesh_import_impl::kSmdRawVertexMapAttribute,
+        SerializeRawVertexMap(rawToSharedVertexIndex));
+    if (!status)
+    {
+        return maya_smd::ReportError(
+            MString("maya_smd: failed to store raw vertex map for material group ")
+            + materialName.c_str(),
+            status);
     }
 
     if (hasWeights)

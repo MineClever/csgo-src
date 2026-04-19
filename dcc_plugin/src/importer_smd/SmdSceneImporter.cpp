@@ -3,7 +3,7 @@
 #include "SmdImportUtils.h"
 #include "SmdMeshImporter.h"
 
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 #include <common_smd/MayaSmdCommon.h>
 
 #include <algorithm>

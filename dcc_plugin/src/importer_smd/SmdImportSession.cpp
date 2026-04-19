@@ -1,6 +1,7 @@
 #include "SmdImportSession.h"
 #include "SmdImportUtils.h"
 #include "SmdSceneImporter.h"
+#include "VtaSceneImporter.h"
 
 #include <common/SceneMergeStrategy.h>
 #include <common_smd/MayaSmdCommon.h>
@@ -109,6 +110,26 @@ struct SmdImportDocumentNormalizer
                 vertex.nz = correctedNormal.z;
             }
         }
+
+        for (simple_smd::VertexAnimationFrame &frame : document.vertexAnimationFrames)
+        {
+            for (simple_smd::VertexAnimationSample &sample : frame.samples)
+            {
+                const MVector correctedPosition = dcc_import_transform::ApplyToPoint(
+                    correction,
+                    MVector(sample.px, sample.py, sample.pz));
+                const MVector correctedNormal = dcc_import_transform::ApplyToNormal(
+                    correction,
+                    MVector(sample.nx, sample.ny, sample.nz));
+
+                sample.px = correctedPosition.x;
+                sample.py = correctedPosition.y;
+                sample.pz = correctedPosition.z;
+                sample.nx = correctedNormal.x;
+                sample.ny = correctedNormal.y;
+                sample.nz = correctedNormal.z;
+            }
+        }
     }
 };
 }
@@ -142,6 +163,12 @@ MStatus SmdImportSession::Run()
     SmdImportDocumentNormalizer::NormalizeDocumentForImportCorrection(*document, importOptions.transformCorrection);
     SmdImportOptions normalizedImportOptions = importOptions;
     normalizedImportOptions.transformCorrection = dcc_import_transform::TransformCorrection();
+    if (maya_smd::HasVtaExtension(fileObject_))
+    {
+        VtaSceneImporter importer(document, normalizedImportOptions);
+        return importer.Import();
+    }
+
     dcc_import_policy::SceneMergeStrategy sceneMergeStrategy(normalizedImportOptions.scenePolicy);
     if (sceneMergeStrategy.usesAnimationOnlyImport() && !sceneMergeStrategy.usesSceneRoot())
     {
@@ -178,7 +205,7 @@ MStatus SmdImportSession::Run()
 
 MStatus SmdImportSession::validateInputFile() const
 {
-    if (!maya_smd::HasSmdExtension(fileObject_))
+    if (!maya_smd::HasSmdExtension(fileObject_) && !maya_smd::HasVtaExtension(fileObject_))
     {
         return maya_smd::ReportError(MString("maya_smd: unsupported import extension for ") + fileObject_.rawFullName());
     }

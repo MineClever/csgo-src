@@ -13,6 +13,10 @@ add_library(maya_import_smd STATIC
     SmdSourceDeltaProcessor.h
     SmdImportTranslator.cpp
     SmdImportTranslator.h
+    VtaImportTranslator.cpp
+    VtaImportTranslator.h
+    VtaSceneImporter.cpp
+    VtaSceneImporter.h
 )
 
 target_link_libraries(maya_import_smd PUBLIC maya_common_smd)

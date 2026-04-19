@@ -301,6 +301,24 @@ EXPORT_TRANSFORM_GATE_EXPECTATIONS = {
     },
 }
 
+VTA_IMPORT_GATE_EXPECTATIONS = {
+    "humans_sdk/male_sdk/male_06_expressions.vta": {
+        "base_case": "humans_sdk/male_sdk/male_06_reference.smd",
+        "base_import_options": "useSceneRoot=0;importMode=create",
+        "vta_import_options": "useSceneRoot=0;importMode=create",
+        "root_name_substring": "smd_import_root",
+        "expected_blendshape_targets": [
+            {"mesh_suffix": "eyeball_l_tgaShape1", "target_count": 11},
+            {"mesh_suffix": "eyeball_r_tgaShape1", "target_count": 11},
+            {"mesh_suffix": "mouth_tgaShape1", "target_count": 21},
+            {"mesh_suffix": "sandro_facemap_tgaShape1", "target_count": 32},
+        ],
+        "expected_mesh_without_blendshape": [
+            "citizen_sheet_tgaShape1",
+        ],
+    },
+}
+
 
 def snapshot_scene_animation_only_counts(cmds):
     return {
@@ -1591,6 +1609,101 @@ def validate_export_transform_gate(exported_path, case_name, format_name, export
         )
 
 
+def validate_vta_import_gate(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = VTA_IMPORT_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return False
+
+    plugin_path = plugin_paths_by_format.get("smd")
+    if not plugin_path:
+        raise RuntimeError(f"Missing SMD plugin while running VTA case '{case_name}'")
+
+    cmds.file(new=True, force=True)
+    ensure_plugins_loaded(cmds, [plugin_path])
+
+    base_input_path = resolve_input_path(sample_dir, expectation["base_case"])
+    base_import_kwargs = dict(
+        i=True,
+        type="Valve SMD Import",
+        ignoreVersion=True,
+        mergeNamespacesOnClash=False,
+        options=expectation["base_import_options"],
+    )
+    before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+    cmds.file(base_input_path, **base_import_kwargs)
+    imported_roots = collect_imported_roots(cmds, before_assemblies)
+    selectable_root = None
+    for root_path in imported_roots:
+        if expectation["root_name_substring"] in root_path:
+            selectable_root = root_path
+            break
+    if not selectable_root:
+        raise RuntimeError(f"VTA import gate failed for {normalized_case_name}: could not resolve imported root")
+
+    cmds.select(selectable_root, replace=True)
+    vta_input_path = resolve_input_path(sample_dir, normalized_case_name)
+    cmds.file(
+        vta_input_path,
+        i=True,
+        type="Valve VTA Import",
+        ignoreVersion=True,
+        mergeNamespacesOnClash=False,
+        options=expectation["vta_import_options"],
+    )
+
+    visible_meshes = [
+        mesh for mesh in (cmds.ls(type="mesh", long=True) or [])
+        if not cmds.getAttr(mesh + ".intermediateObject")
+    ]
+    mesh_to_target_count = {}
+    for mesh_path in visible_meshes:
+        history = cmds.listHistory(mesh_path, pruneDagObjects=True) or []
+        blendshapes = [node for node in history if cmds.nodeType(node) == "blendShape"]
+        if not blendshapes:
+            continue
+        mesh_to_target_count[mesh_path] = len(cmds.listAttr(blendshapes[0] + ".w", multi=True) or [])
+
+    for requirement in expectation["expected_blendshape_targets"]:
+        matching_meshes = [
+            mesh_path for mesh_path in mesh_to_target_count
+            if mesh_path.endswith(requirement["mesh_suffix"])
+        ]
+        if len(matching_meshes) != 1:
+            raise RuntimeError(
+                f"VTA import gate failed for {normalized_case_name}: expected one mesh ending with "
+                f"{requirement['mesh_suffix']} got {matching_meshes}"
+            )
+        actual_target_count = mesh_to_target_count[matching_meshes[0]]
+        if actual_target_count != requirement["target_count"]:
+            raise RuntimeError(
+                f"VTA import gate failed for {normalized_case_name}: mesh {matching_meshes[0]} "
+                f"expected {requirement['target_count']} targets got {actual_target_count}"
+            )
+
+    for mesh_suffix in expectation.get("expected_mesh_without_blendshape", []):
+        matching_meshes = [
+            mesh_path for mesh_path in visible_meshes
+            if mesh_path.endswith(mesh_suffix)
+        ]
+        if len(matching_meshes) != 1:
+            raise RuntimeError(
+                f"VTA import gate failed for {normalized_case_name}: expected one mesh ending with "
+                f"{mesh_suffix} got {matching_meshes}"
+            )
+        if matching_meshes[0] in mesh_to_target_count:
+            raise RuntimeError(
+                f"VTA import gate failed for {normalized_case_name}: mesh {matching_meshes[0]} "
+                f"should not receive a blendShape target set"
+            )
+
+    gate_marker = os.path.join(output_dir, f"{make_case_output_name(case_name)}.vta_import_gate.txt")
+    with open(gate_marker, "w", encoding="utf-8") as marker_file:
+        marker_file.write("ok\n")
+
+    return True
+
+
 def verify_roundtrip(
     cmds,
     plugin_paths,
@@ -1663,7 +1776,7 @@ def ensure_plugins_loaded(cmds, plugin_paths):
 def make_case_output_name(case_name):
     normalized_name = case_name.replace("\\", "/")
     root, ext = os.path.splitext(normalized_name)
-    if ext.lower() in (".dmx", ".dmxb", ".dmxbin", ".smd"):
+    if ext.lower() in (".dmx", ".dmxb", ".dmxbin", ".smd", ".vta"):
         normalized_name = root
     return normalized_name.replace("\\", "__").replace("/", "__")
 
@@ -1672,13 +1785,14 @@ def resolve_input_path(sample_dir, case_name):
     normalized_name = case_name.replace("\\", "/")
     root, ext = os.path.splitext(normalized_name)
     candidate_paths = []
-    if ext.lower() in (".dmx", ".dmxb", ".dmxbin", ".smd"):
+    if ext.lower() in (".dmx", ".dmxb", ".dmxbin", ".smd", ".vta"):
         candidate_paths.append(os.path.join(sample_dir, normalized_name))
     else:
         candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.dmx"))
         candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.dmxb"))
         candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.dmxbin"))
         candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.smd"))
+        candidate_paths.append(os.path.join(sample_dir, f"{normalized_name}.vta"))
 
     for candidate_path in candidate_paths:
         if os.path.isfile(candidate_path):
@@ -1691,6 +1805,9 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
     label = case_name if not import_options else f"{case_name} [{import_options}]"
     sys.stdout.write(f"[maya_dmx_case] {label}\n")
     sys.stdout.flush()
+
+    if not import_options and validate_vta_import_gate(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name):
+        return
 
     input_path = resolve_input_path(sample_dir, case_name)
     format_name = detect_format(input_path)

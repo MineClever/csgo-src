@@ -1,7 +1,7 @@
 #pragma once
 
 #include <common_smd/SimpleSmdDocument.h>
-#include <common/ExportTransformPolicy.h>
+#include <common/TransformCorrection.h>
 #include <maya/MDagPath.h>
 #include <maya/MPxFileTranslator.h>
 #include <maya/MStatus.h>

@@ -55,6 +55,23 @@ struct Triangle
     std::vector<TriangleVertex> vertices;
 };
 
+struct VertexAnimationSample
+{
+    int vertexIndex = -1;
+    double px = 0.0;
+    double py = 0.0;
+    double pz = 0.0;
+    double nx = 0.0;
+    double ny = 0.0;
+    double nz = 0.0;
+};
+
+struct VertexAnimationFrame
+{
+    int time = 0;
+    std::vector<VertexAnimationSample> samples;
+};
+
 class Document
 {
 public:
@@ -66,6 +83,7 @@ public:
     std::vector<Node> nodes;
     std::vector<SkeletonFrame> skeletonFrames;
     std::vector<Triangle> triangles;
+    std::vector<VertexAnimationFrame> vertexAnimationFrames;
     bool hasVertexAnimation = false;
 };
 }

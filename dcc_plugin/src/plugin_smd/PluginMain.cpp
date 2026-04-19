@@ -1,5 +1,6 @@
 #include <exporter_smd/SmdExportTranslator.h>
 #include <importer_smd/SmdImportTranslator.h>
+#include <importer_smd/VtaImportTranslator.h>
 #include <common_smd/MayaSmdCommon.h>
 
 #include <maya/MFnPlugin.h>
@@ -72,6 +73,19 @@ MStatus initializePlugin(MObject object)
         return MStatus::kFailure;
     }
 
+    status = RegisterTranslator(
+        plugin,
+        maya_smd::kVtaImporterTranslatorName,
+        &VtaImportTranslator::Create,
+        kImportOptionsScriptName,
+        kImportDefaultOptions);
+    if (!status)
+    {
+        plugin.deregisterFileTranslator(maya_smd::kExporterTranslatorName);
+        plugin.deregisterFileTranslator(maya_smd::kImporterTranslatorName);
+        return MStatus::kFailure;
+    }
+
     return MS::kSuccess;
 }
 
@@ -79,7 +93,13 @@ MStatus uninitializePlugin(MObject object)
 {
     MFnPlugin plugin(object);
 
-    MStatus status = DeregisterTranslator(plugin, maya_smd::kExporterTranslatorName);
+    MStatus status = DeregisterTranslator(plugin, maya_smd::kVtaImporterTranslatorName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    status = DeregisterTranslator(plugin, maya_smd::kExporterTranslatorName);
     if (!status)
     {
         return MStatus::kFailure;

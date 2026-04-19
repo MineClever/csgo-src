@@ -86,6 +86,15 @@ bool ParseTriangleVertexLine(const std::string &line, TriangleVertex &vertex)
     return true;
 }
 
+bool ParseVertexAnimationSampleLine(const std::string &line, VertexAnimationSample &sample)
+{
+    std::istringstream stream(line);
+    return static_cast<bool>(
+        stream >> sample.vertexIndex >>
+        sample.px >> sample.py >> sample.pz >>
+        sample.nx >> sample.ny >> sample.nz);
+}
+
 void AppendLine(std::ostringstream &stream, const std::string &line)
 {
     stream << line << '\n';
@@ -98,6 +107,7 @@ bool Document::ParseFromText(const std::string &text, std::string *errorMessage)
     nodes.clear();
     skeletonFrames.clear();
     triangles.clear();
+    vertexAnimationFrames.clear();
     hasVertexAnimation = false;
 
     std::istringstream input(text);
@@ -261,13 +271,59 @@ bool Document::ParseFromText(const std::string &text, std::string *errorMessage)
         if (trimmed == "vertexanimation")
         {
             hasVertexAnimation = true;
+            VertexAnimationFrame *currentFrame = nullptr;
             while (std::getline(input, line))
             {
                 ++lineNumber;
-                if (simple_smd_impl::Trim(line) == "end")
+                const std::string vertexAnimationLine = simple_smd_impl::Trim(line);
+                if (vertexAnimationLine.empty() || simple_smd_impl::StartsWith(vertexAnimationLine, "//"))
+                {
+                    continue;
+                }
+
+                if (vertexAnimationLine == "end")
                 {
                     break;
                 }
+
+                if (simple_smd_impl::StartsWith(vertexAnimationLine, "time"))
+                {
+                    std::istringstream stream(vertexAnimationLine);
+                    std::string keyword;
+                    VertexAnimationFrame frame;
+                    if (!(stream >> keyword >> frame.time))
+                    {
+                        if (errorMessage)
+                        {
+                            *errorMessage = "Failed to parse vertexanimation time line at " + std::to_string(lineNumber);
+                        }
+                        return false;
+                    }
+
+                    vertexAnimationFrames.push_back(frame);
+                    currentFrame = &vertexAnimationFrames.back();
+                    continue;
+                }
+
+                if (!currentFrame)
+                {
+                    if (errorMessage)
+                    {
+                        *errorMessage = "Encountered vertexanimation sample before time block at " + std::to_string(lineNumber);
+                    }
+                    return false;
+                }
+
+                VertexAnimationSample sample;
+                if (!simple_smd_impl::ParseVertexAnimationSampleLine(vertexAnimationLine, sample))
+                {
+                    if (errorMessage)
+                    {
+                        *errorMessage = "Failed to parse vertexanimation sample line at " + std::to_string(lineNumber);
+                    }
+                    return false;
+                }
+                currentFrame->samples.push_back(sample);
             }
             continue;
         }
@@ -342,6 +398,24 @@ std::string Document::Serialize() const
                     }
                 }
                 simple_smd_impl::AppendLine(output, vertexLine.str());
+            }
+        }
+        simple_smd_impl::AppendLine(output, "end");
+    }
+
+    if (!vertexAnimationFrames.empty())
+    {
+        simple_smd_impl::AppendLine(output, "vertexanimation");
+        for (const VertexAnimationFrame &frame : vertexAnimationFrames)
+        {
+            simple_smd_impl::AppendLine(output, "time " + std::to_string(frame.time));
+            for (const VertexAnimationSample &sample : frame.samples)
+            {
+                std::ostringstream sampleLine;
+                sampleLine << "  " << sample.vertexIndex << ' '
+                           << sample.px << ' ' << sample.py << ' ' << sample.pz << ' '
+                           << sample.nx << ' ' << sample.ny << ' ' << sample.nz;
+                simple_smd_impl::AppendLine(output, sampleLine.str());
             }
         }
         simple_smd_impl::AppendLine(output, "end");

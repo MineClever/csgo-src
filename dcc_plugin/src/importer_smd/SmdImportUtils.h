@@ -1,6 +1,6 @@
 #pragma once
 
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 #include <common_smd/SimpleSmdDocument.h>
 
 #include <string>

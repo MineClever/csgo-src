@@ -1,7 +1,6 @@
 #include "SmdExportSession.h"
 
-#include <common/ExportTransformPolicy.h>
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 #include <common_smd/MayaSmdCommon.h>
 
 #include <fstream>

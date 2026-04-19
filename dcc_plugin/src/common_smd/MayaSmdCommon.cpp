@@ -6,21 +6,26 @@
 
 namespace maya_smd
 {
-bool HasSmdExtension(const MFileObject &fileObject)
+namespace
+{
+bool HasExtension(const MFileObject &fileObject, const char *extension)
 {
     const MString lowerName = fileObject.rawFullName().toLowerCase();
     const char *fileName = lowerName.asChar();
     const size_t fileNameLength = strlen(fileName);
-    for (const char *extension : {".smd"})
-    {
-        const size_t extensionLength = strlen(extension);
-        if (fileNameLength >= extensionLength && strcmp(fileName + fileNameLength - extensionLength, extension) == 0)
-        {
-            return true;
-        }
-    }
+    const size_t extensionLength = strlen(extension);
+    return fileNameLength >= extensionLength && strcmp(fileName + fileNameLength - extensionLength, extension) == 0;
+}
+}
 
-    return false;
+bool HasSmdExtension(const MFileObject &fileObject)
+{
+    return HasExtension(fileObject, ".smd");
+}
+
+bool HasVtaExtension(const MFileObject &fileObject)
+{
+    return HasExtension(fileObject, ".vta");
 }
 
 MStatus ReportInfo(const MString &message)
