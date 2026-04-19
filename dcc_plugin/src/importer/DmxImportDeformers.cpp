@@ -3,6 +3,7 @@
 
 #include <common/MayaCommandUtils.h>
 #include <common/MayaDmxCommon.h>
+#include <common/SkinClusterUtils.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -36,101 +37,6 @@
 
 namespace dmx_import_impl
 {
-
-std::unordered_map<std::string, unsigned int> BuildInfluenceIndexByPath(const MDagPathArray &influencePaths)
-{
-    std::unordered_map<std::string, unsigned int> influenceByPath;
-    for (unsigned int index = 0; index < influencePaths.length(); ++index)
-    {
-        influenceByPath[influencePaths[index].fullPathName().asChar()] = index;
-    }
-    return influenceByPath;
-}
-
-bool FindMatchingInfluencePath(
-    const dmx_import_translator::ImportContext &context,
-    const MDagPathArray &influencePaths,
-    const MDagPath &requiredInfluencePath,
-    MDagPath &matchedInfluencePath)
-{
-    const std::string requiredFullPath = requiredInfluencePath.fullPathName().asChar();
-    const std::string requiredLeafName = requiredInfluencePath.partialPathName().asChar();
-    for (unsigned int influenceIndex = 0; influenceIndex < influencePaths.length(); ++influenceIndex)
-    {
-        const MDagPath &candidatePath = influencePaths[influenceIndex];
-        if (requiredFullPath == candidatePath.fullPathName().asChar())
-        {
-            matchedInfluencePath = candidatePath;
-            return true;
-        }
-
-        if (dcc_import_policy::MatchesNodeNameForAppend(
-            context.scenePolicy,
-            candidatePath.partialPathName().asChar(),
-            requiredLeafName))
-        {
-            matchedInfluencePath = candidatePath;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-MStatus EnsureSkinClusterContainsInfluences(
-    const dmx_import_translator::ImportContext &context,
-    const MObject &skinClusterObject,
-    const MDagPathArray &requiredInfluencePaths,
-    MDagPathArray &resolvedInfluencePaths)
-{
-    resolvedInfluencePaths.clear();
-    if (skinClusterObject.isNull())
-    {
-        return MS::kFailure;
-    }
-
-    MStatus status;
-    MFnSkinCluster skinClusterFn(skinClusterObject, &status);
-    if (!status)
-    {
-        return MS::kFailure;
-    }
-
-    skinClusterFn.influenceObjects(resolvedInfluencePaths, &status);
-    if (!status)
-    {
-        return MS::kFailure;
-    }
-
-    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
-    if (!status)
-    {
-        return MS::kFailure;
-    }
-
-    for (unsigned int influenceIndex = 0; influenceIndex < requiredInfluencePaths.length(); ++influenceIndex)
-    {
-        MDagPath matchedInfluencePath;
-        if (FindMatchingInfluencePath(context, resolvedInfluencePaths, requiredInfluencePaths[influenceIndex], matchedInfluencePath))
-        {
-            continue;
-        }
-
-        AppendImportDebugLog(
-            (std::string("skinning: adding missing influence ")
-                + requiredInfluencePaths[influenceIndex].fullPathName().asChar()).c_str());
-        status = maya_cmd::AddSkinClusterInfluence(skinClusterNode.name(), requiredInfluencePaths[influenceIndex]);
-        if (!status)
-        {
-            return MS::kFailure;
-        }
-    }
-
-    resolvedInfluencePaths.clear();
-    skinClusterFn.influenceObjects(resolvedInfluencePaths, &status);
-    return status ? MS::kSuccess : MS::kFailure;
-}
-
 
 DeformerImporter::DeformerImporter(std::shared_ptr<ImportContext> context)
     : context_(context)
@@ -237,14 +143,14 @@ MStatus DeformerImporter::updateExistingSkinClusterBindings(
     }
 
     MDagPathArray existingInfluencePaths;
-    status = EnsureSkinClusterContainsInfluences(*context_, skinClusterObject, influencePaths, existingInfluencePaths);
+    status = dcc_skinning::EnsureSkinClusterContainsInfluences(context_->scenePolicy, skinClusterObject, influencePaths, existingInfluencePaths);
     if (!status)
     {
         maya_dmx::ReportWarning(MString("maya_dmx: failed while expanding existing skinCluster influences for ") + meshDagPath_.fullPathName());
         return MS::kFailure;
     }
 
-    std::unordered_map<std::string, unsigned int> existingInfluenceByPath = BuildInfluenceIndexByPath(existingInfluencePaths);
+    std::unordered_map<std::string, unsigned int> existingInfluenceByPath = dcc_skinning::BuildInfluenceIndexByPath(existingInfluencePaths);
 
     MFnDependencyNode skinClusterNode(skinClusterObject, &status);
     if (!status)
@@ -286,7 +192,7 @@ MStatus DeformerImporter::updateExistingSkinClusterBindings(
         }
 
         MDagPath matchedInfluencePath;
-        if (!FindMatchingInfluencePath(*context_, existingInfluencePaths, influencePaths[influenceIndex], matchedInfluencePath))
+        if (!dcc_skinning::FindMatchingInfluencePath(context_->scenePolicy, existingInfluencePaths, influencePaths[influenceIndex], matchedInfluencePath))
         {
             return maya_dmx::ReportWarning(
                 MString("maya_dmx: update skipped skinCluster overwrite because a required influence path could not be resolved for ")
@@ -297,13 +203,6 @@ MStatus DeformerImporter::updateExistingSkinClusterBindings(
         if (!status)
         {
             maya_dmx::ReportWarning(MString("maya_dmx: failed to query logical influence index for existing skinCluster on ") + meshDagPath_.fullPathName());
-            return MS::kFailure;
-        }
-
-        MPlug bindPreMatrixPlug = bindPreMatrixArrayPlug.elementByLogicalIndex(logicalInfluenceIndex, &status);
-        if (!status)
-        {
-            maya_dmx::ReportWarning(MString("maya_dmx: failed to resolve bindPreMatrix element for existing skinCluster on ") + meshDagPath_.fullPathName());
             return MS::kFailure;
         }
 
@@ -320,26 +219,12 @@ MStatus DeformerImporter::updateExistingSkinClusterBindings(
             }
         }
 
-        MFnMatrixData matrixDataFn;
-        MObject bindPreMatrixObject = matrixDataFn.create(bindPreMatrix, &status);
-        if (!status)
-        {
-            maya_dmx::ReportWarning(MString("maya_dmx: failed to create bindPreMatrix value for existing skinCluster on ") + meshDagPath_.fullPathName());
-            return MS::kFailure;
-        }
-        status = bindPreMatrixPlug.setMObject(bindPreMatrixObject);
+        status = dcc_skinning::SetSkinClusterBindPreMatrix(skinClusterObject, logicalInfluenceIndex, bindPreMatrix);
         if (!status)
         {
             maya_dmx::ReportWarning(MString("maya_dmx: failed to assign bindPreMatrix value for existing skinCluster on ") + meshDagPath_.fullPathName());
             return MS::kFailure;
         }
-    }
-
-    MPlug geomMatrixPlug = skinClusterNode.findPlug("geomMatrix", true, &status);
-    if (!status)
-    {
-        maya_dmx::ReportWarning(MString("maya_dmx: failed to find geomMatrix on existing skinCluster for ") + meshDagPath_.fullPathName());
-        return MS::kFailure;
     }
 
     MMatrix geomMatrix = meshParentPath_.inclusiveMatrix();
@@ -349,15 +234,7 @@ MStatus DeformerImporter::updateExistingSkinClusterBindings(
         geomMatrix = parsedGeomMatrix;
     }
 
-    MFnMatrixData geomMatrixDataFn;
-    MObject geomMatrixObject = geomMatrixDataFn.create(geomMatrix, &status);
-    if (!status)
-    {
-        maya_dmx::ReportWarning(MString("maya_dmx: failed to create geomMatrix value for existing skinCluster on ") + meshDagPath_.fullPathName());
-        return MS::kFailure;
-    }
-
-    status = geomMatrixPlug.setMObject(geomMatrixObject);
+    status = dcc_skinning::SetSkinClusterGeomMatrix(skinClusterObject, geomMatrix);
     if (!status)
     {
         maya_dmx::ReportWarning(MString("maya_dmx: failed to assign geomMatrix value for existing skinCluster on ") + meshDagPath_.fullPathName());
@@ -520,18 +397,6 @@ MStatus DeformerImporter::createSkinClusterWithApi(
             return MStatus::kFailure;
         }
 
-        MPlug bindPreMatrixPlug = skinClusterNode.findPlug("bindPreMatrix", true, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        bindPreMatrixPlug = bindPreMatrixPlug.elementByLogicalIndex(influenceIndex, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MFnMatrixData matrixDataFn;
         MMatrix bindPreMatrix = influencePaths[influenceIndex].inclusiveMatrixInverse();
         if (!bindPreMatrixStrings.empty())
         {
@@ -549,36 +414,20 @@ MStatus DeformerImporter::createSkinClusterWithApi(
             }
         }
 
-        MObject bindPreMatrixObject = matrixDataFn.create(bindPreMatrix, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        status = bindPreMatrixPlug.setMObject(bindPreMatrixObject);
+        status = dcc_skinning::SetSkinClusterBindPreMatrix(skinClusterObject, influenceIndex, bindPreMatrix);
         if (!status)
         {
             return MStatus::kFailure;
         }
     }
 
-    MPlug geomMatrixPlug = skinClusterNode.findPlug("geomMatrix", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-    MFnMatrixData geomMatrixDataFn;
     MMatrix geomMatrix = meshParentPath_.inclusiveMatrix();
     MMatrix parsedGeomMatrix;
     if (ParseMatrixString(FindAttributeString(vertexData_, "mayaGeomMatrix"), parsedGeomMatrix))
     {
         geomMatrix = parsedGeomMatrix;
     }
-    MObject geomMatrixObject = geomMatrixDataFn.create(geomMatrix, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-    status = geomMatrixPlug.setMObject(geomMatrixObject);
+    status = dcc_skinning::SetSkinClusterGeomMatrix(skinClusterObject, geomMatrix);
     if (!status)
     {
         return MStatus::kFailure;
@@ -1016,23 +865,11 @@ MStatus DeformerImporter::ApplySkinning(
         return MStatus::kFailure;
     }
 
-    MFnSingleIndexedComponent componentFn;
-    MObject vertexComponent = componentFn.create(MFn::kMeshVertComponent, &status);
+    MObject vertexComponent;
+    status = dcc_skinning::CreateMeshVertexComponent(static_cast<unsigned int>(vertexCount), vertexComponent);
     if (!status)
     {
         maya_dmx::ReportWarning(MString("maya_dmx: failed to create vertex component for ") + meshDagPath_.fullPathName());
-        return MStatus::kFailure;
-    }
-
-    MIntArray vertexIds;
-    for (int vertexIndex = 0; vertexIndex < static_cast<int>(vertexCount); ++vertexIndex)
-    {
-        vertexIds.append(vertexIndex);
-    }
-    status = componentFn.addElements(vertexIds);
-    if (!status)
-    {
-        maya_dmx::ReportWarning(MString("maya_dmx: failed to populate vertex component for ") + meshDagPath_.fullPathName());
         return MStatus::kFailure;
     }
 
@@ -1049,7 +886,7 @@ MStatus DeformerImporter::ApplySkinning(
     for (unsigned int influencePathIndex = 0; influencePathIndex < activeInfluencePaths.length(); ++influencePathIndex)
     {
         MDagPath matchedInfluencePath;
-        if (!FindMatchingInfluencePath(*context_, influencePaths, activeInfluencePaths[influencePathIndex], matchedInfluencePath))
+        if (!dcc_skinning::FindMatchingInfluencePath(context_->scenePolicy, influencePaths, activeInfluencePaths[influencePathIndex], matchedInfluencePath))
         {
             maya_dmx::ReportWarning(MString("maya_dmx: failed to match active influence path during update for ") + meshDagPath_.fullPathName());
             return MStatus::kFailure;
@@ -1075,41 +912,16 @@ MStatus DeformerImporter::ApplySkinning(
         }
     }
 
-    for (unsigned int influencePathIndex = 0; influencePathIndex < influencePaths.length(); ++influencePathIndex)
+    status = dcc_skinning::BuildPhysicalInfluenceIndices(influencePaths, influenceIndices);
+    if (!status)
     {
-        // setWeights expects the skinCluster's current physical influence order,
-        // not the sparse logical matrix/bindPreMatrix index.
-        influenceIndices.append(static_cast<int>(influencePathIndex));
+        return MStatus::kFailure;
     }
 
     if (influenceIndices.length() == 0)
     {
         return MS::kSuccess;
     }
-
-    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
-    if (!status)
-    {
-        maya_dmx::ReportWarning(MString("maya_dmx: failed to bind dependency node during weight write for ") + meshDagPath_.fullPathName());
-        return MStatus::kFailure;
-    }
-
-    MPlug maintainMaxInfluencesPlug = skinClusterNode.findPlug("maintainMaxInfluences", true, &status);
-    if (status)
-    {
-        maintainMaxInfluencesPlug.setBool(false);
-    }
-    status = MS::kSuccess;
-
-    MPlug normalizeWeightsPlug = skinClusterNode.findPlug("normalizeWeights", true, &status);
-    if (status)
-    {
-        normalizeWeightsPlug.setShort(0);
-    }
-    status = MS::kSuccess;
-
-    MPlug maxInfluencesPlug = skinClusterNode.findPlug("maxInfluences", true, &status);
-    status = MS::kSuccess;
 
     MFloatArray weights;
     weights.setLength(static_cast<unsigned int>(vertexCount) * influenceIndices.length());
@@ -1118,7 +930,6 @@ MStatus DeformerImporter::ApplySkinning(
         weights[weightIndex] = 0.0f;
     }
 
-    unsigned int maxAssignedInfluences = 0;
     for (unsigned int vertexIndex = 0; vertexIndex < static_cast<unsigned int>(vertexCount); ++vertexIndex)
     {
         const size_t baseOffset = static_cast<size_t>(vertexIndex) * static_cast<size_t>(jointCount);
@@ -1138,33 +949,18 @@ MStatus DeformerImporter::ApplySkinning(
                 weights[vertexIndex * influenceIndices.length() + influenceSlot] += weightValue;
             }
         }
-
-        float totalWeight = 0.0f;
-        unsigned int assignedInfluenceCount = 0;
-        for (unsigned int influenceSlot = 0; influenceSlot < influenceIndices.length(); ++influenceSlot)
-        {
-            const float weightValue = weights[vertexIndex * influenceIndices.length() + influenceSlot];
-            totalWeight += weightValue;
-            if (weightValue > 1.0e-6f)
-            {
-                ++assignedInfluenceCount;
-            }
-        }
-        maxAssignedInfluences = std::max(maxAssignedInfluences, assignedInfluenceCount);
-
-        if (totalWeight > 1.0e-6f)
-        {
-            const float invTotalWeight = 1.0f / totalWeight;
-            for (unsigned int influenceSlot = 0; influenceSlot < influenceIndices.length(); ++influenceSlot)
-            {
-                weights[vertexIndex * influenceIndices.length() + influenceSlot] *= invTotalWeight;
-            }
-        }
     }
 
-    if (!maxInfluencesPlug.isNull())
+    const unsigned int maxAssignedInfluences = dcc_skinning::NormalizeWeightBufferInPlace(
+        weights,
+        static_cast<unsigned int>(vertexCount),
+        static_cast<unsigned int>(influenceIndices.length()));
+
+    status = dcc_skinning::PrepareSkinClusterForSetWeights(skinClusterObject, maxAssignedInfluences);
+    if (!status)
     {
-        maxInfluencesPlug.setInt(static_cast<int>(std::max(1u, maxAssignedInfluences)));
+        maya_dmx::ReportWarning(MString("maya_dmx: failed to prepare skinCluster weight write state for ") + meshDagPath_.fullPathName());
+        return MStatus::kFailure;
     }
 
     status = skinClusterFn.setWeights(meshDagPath_, vertexComponent, influenceIndices, weights, false);

@@ -14,12 +14,20 @@ add_library(maya_dmx_serialization STATIC
 maya_dmx_apply_common_target_settings(maya_dmx_serialization)
 
 add_library(maya_dmx_common STATIC
+    AnimationCurveUtils.cpp
+    AnimationCurveUtils.h
+    AnimationSampleUtils.cpp
+    AnimationSampleUtils.h
     ImportTransformCorrection.cpp
     ImportTransformCorrection.h
+    MaterialUtils.cpp
+    MaterialUtils.h
     MayaCommandUtils.cpp
     MayaCommandUtils.h
     MayaDmxCommon.cpp
     MayaDmxCommon.h
+    SkinClusterUtils.cpp
+    SkinClusterUtils.h
 )
 
 target_link_libraries(maya_dmx_common PUBLIC maya_dmx_serialization)

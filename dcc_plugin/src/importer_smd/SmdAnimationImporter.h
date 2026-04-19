@@ -3,6 +3,7 @@
 #include "SmdImportSession.h"
 #include "SmdSourceDeltaProcessor.h"
 
+#include <common/AnimationCurveUtils.h>
 #include <common/SceneMergeStrategy.h>
 #include <common_smd/SimpleSmdDocument.h>
 
@@ -54,6 +55,5 @@ private:
     const std::unordered_map<int, MDagPath> &jointPathsByBone_;
     const std::unordered_set<int> &reusedBoneIndices_;
     SmdSourceDeltaProcessor sourceDeltaProcessor_;
-    mutable bool transformAnimationLayerInitialized_ = false;
-    mutable MString transformAnimationLayerName_;
+    mutable dcc_animation::AnimationLayerCache transformAnimationLayerCache_;
 };

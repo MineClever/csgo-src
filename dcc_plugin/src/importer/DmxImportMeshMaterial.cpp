@@ -1,6 +1,7 @@
 #include "DmxImportMeshMaterial.h"
 #include "DmxImportInternals.h"
 
+#include <common/MaterialUtils.h>
 #include <common/MayaCommandUtils.h>
 
 #include <algorithm>
@@ -154,54 +155,26 @@ MStatus AssignFaceSetMaterials(
         }
         const std::string materialName = assignment.materialName.empty() ? shadingGroupName : assignment.materialName;
         const std::string shaderType = assignment.shaderType.empty() ? "lambert" : assignment.shaderType;
-        const std::string shaderName = assignment.shaderName.empty() ?
-            SanitizeNodeName(materialName) :
-            SanitizeNodeName(assignment.shaderName);
+        const dcc_material::MaterialNodeNames defaultNames =
+            dcc_material::BuildMaterialNodeNames(materialName, "dmxMaterial");
+        const MString shaderName = assignment.shaderName.empty() ?
+            defaultNames.shaderName :
+            SanitizeNodeName(assignment.shaderName).c_str();
 
-        MObject shadingGroupObject = EnsureShadingGroup(shadingGroupName, status);
-        if (!status || shadingGroupObject.isNull())
-        {
-            return MStatus::kFailure;
-        }
-
-        MObject shaderObject = EnsureDependencyNode(shaderType, shaderName, status);
-        if (!status || shaderObject.isNull())
-        {
-            return MStatus::kFailure;
-        }
-
-        status = maya_cmd::EnsureShaderRegisteredInDefaultShaderList(shaderObject);
+        MObject shaderObject;
+        MObject shadingGroupObject;
+        status = dcc_material::EnsureSurfaceShaderBinding(
+            shaderType.c_str(),
+            shaderName,
+            shadingGroupName.c_str(),
+            shaderObject,
+            shadingGroupObject);
         if (!status)
         {
-            maya_dmx::ReportWarning(MString("maya_dmx: failed to register shader in defaultShaderList for ") + shaderName.c_str());
-            status = MS::kSuccess;
+            return MStatus::kFailure;
         }
 
         MFnDependencyNode shaderNodeFn(shaderObject, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MFnDependencyNode shadingGroupNodeFn(shadingGroupObject, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MPlug surfaceShaderPlug = shadingGroupNodeFn.findPlug("surfaceShader", true, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MPlug outColorPlug = shaderNodeFn.findPlug("outColor", true, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        status = ConnectPlugs(outColorPlug, surfaceShaderPlug);
         if (!status)
         {
             return MStatus::kFailure;
@@ -221,7 +194,7 @@ MStatus AssignFaceSetMaterials(
 
         if (!assignment.diffuseTexture.empty() && colorPlug.isNull() == false)
         {
-            status = AssignTextureToShader(shaderName + "_diffuseFile", assignment.diffuseTexture, colorPlug, false);
+            status = AssignTextureToShader(std::string(shaderName.asChar()) + "_diffuseFile", assignment.diffuseTexture, colorPlug, false);
             if (!status)
             {
                 return MStatus::kFailure;
@@ -232,7 +205,7 @@ MStatus AssignFaceSetMaterials(
         const std::string normalOrBumpTexture = assignment.normalTexture.empty() ? assignment.bumpTexture : assignment.normalTexture;
         if (status && !normalOrBumpTexture.empty())
         {
-            MObject bumpNodeObject = EnsureDependencyNode("bump2d", shaderName + "_normalBump", status);
+            MObject bumpNodeObject = EnsureDependencyNode("bump2d", std::string(shaderName.asChar()) + "_normalBump", status);
             if (!status || bumpNodeObject.isNull())
             {
                 return MStatus::kFailure;
@@ -256,7 +229,7 @@ MStatus AssignFaceSetMaterials(
                 return MStatus::kFailure;
             }
 
-            status = AssignTextureToShader(shaderName + "_normalFile", normalOrBumpTexture, bumpValuePlug, true);
+            status = AssignTextureToShader(std::string(shaderName.asChar()) + "_normalFile", normalOrBumpTexture, bumpValuePlug, true);
             if (!status)
             {
                 return MStatus::kFailure;
@@ -275,26 +248,13 @@ MStatus AssignFaceSetMaterials(
             }
         }
 
-        MFnSingleIndexedComponent componentFn;
-        MObject faceComponent = componentFn.create(MFn::kMeshPolygonComponent, &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
         MIntArray faceIds;
         for (int offset = 0; offset < assignment.polygonCount; ++offset)
         {
             faceIds.append(assignment.polygonStart + offset);
         }
 
-        status = componentFn.addElements(faceIds);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        status = maya_cmd::AddComponentToSet(meshPath, faceComponent, shadingGroupObject);
+        status = dcc_material::AssignFacesToShadingGroup(meshPath, faceIds, shadingGroupObject);
         if (!status)
         {
             return MStatus::kFailure;

@@ -2,6 +2,7 @@
 
 #include "DmxImportTranslatorTypes.h"
 
+#include <common/AnimationCurveUtils.h>
 #include <common/SimpleDmxDocument.h>
 
 #include <memory>
@@ -158,8 +159,7 @@ private:
     const simple_dmx::Element *currentLogElement_ = nullptr;
     const simple_dmx::Element *currentLogLayer_ = nullptr;
     std::string currentTargetAttribute_;
-    mutable bool transformAnimationLayerInitialized_ = false;
-    mutable MString transformAnimationLayerName_;
+    mutable dcc_animation::AnimationLayerCache transformAnimationLayerCache_;
 };
 
 } // namespace dmx_import_impl

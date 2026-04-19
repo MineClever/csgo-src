@@ -1,6 +1,7 @@
 #include "SmdAnimationImporter.h"
 #include "SmdImportUtils.h"
 
+#include <common/AnimationCurveUtils.h>
 #include <common/MayaCommandUtils.h>
 #include <common/ImportTransformCorrection.h>
 #include <common_smd/MayaSmdCommon.h>
@@ -282,29 +283,21 @@ bool SmdAnimationImporter::usesAnimationLayerForTransforms() const
 
 MStatus SmdAnimationImporter::ensureTransformAnimationLayer(MString &layerName) const
 {
-    if (transformAnimationLayerInitialized_)
-    {
-        layerName = transformAnimationLayerName_;
-        return layerName.length() > 0 ? MS::kSuccess : MS::kFailure;
-    }
-
-    transformAnimationLayerInitialized_ = true;
     const std::string configuredName = importOptions_.scenePolicy.animationLayerName.empty() ?
         std::string("smd_layer") :
         importOptions_.scenePolicy.animationLayerName;
-    MStatus status = maya_cmd::EnsureAnimationLayer(
+    MStatus status = dcc_animation::EnsureAnimationLayerCached(
         configuredName.c_str(),
         importOptions_.scenePolicy.animationImportMode == dcc_import_policy::AnimationImportMode::ReplaceLayer,
         dcc_import_policy::UsesSourceDeltaImport(importOptions_.scenePolicy),
         true,
-        &transformAnimationLayerName_);
+        transformAnimationLayerCache_,
+        &layerName);
     if (!status)
     {
-        transformAnimationLayerName_.clear();
         return MS::kFailure;
     }
 
-    layerName = transformAnimationLayerName_;
     return MS::kSuccess;
 }
 
@@ -319,30 +312,7 @@ MStatus SmdAnimationImporter::setCurveKeys(
         return MS::kSuccess;
     }
 
-    MStatus status;
-    MFnAnimCurve curveFn;
-    curveFn.create(plug, curveType, nullptr, &status);
-    if (!status)
-    {
-        maya_smd::ReportWarning(MString("maya_smd: failed to create animation curve for ") + plug.name());
-    }
-
-    for (size_t index = 0; index < times.size(); ++index)
-    {
-        curveFn.addKey(
-            MTime(times[index], MTime::uiUnit()),
-            values[index],
-            MFnAnimCurve::kTangentLinear,
-            MFnAnimCurve::kTangentLinear,
-            nullptr,
-            &status);
-        if (!status)
-        {
-            maya_smd::ReportWarning(MString("maya_smd: failed to add animation key for ") + plug.name());
-        }
-    }
-
-    return MS::kSuccess;
+    return dcc_animation::SetCurveKeys(plug, times, values, curveType, MTime::uiUnit());
 }
 
 MStatus SmdAnimationImporter::setLayerCurveKeys(
@@ -357,12 +327,11 @@ MStatus SmdAnimationImporter::setLayerCurveKeys(
         return MS::kSuccess;
     }
 
-    return maya_cmd::SetKeyframesOnAnimationLayer(
-        layerName,
+    return dcc_animation::SetCurveKeysOnAnimationLayer(
         plug,
-        times.data(),
-        values.data(),
-        times.size(),
+        times,
+        values,
+        layerName,
         false,
         keepAdditiveMode);
 }

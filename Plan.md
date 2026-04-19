@@ -812,6 +812,51 @@
   - 2026-04-18：进一步把 DMX / SMD 的层级查找与归一化辅助收进 `SceneMergeResolver` 和文件内 struct，减少匿名命名空间自由函数，提升后续复用空间。
   - 2026-04-18：`SceneMergeStrategy` 与 `SceneMergeResolver` 已合并到同一个头文件，避免双文件同步维护。
   - 2026-04-18：`SmdSceneImporter` 已继续拆分为面向对象结构，匿名命名空间辅助逻辑改为具名 `smd_import_impl` 工具单元，transform 动画导入与 source delta 采样分别落到 `SmdAnimationImporter`、`SmdSourceDeltaProcessor`，`SmdSceneImporter` 自身只保留场景骨架/层级搭建与调度职责。
+  - 2026-04-19：继续确认“共用函数/方法整合”仍是明确计划项，不是临时想法。当前主线包括：把 importer/exporter 双侧共用类型、工具函数和辅助结构继续迁入 `dcc_plugin/src/common`；把 DMX / SMD 的场景合并、层级解析与 source delta 公共逻辑维持在统一入口下收口。现阶段优先级不变，仍属于中期重构主线。
+  - 2026-04-19：已进一步盘点“下一批适合继续收进 common”的散落逻辑，建议优先级如下：
+    - 第一优先级：动画层写入与 base curve 覆盖辅助。DMX [DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 与 SMD [SmdAnimationImporter.cpp](dcc_plugin/src/importer_smd/SmdAnimationImporter.cpp) 仍各自维护“确定 layer 名、清旧曲线、写 animCurveTL/TA、source-delta 时切 layer / base”的流程，适合抽成统一 `AnimationCurveImportUtils` 或同级 helper。
+    - 第一优先级：source delta reference 采样壳层。虽然数值差值已进 [SourceDeltaUtils.h](dcc_plugin/src/common/SourceDeltaUtils.h)，但 DMX 侧仍在 [DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 自己处理 clip/useClip/referenceFrame 解析与 scene/layer 参考采样，SMD 侧则在 [SmdSourceDeltaProcessor.cpp](dcc_plugin/src/importer_smd/SmdSourceDeltaProcessor.cpp) 自己维护同类壳层；后续可继续抽成统一 reference sampler / settings resolver。
+    - 第二优先级：节点命名清洗与默认 layer 命名规则。当前 `SanitizeNodeName()` 仍在 SMD util 与 DMX importer 多处使用，`SceneMergeStrategy` 里也单独有 layer 名清洗；可整理成 `NameSanitizer` 级别公共 helper，统一 node/material/layer 的合法化策略。
+    - 第二优先级：skinCluster update/overwrite 公共步骤。DMX [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 与 SMD [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 仍分别维护“复用旧 skinCluster、补 influence、写 bindPreMatrix、按 physical/logical index 区分 setWeights”的主流程，适合继续抽成 shared skin update helper，但要保留格式侧差异数据准备。
+    - 第三优先级：材质/shadingEngine 赋值公共 helper。DMX [DmxImportMeshMaterial.cpp](dcc_plugin/src/importer/DmxImportMeshMaterial.cpp) 与 SMD [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 仍各自处理 shading group 创建、材质节点复用、exclusive set 赋值；可以先抽 Maya 侧最小公共层，格式语义继续留在各自 importer。
+    - 第三优先级：时间/FPS 与播放区间策略。SMD 当前在 [SmdImportUtils.cpp](dcc_plugin/src/importer_smd/SmdImportUtils.cpp) 单独维护 `FrameIndexToTime` / `ResolveCurrentFramesPerSecond`，DMX 动画侧则独立处理 `timeFrame` / `duration`；后续若要统一 animation import gate，可考虑抽成公共 time sampling policy，但这项优先级低于 animation layer / source delta / skin update。
+  - 2026-04-19：已先落地第一优先级中的“动画层写入与 base curve 覆盖辅助”。新增 [AnimationCurveUtils.h](dcc_plugin/src/common/AnimationCurveUtils.h) / [AnimationCurveUtils.cpp](dcc_plugin/src/common/AnimationCurveUtils.cpp)，把以下原先散落在 DMX / SMD 两侧的逻辑收进 `dcc_plugin/src/common`：
+    - base animCurve 清理
+    - base animCurve 写入（显式曲线类型 / 自动曲线类型）
+    - animation layer 的带缓存 ensure 流程
+    - animation layer key 写入包装
+    当前 [DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 与 [SmdAnimationImporter.cpp](dcc_plugin/src/importer_smd/SmdAnimationImporter.cpp) 已改为复用该公共 helper；最小验证已通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。当前残留的“共用层下一步”仍优先指向 source delta reference 采样壳层与 skin update 公共步骤。
+  - 2026-04-19：已继续落地第一优先级中的 `source delta reference` 采样壳层。新增 [AnimationSampleUtils.h](dcc_plugin/src/common/AnimationSampleUtils.h) / [AnimationSampleUtils.cpp](dcc_plugin/src/common/AnimationSampleUtils.cpp)，统一了以下 Maya 侧参考采样能力：
+    - scene reference 下的 translation/rotation 采样
+    - scene animation layer reference 下的 translation/rotation 采样
+    - 当前时间保护与空 layer 名判断
+    当前 [DmxImportAnimation.cpp](dcc_plugin/src/importer/DmxImportAnimation.cpp) 与 [SmdSourceDeltaProcessor.cpp](dcc_plugin/src/importer_smd/SmdSourceDeltaProcessor.cpp) 已改为复用这套公共采样 helper；DMX / SMD 各自仍保留格式侧的 `sourceDeltaMode/useClip/referenceFrame` 解析与差值应用。最小验证已再次通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。按现阶段收口顺序，下一批仍优先是 `skinCluster update` 公共步骤，其次才是材质 / shadingEngine 公共 helper。
+  - 2026-04-19：已开始收口 `skinCluster update` 的公共步骤，先落地最稳的一层 influence 匹配/补齐 helper。新增 [SkinClusterUtils.h](dcc_plugin/src/common/SkinClusterUtils.h) / [SkinClusterUtils.cpp](dcc_plugin/src/common/SkinClusterUtils.cpp)，把以下两边重复逻辑移入 `dcc_plugin/src/common`：
+    - influence full path -> physical slot 索引表构建
+    - 兼容 append/update 命名匹配的 influence path 查找
+    - 复用已有 skinCluster 时的“缺 influence 则补入，再重新抓 influenceObjects()”
+    当前 [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已改为共用这层 helper；DMX 专有的 `mayaBindPreMatrix/mayaGeomMatrix` 恢复、以及 DMX/SMD 各自的 weight buffer 构建和 `setWeights()` 前后设置仍保留在格式侧。最小验证已通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。下一步如果继续收口，应优先评估“bindPreMatrix/geomMatrix 写回”和“setWeights 前的 normalize/maxInfluences 准备”能否再抽一层共享实现。
+  - 2026-04-19：已继续把 `setWeights()` 前的公共准备步骤收进 [SkinClusterUtils.h](dcc_plugin/src/common/SkinClusterUtils.h) / [SkinClusterUtils.cpp](dcc_plugin/src/common/SkinClusterUtils.cpp)。当前新增并复用的公共 helper 包括：
+    - `BuildPhysicalInfluenceIndices()`：统一按 skinCluster 当前 physical influence order 生成 `MIntArray`
+    - `PrepareSkinClusterForSetWeights()`：统一处理 `maintainMaxInfluences=0`、`normalizeWeights=0`、`maxInfluences=maxAssigned`
+    当前 [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已改为复用这层逻辑；DMX 侧 `restoreSkinClusterSettings()` 仍保留在格式侧，因为它依赖 DMX 元数据恢复旧值，而 SMD 没有对应输入。最小验证再次通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。如果继续收口，下一步更适合评估的是 `bindPreMatrix/geomMatrix` 写回辅助，而不是继续硬并权重 buffer 构造。
+  - 2026-04-19：已继续把 `bindPreMatrix/geomMatrix` 的 Maya 写回动作收进 [SkinClusterUtils.h](dcc_plugin/src/common/SkinClusterUtils.h) / [SkinClusterUtils.cpp](dcc_plugin/src/common/SkinClusterUtils.cpp)。当前新增并复用的公共 helper 包括：
+    - `SetSkinClusterBindPreMatrix()`：统一按 logical influence index 写 `bindPreMatrix[]`
+    - `SetSkinClusterGeomMatrix()`：统一写 `geomMatrix`
+    当前 [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已改为复用这些 Maya 侧写回 helper；DMX 侧“从 `mayaBindPreMatrix/mayaGeomMatrix` 文本元数据回退到指定矩阵值”的格式语义仍保留在 DMX importer 内部，SMD 仍直接使用当前 scene/influence 矩阵。最小验证再次通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。照当前收口边界，`skinCluster` 下一步若继续抽公共层，只剩权重 buffer 构造与错误报告包装，但这两块已更贴近格式差异，收益会明显低于前几轮。
+  - 2026-04-19：已把 `skinCluster` 权重写入前最后一批稳定公共步骤收进 [SkinClusterUtils.h](dcc_plugin/src/common/SkinClusterUtils.h) / [SkinClusterUtils.cpp](dcc_plugin/src/common/SkinClusterUtils.cpp)。当前新增并复用的公共 helper 包括：
+    - `CreateMeshVertexComponent()`：统一创建 mesh vertex component 并填充 `[0..vertexCount)` 顶点集合
+    - `NormalizeWeightBufferInPlace()`：统一对 `MFloatArray` 权重缓冲做逐顶点归一化，并返回 `maxAssignedInfluenceCount`
+    当前 [DmxImportDeformers.cpp](dcc_plugin/src/importer/DmxImportDeformers.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已改为共用这层逻辑；两边仍各自保留“如何把格式侧 joint/bone 权重映射到 influence slot”的前半段，以及各自的错误消息包装。最小验证再次通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。至此 `skinCluster` 共用层已基本收口，继续抽下去的剩余收益会明显下降，后续更适合转回材质 / shadingEngine 公共 helper 或 exporter 侧共用抽象。
+  - 2026-04-19：已开始转向材质 / `shadingEngine` 公共层，先落地“最小 surface shader 绑定骨架”。新增 [MaterialUtils.h](dcc_plugin/src/common/MaterialUtils.h) / [MaterialUtils.cpp](dcc_plugin/src/common/MaterialUtils.cpp)，当前提供：
+    - `EnsureDependencyNodeOfType()`：按节点类型确保材质节点存在
+    - `EnsureSurfaceShaderBinding()`：统一处理 shader 创建/复用、`defaultShaderList` 注册、renderable `shadingEngine` 创建/复用，以及 `outColor -> surfaceShader` 连接
+    当前 [DmxImportMeshMaterial.cpp](dcc_plugin/src/importer/DmxImportMeshMaterial.cpp) 与 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已改为复用这层公共 helper；DMX 侧特有的贴图节点、`bump2d`、颜色/透明度 plug 写值、以及 per-face component 赋材仍保留在 DMX importer 内，SMD 侧则继续只做最小 lambert + 整 mesh 赋材。最小验证已通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。下一步若继续沿材质线收口，更适合评估“整 mesh 与 face component 两种赋材入口”的统一包装，以及 shader/shadingGroup 命名规范 helper。
+  - 2026-04-19：已继续把材质 / `shadingEngine` 的赋材入口和命名规范收进 [MaterialUtils.h](dcc_plugin/src/common/MaterialUtils.h) / [MaterialUtils.cpp](dcc_plugin/src/common/MaterialUtils.cpp)。当前新增并复用的公共 helper 包括：
+    - `BuildMaterialNodeNames()`：统一生成 `shaderName` / `shadingGroupName`
+    - `AssignWholeMeshToShadingGroup()`：统一整 mesh 赋材
+    - `AssignFacesToShadingGroup()`：统一 face component 赋材
+    当前 [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 已改为通过 `BuildMaterialNodeNames() + AssignWholeMeshToShadingGroup()` 走最小 lambert 绑定；[DmxImportMeshMaterial.cpp](dcc_plugin/src/importer/DmxImportMeshMaterial.cpp) 已改为通过 `BuildMaterialNodeNames() + AssignFacesToShadingGroup()` 处理 face set 材质分配。DMX 侧纹理、`bump2d`、颜色/透明度 plug 写值仍保留在 importer 内。最小验证再次通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。材质公共层下一步如果还要继续收口，更合理的方向是“file/bump 贴图节点创建与连接包装”，而不是继续压缩当前已经不多的 importer 侧差异。
   - 2026-04-18：评估结果显示，Maya 2022.5 里动画层相关 C++ API 覆盖不足，当前 `animLayer / setKeyframe -animLayer` 仍需要 MEL 包装；若未来升级 SDK baseline，再考虑用 `MAnimUtil` 的更高版本接口替换。
   - 2026-04-18：当前可直接用 OpenMayaAnim 保留的仅是 `MFnAnimCurve` 这类普通曲线写入；动画层创建、挂接、查曲线仍需要 MEL 过桥，后续若升级到更高 Maya 版本再评估替换。
   - 2026-04-18：帧率自适应不宜默认接入导入流程。DMX 有 `frameRate` / `timeFrame` 元数据，理论上可作为可选覆盖；SMD 只有帧序号，没有可靠 fps 来源。若要切 Maya time unit，应作为显式导入选项而不是自动行为。

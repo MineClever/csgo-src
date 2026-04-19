@@ -1,6 +1,8 @@
 #include "DmxImportAnimation.h"
 #include "DmxImportInternals.h"
 
+#include <common/AnimationCurveUtils.h>
+#include <common/AnimationSampleUtils.h>
 #include <common/MayaCommandUtils.h>
 #include <common/ImportTransformCorrection.h>
 #include <common/SourceDeltaUtils.h>
@@ -12,7 +14,6 @@
 #include <vector>
 
 #include <maya/MAnimControl.h>
-#include <maya/MDGModifier.h>
 #include <maya/MEulerRotation.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
@@ -59,132 +60,7 @@ dcc_import_policy::SourceDeltaMode ParseSourceDeltaModeValue(const std::string &
     return dcc_import_policy::SourceDeltaMode::None;
 }
 
-bool IsEmptyLayerName(const std::string &layerName)
-{
-    return layerName.empty() || layerName == "None" || layerName == "none";
-}
-
-MStatus SampleLayerPlugValue(
-    const MString &layerName,
-    const MPlug &plug,
-    double time,
-    double &value)
-{
-    value = 0.0;
-    if (plug.isNull())
-    {
-        return MStatus::kFailure;
-    }
-
-    if (IsEmptyLayerName(layerName.asChar()))
-    {
-        MTime previousTime = MAnimControl::currentTime();
-        MAnimControl::setCurrentTime(MTime(time, MTime::kSeconds));
-        value = plug.asDouble();
-        MAnimControl::setCurrentTime(previousTime);
-        return MS::kSuccess;
-    }
-
-    MStringArray curveNames;
-    MStatus status = maya_cmd::FindAnimationLayerCurvesForPlug(layerName, plug, curveNames);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    if (curveNames.length() == 0)
-    {
-        MTime previousTime = MAnimControl::currentTime();
-        MAnimControl::setCurrentTime(MTime(time, MTime::kSeconds));
-        value = plug.asDouble();
-        MAnimControl::setCurrentTime(previousTime);
-        return MS::kSuccess;
-    }
-
-    MObject curveObject;
-    const bool curveFound = maya_cmd::TryGetNodeByName(curveNames[0], curveObject);
-    if (!curveFound || curveObject.isNull() || !curveObject.hasFn(MFn::kAnimCurve))
-    {
-        return MStatus::kFailure;
-    }
-
-    MFnAnimCurve curveFn(curveObject, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    value = curveFn.evaluate(MTime(time, MTime::kSeconds));
-    return MS::kSuccess;
-}
-
-struct CurrentTimeGuard
-{
-    CurrentTimeGuard()
-        : previousTime(MAnimControl::currentTime())
-    {
-    }
-
-    ~CurrentTimeGuard()
-    {
-        MAnimControl::setCurrentTime(previousTime);
-    }
-
-    MTime previousTime;
-};
-
 } // namespace
-
-static MStatus ClearExistingAnimationCurve(const MPlug &plug)
-{
-    if (plug.isNull())
-    {
-        return MS::kSuccess;
-    }
-
-    MPlugArray sourceConnections;
-    MStatus status;
-    plug.connectedTo(sourceConnections, true, false, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    for (unsigned int sourceIndex = 0; sourceIndex < sourceConnections.length(); ++sourceIndex)
-    {
-        const MPlug sourcePlug = sourceConnections[sourceIndex];
-        if (sourcePlug.isNull() || !sourcePlug.node().hasFn(MFn::kAnimCurve))
-        {
-            continue;
-        }
-
-        MDGModifier disconnectModifier;
-        status = disconnectModifier.disconnect(sourcePlug, plug);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        status = disconnectModifier.doIt();
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MDGModifier deleteModifier;
-        status = deleteModifier.deleteNode(sourcePlug.node());
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        status = deleteModifier.doIt();
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-    }
-
-    return MS::kSuccess;
-}
 
 AnimationImporter::AnimationImporter(std::shared_ptr<ImportContext> context)
     : context_(context)
@@ -408,7 +284,7 @@ MStatus AnimationImporter::buildSourceDeltaVector3Samples(
         return MS::kSuccess;
     }
 
-    if (settings.useClip && !IsEmptyLayerName(settings.sceneClipName))
+    if (settings.useClip && !dcc_animation::IsEmptyAnimationLayerName(settings.sceneClipName.c_str()))
     {
         Vector3AnimationSamples referenceSamples;
         status = buildSceneLayerVector3Samples(MString(settings.sceneClipName.c_str()), targetPath, samples.times, referenceSamples);
@@ -447,40 +323,11 @@ MStatus AnimationImporter::buildSceneReferenceVector3Samples(
         return MS::kSuccess;
     }
 
-    MStatus status;
-    MFnDependencyNode targetNodeFn(targetPath.node(), &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MPlug translateXPlug = targetNodeFn.findPlug("translateX", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-    MPlug translateYPlug = targetNodeFn.findPlug("translateY", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-    MPlug translateZPlug = targetNodeFn.findPlug("translateZ", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    CurrentTimeGuard currentTimeGuard;
-    for (double time : times)
-    {
-        MAnimControl::setCurrentTime(MTime(time, MTime::kSeconds));
-        samples.values.emplace_back(
-            translateXPlug.asDouble(),
-            translateYPlug.asDouble(),
-            translateZPlug.asDouble());
-    }
-
-    return MS::kSuccess;
+    return dcc_animation::BuildSceneReferenceTranslationSamples(
+        targetPath,
+        times,
+        MTime::kSeconds,
+        samples.values);
 }
 
 MStatus AnimationImporter::buildSceneLayerVector3Samples(
@@ -496,54 +343,12 @@ MStatus AnimationImporter::buildSceneLayerVector3Samples(
         return MS::kSuccess;
     }
 
-    MStatus status;
-    MFnDependencyNode targetNodeFn(targetPath.node(), &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MPlug translateXPlug = targetNodeFn.findPlug("translateX", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-    MPlug translateYPlug = targetNodeFn.findPlug("translateY", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-    MPlug translateZPlug = targetNodeFn.findPlug("translateZ", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    for (double time : times)
-    {
-        double x = 0.0;
-        double y = 0.0;
-        double z = 0.0;
-        status = SampleLayerPlugValue(layerName, translateXPlug, time, x);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        status = SampleLayerPlugValue(layerName, translateYPlug, time, y);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        status = SampleLayerPlugValue(layerName, translateZPlug, time, z);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        samples.values.emplace_back(x, y, z);
-    }
-
-    return MS::kSuccess;
+    return dcc_animation::BuildSceneLayerTranslationSamples(
+        layerName,
+        targetPath,
+        times,
+        MTime::kSeconds,
+        samples.values);
 }
 
 MStatus AnimationImporter::buildSceneReferenceQuaternionSamples(
@@ -558,28 +363,11 @@ MStatus AnimationImporter::buildSceneReferenceQuaternionSamples(
         return MS::kSuccess;
     }
 
-    MStatus status;
-    MFnTransform transformFn(targetPath, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    CurrentTimeGuard currentTimeGuard;
-    for (double time : times)
-    {
-        MAnimControl::setCurrentTime(MTime(time, MTime::kSeconds));
-        MEulerRotation currentEulerRotation;
-        status = transformFn.getRotation(currentEulerRotation);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        samples.values.push_back(currentEulerRotation.asQuaternion());
-    }
-
-    return MS::kSuccess;
+    return dcc_animation::BuildSceneReferenceQuaternionSamples(
+        targetPath,
+        times,
+        MTime::kSeconds,
+        samples.values);
 }
 
 MStatus AnimationImporter::buildSceneLayerQuaternionSamples(
@@ -595,69 +383,12 @@ MStatus AnimationImporter::buildSceneLayerQuaternionSamples(
         return MS::kSuccess;
     }
 
-    MStatus status;
-    MFnTransform transformFn(targetPath, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MEulerRotation currentEulerRotation;
-    status = transformFn.getRotation(currentEulerRotation);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MFnDependencyNode targetNodeFn(targetPath.node(), &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MPlug rotateXPlug = targetNodeFn.findPlug("rotateX", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-    MPlug rotateYPlug = targetNodeFn.findPlug("rotateY", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-    MPlug rotateZPlug = targetNodeFn.findPlug("rotateZ", true, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    for (double time : times)
-    {
-        double x = 0.0;
-        double y = 0.0;
-        double z = 0.0;
-        status = SampleLayerPlugValue(layerName, rotateXPlug, time, x);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        status = SampleLayerPlugValue(layerName, rotateYPlug, time, y);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-        status = SampleLayerPlugValue(layerName, rotateZPlug, time, z);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-
-        MEulerRotation eulerRotation(x, y, z);
-        eulerRotation.reorderIt(currentEulerRotation.order);
-        samples.values.push_back(eulerRotation.asQuaternion());
-    }
-
-    return MS::kSuccess;
+    return dcc_animation::BuildSceneLayerQuaternionSamples(
+        layerName,
+        targetPath,
+        times,
+        MTime::kSeconds,
+        samples.values);
 }
 
 MStatus AnimationImporter::buildSourceDeltaQuaternionSamples(
@@ -692,7 +423,7 @@ MStatus AnimationImporter::buildSourceDeltaQuaternionSamples(
         return MS::kSuccess;
     }
 
-    if (settings.useClip && !IsEmptyLayerName(settings.sceneClipName))
+    if (settings.useClip && !dcc_animation::IsEmptyAnimationLayerName(settings.sceneClipName.c_str()))
     {
         QuaternionAnimationSamples referenceSamples;
         status = buildSceneLayerQuaternionSamples(MString(settings.sceneClipName.c_str()), targetPath, samples.times, referenceSamples);
@@ -730,35 +461,7 @@ MStatus AnimationImporter::setCurveKeys(
         return MS::kSuccess;
     }
 
-    MStatus status = ClearExistingAnimationCurve(plug);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MFnAnimCurve curveFn;
-    curveFn.create(plug, curveType, nullptr, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    for (size_t keyIndex = 0; keyIndex < times.size(); ++keyIndex)
-    {
-        curveFn.addKey(
-            MTime(times[keyIndex], MTime::kSeconds),
-            values[keyIndex],
-            MFnAnimCurve::kTangentLinear,
-            MFnAnimCurve::kTangentLinear,
-            nullptr,
-            &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-    }
-
-    return MS::kSuccess;
+    return dcc_animation::SetCurveKeys(plug, times, values, curveType, MTime::kSeconds);
 }
 
 MStatus AnimationImporter::setCurveKeysAuto(
@@ -771,35 +474,7 @@ MStatus AnimationImporter::setCurveKeysAuto(
         return MS::kSuccess;
     }
 
-    MStatus status = ClearExistingAnimationCurve(plug);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MFnAnimCurve curveFn;
-    curveFn.create(plug, nullptr, &status);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    for (size_t keyIndex = 0; keyIndex < times.size(); ++keyIndex)
-    {
-        curveFn.addKey(
-            MTime(times[keyIndex], MTime::kSeconds),
-            values[keyIndex],
-            MFnAnimCurve::kTangentLinear,
-            MFnAnimCurve::kTangentLinear,
-            nullptr,
-            &status);
-        if (!status)
-        {
-            return MStatus::kFailure;
-        }
-    }
-
-    return MS::kSuccess;
+    return dcc_animation::SetCurveKeysAuto(plug, times, values, MTime::kSeconds);
 }
 
 MStatus AnimationImporter::setTransformCurveKeys(
@@ -821,12 +496,11 @@ MStatus AnimationImporter::setTransformCurveKeys(
     }
 
     AppendImportDebugLog((std::string("animLayer: set keys for ") + plug.name().asChar() + " on " + layerName.asChar()).c_str());
-    return maya_cmd::SetKeyframesOnAnimationLayer(
-        layerName,
+    return dcc_animation::SetCurveKeysOnAnimationLayer(
         plug,
-        times.data(),
-        values.data(),
-        times.size(),
+        times,
+        values,
+        layerName,
         true,
         dcc_import_policy::UsesSourceDeltaImport(context_->scenePolicy));
 }
@@ -1477,30 +1151,22 @@ bool AnimationImporter::usesAnimationLayerForScalars() const
 
 MStatus AnimationImporter::ensureAnimationLayer(MString &layerName) const
 {
-    if (transformAnimationLayerInitialized_)
-    {
-        layerName = transformAnimationLayerName_;
-        return layerName.length() > 0 ? MS::kSuccess : MS::kFailure;
-    }
-
-    transformAnimationLayerInitialized_ = true;
     const std::string configuredName = context_->scenePolicy.animationLayerName.empty() ?
         std::string("dmx_anim") :
         context_->scenePolicy.animationLayerName;
-    MStatus status = maya_cmd::EnsureAnimationLayer(
+    MStatus status = dcc_animation::EnsureAnimationLayerCached(
         configuredName.c_str(),
         context_->scenePolicy.animationImportMode == dcc_import_policy::AnimationImportMode::ReplaceLayer,
         dcc_import_policy::UsesSourceDeltaImport(context_->scenePolicy),
         true,
-        &transformAnimationLayerName_);
+        transformAnimationLayerCache_,
+        &layerName);
     if (!status)
     {
-        transformAnimationLayerName_.clear();
         return MStatus::kFailure;
     }
 
-    AppendImportDebugLog((std::string("animLayer: ensured layer ") + transformAnimationLayerName_.asChar()).c_str());
-    layerName = transformAnimationLayerName_;
+    AppendImportDebugLog((std::string("animLayer: ensured layer ") + layerName.asChar()).c_str());
     return MS::kSuccess;
 }
 
