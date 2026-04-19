@@ -5,7 +5,7 @@
 #include "DmxImportInternals.h"
 #include "DmxImportMeshMaterial.h"
 
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 #include <common_dmx/SimpleDmxDocument.h>
 #include <common_dmx/MayaDmxCommon.h>
 #include <common/SceneMergeStrategy.h>

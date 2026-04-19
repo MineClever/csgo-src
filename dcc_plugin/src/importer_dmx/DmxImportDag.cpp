@@ -2,7 +2,7 @@
 
 #include "DmxImportMesh.h"
 
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 #include <common/SceneMergeStrategy.h>
 
 #include <string>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../common_dmx/SimpleDmxDocument.h"
-#include <common/ExportTransformPolicy.h>
+#include <common_dmx/SimpleDmxDocument.h>
+#include <common/TransformCorrection.h>
 
 #include <string>
 #include <unordered_map>

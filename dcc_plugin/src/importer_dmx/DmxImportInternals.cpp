@@ -1,7 +1,7 @@
 #include "DmxImportInternals.h"
 
 #include <common/ImportPolicy.h>
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 
 #include <cstdint>
 #include <algorithm>

@@ -4,10 +4,10 @@
 #include "DmxExportDag.h"
 #include "DmxExportInternals.h"
 
-#include "../common_dmx/MayaDmxCommon.h"
-#include "../common_dmx/SimpleDmxWrite.h"
+#include <common_dmx/MayaDmxCommon.h>
+#include <common_dmx/SimpleDmxWrite.h>
 
-#include <common/ExportTransformPolicy.h>
+#include <common/TransformCorrection.h>
 
 #include <fstream>
 #include <string>

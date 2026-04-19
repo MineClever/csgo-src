@@ -1,6 +1,6 @@
 #include "DmxExportInternals.h"
 
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 #include <common/MayaCommandUtils.h>
 
 #include <algorithm>

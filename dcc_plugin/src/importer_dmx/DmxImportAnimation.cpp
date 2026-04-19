@@ -4,7 +4,7 @@
 #include <common/AnimationCurveUtils.h>
 #include <common/AnimationSampleUtils.h>
 #include <common/MayaCommandUtils.h>
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 #include <common/SourceDeltaUtils.h>
 
 #include <algorithm>

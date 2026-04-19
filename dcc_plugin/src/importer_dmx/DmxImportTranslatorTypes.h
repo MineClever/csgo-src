@@ -1,7 +1,7 @@
 #pragma once
 
 #include <common/ImportPolicy.h>
-#include <common/ImportTransformCorrection.h>
+#include <common/TransformCorrection.h>
 #include <common_dmx/SimpleDmxDocument.h>
 
 #include <maya/MDagPath.h>
