@@ -1420,7 +1420,7 @@ def parse_float_triplet(text):
     return values
 
 
-def assert_close_triplet(actual, expected, label, tolerance=1.0e-5):
+def assert_close_triplet(actual, expected, label, tolerance=1.0e-3):
     if len(actual) != 3 or len(expected) != 3:
         raise RuntimeError(f"{label}: invalid triplet lengths actual={actual} expected={expected}")
     for actual_value, expected_value in zip(actual, expected):
@@ -1448,17 +1448,32 @@ def parse_exported_dmx_transform_gate_data(exported_path):
         if stripped == '"positions" "vector3_array"':
             break
 
-    positions_start = contents.find('"positions" "vector3_array"')
-    if positions_start >= 0:
-        bracket_start = contents.find('[', positions_start)
-        bracket_end = contents.find(']', bracket_start)
-        positions_block = contents[bracket_start + 1:bracket_end]
-        for raw_line in positions_block.splitlines():
-            stripped = raw_line.strip()
-            if not stripped:
-                continue
-            if stripped.startswith('"') and stripped.endswith('"'):
-                bind_positions.append(parse_float_triplet(stripped.strip('"')))
+    bind_state_start = contents.find('"bindState" "DmeVertexData"')
+    if bind_state_start >= 0:
+        positions_start = contents.find('"positions" "vector3_array"', bind_state_start)
+        if positions_start >= 0:
+            bracket_start = contents.find('[', positions_start)
+            if bracket_start >= 0:
+                bracket_depth = 0
+                bracket_end = -1
+                for index in range(bracket_start, len(contents)):
+                    character = contents[index]
+                    if character == '[':
+                        bracket_depth += 1
+                    elif character == ']':
+                        bracket_depth -= 1
+                        if bracket_depth == 0:
+                            bracket_end = index
+                            break
+
+                if bracket_end >= 0:
+                    positions_block = contents[bracket_start + 1:bracket_end]
+                    for raw_line in positions_block.splitlines():
+                        stripped = raw_line.strip().rstrip(",")
+                        if not stripped:
+                            continue
+                        if stripped.startswith('"') and stripped.endswith('"'):
+                            bind_positions.append(parse_float_triplet(stripped.strip('"')))
 
     return {
         "up_axis": up_axis,

@@ -908,7 +908,7 @@
     - 迁移后已重新执行 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`，DMX / SMD 插件均可通过编译
     当前未发现因目录规范化引入新的编译错误。当时仍残留的 `C4819` / `C4244` warning 已在后续 warning 清理阶段修复；后续统一命名也已继续推进到内部 CMake target 层。
   - 2026-04-19：已继续把“真正公用”与“仅 DMX 公用”重新拆开，并同步完成内部 CMake target 统一命名。新增脚本 [split_common_dirs.py](dcc_plugin/tools/split_common_dirs.py)，本轮实际完成：
-    - 共享 helper 已从 `src/common_dmx` 回迁到 [src/common](dcc_plugin/src/common)，包括 `AnimationCurveUtils`、`AnimationSampleUtils`、`ExportAnimationUtils`、`ImportTransformCorrection`、`MaterialExportUtils`、`MaterialUtils`、`MayaCommandUtils`、`SkinClusterUtils`、`ImportPolicy.h`、`SceneMergeStrategy.h`、`SourceDeltaUtils.h`
+    - 共享 helper 已从 `src/common_dmx` 回迁到 [src/common](dcc_plugin/src/common)，包括 `AnimationCurveUtils`、`AnimationSampleUtils`、`ExportAnimationUtils`、`TransformCorrection`、`MaterialExportUtils`、`MaterialUtils`、`MayaCommandUtils`、`SkinClusterUtils`、`ImportPolicy.h`、`SceneMergeStrategy.h`、`SourceDeltaUtils.h`
     - `src/common_dmx` 现在只保留 DMX 专用内容：`MayaDmxCommon.*` 与 `SimpleDmx*`
     - include 路径已同步回拆：真正共享的头文件统一走 `<common/...>`，仅 DMX 专用的头文件继续走 `<common_dmx/...>`
     - CMake target 已统一改为与目录对应的命名体系：
@@ -1111,7 +1111,7 @@
     - 明确“导出方向校正层”的数据入口与适用范围。
     - 决定保留 DMX 旧 `upAxis` 兼容路径，还是继续统一到新的导出校正策略。
   - 任务同步（2026-04-19，第一阶段落地）：
-    - 已新增 [ExportTransformPolicy.h](dcc_plugin/src/common/ExportTransformPolicy.h) / [ExportTransformPolicy.cpp](dcc_plugin/src/common/ExportTransformPolicy.cpp)，作为 DMX / SMD 共用的导出方向策略层。
+    - 共享导出/导入校正层现已统一合并为 [TransformCorrection.h](dcc_plugin/src/common/TransformCorrection.h) / [TransformCorrection.cpp](dcc_plugin/src/common/TransformCorrection.cpp)，不再分散维护 `ExportTransformPolicy.*` 与 `ImportTransformCorrection.*`。
     - 当前统一能力包括：
       - 直接消费导出侧 `TransformCorrection`（translate / rotate / scale）
       - point / direction / quaternion / Euler rotation 的统一导出校正入口
@@ -1138,6 +1138,12 @@
     - 验证：
       - `cmake --build dcc_plugin\build --config Release --target maya_plugin_dmx maya_plugin_smd` 已通过
       - `python -m py_compile dcc_plugin/tools/MayaBatchRegression.py` 已通过
+      - 2026-04-19 已在真实 `mayapy` 宿主下执行：
+        - `mayapy dcc_plugin\tools\MayaBatchRegression.py --plugin dcc_plugin\bin\Release\maya_dmx.mll --plugin-smd dcc_plugin\bin\Release\maya_smd.mll --samples dcc_plugin\samples --output dcc_plugin\build\maya_batch_regression\Release --cases simple_mesh ctm_fbi/ctm_fbi.smd`
+      - 当前两条新增导出 gate 已通过：
+        - `simple_mesh.dmx`：已确认 DMX text export 在带 `TransformCorrection` 时，`DmeTransform.position`、`bindState.positions` 与 `upAxis` metadata 按预期写出
+        - `ctm_fbi/ctm_fbi.smd`：已确认 SMD text export 在带 `TransformCorrection` 时，首条 skeleton pose 平移与首个 triangle vertex 位置按预期写出
+      - 为适配文本导出序列化精度，`MayaBatchRegression.py` 中这两条 gate 的 triplet 比较容差已放宽到 `1e-3`；这只用于文本导出数据层验证，不影响导入导出主流程逻辑
 
 - `M-SHARED-1` 剩余 common / exporter 抽象：
   - 主要代码入口：
