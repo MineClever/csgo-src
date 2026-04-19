@@ -3,8 +3,22 @@
 #include <common_dmx/MayaDmxCommon.h>
 #include "WorkflowSupport.h"
 
+#include <sstream>
+
 namespace maya_dmx
 {
+namespace
+{
+MString FormatPresetDouble(double value)
+{
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(6);
+    stream << value;
+    return stream.str().c_str();
+}
+}
+
 MString WorkflowPresetStore::SerializePreset(const ExportPreset &preset) const
 {
     MString serialized;
@@ -12,6 +26,15 @@ MString WorkflowPresetStore::SerializePreset(const ExportPreset &preset) const
     serialized += ";materialRoot=" + workflow_support::EscapeValue(preset.materialRoot);
     serialized += ";dmxEncoding=" + workflow_support::EscapeValue(preset.dmxEncoding);
     serialized += ";upAxis=" + workflow_support::EscapeValue(preset.upAxis);
+    serialized += ";translateX=" + FormatPresetDouble(preset.translateX);
+    serialized += ";translateY=" + FormatPresetDouble(preset.translateY);
+    serialized += ";translateZ=" + FormatPresetDouble(preset.translateZ);
+    serialized += ";rotateX=" + FormatPresetDouble(preset.rotateX);
+    serialized += ";rotateY=" + FormatPresetDouble(preset.rotateY);
+    serialized += ";rotateZ=" + FormatPresetDouble(preset.rotateZ);
+    serialized += ";scaleX=" + FormatPresetDouble(preset.scaleX);
+    serialized += ";scaleY=" + FormatPresetDouble(preset.scaleY);
+    serialized += ";scaleZ=" + FormatPresetDouble(preset.scaleZ);
     serialized += ";exportSkin=";
     serialized += preset.exportSkin ? "1" : "0";
     serialized += ";exportDeltaStates=";
@@ -64,6 +87,42 @@ bool WorkflowPresetStore::DeserializePreset(const MString &text, ExportPreset &p
         else if (key == "upAxis")
         {
             preset.upAxis = value;
+        }
+        else if (key == "translateX")
+        {
+            preset.translateX = value.asDouble();
+        }
+        else if (key == "translateY")
+        {
+            preset.translateY = value.asDouble();
+        }
+        else if (key == "translateZ")
+        {
+            preset.translateZ = value.asDouble();
+        }
+        else if (key == "rotateX")
+        {
+            preset.rotateX = value.asDouble();
+        }
+        else if (key == "rotateY")
+        {
+            preset.rotateY = value.asDouble();
+        }
+        else if (key == "rotateZ")
+        {
+            preset.rotateZ = value.asDouble();
+        }
+        else if (key == "scaleX")
+        {
+            preset.scaleX = value.asDouble();
+        }
+        else if (key == "scaleY")
+        {
+            preset.scaleY = value.asDouble();
+        }
+        else if (key == "scaleZ")
+        {
+            preset.scaleZ = value.asDouble();
         }
         else if (key == "exportSkin")
         {

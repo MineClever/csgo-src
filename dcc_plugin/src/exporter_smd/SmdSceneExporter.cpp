@@ -38,8 +38,11 @@ std::string DagPathKey(const MDagPath &dagPath)
 }
 }
 
-SmdSceneExporter::SmdSceneExporter(MPxFileTranslator::FileAccessMode mode)
+SmdSceneExporter::SmdSceneExporter(
+    MPxFileTranslator::FileAccessMode mode,
+    const dcc_export_transform::ExportTransformPolicy &transformPolicy)
     : mode_(mode)
+    , transformPolicy_(transformPolicy)
 {
 }
 
@@ -393,12 +396,18 @@ MStatus SmdSceneExporter::buildSkeleton()
                 dcc_animation_export::EvaluateSampleSetValues(transformSamples.translation, frameTime, MTime::uiUnit());
             const std::array<double, 3> rotationValues =
                 dcc_animation_export::EvaluateSampleSetValues(transformSamples.rotation, frameTime, MTime::uiUnit());
-            pose.tx = translationValues[0];
-            pose.ty = translationValues[1];
-            pose.tz = translationValues[2];
-            pose.rx = rotationValues[0];
-            pose.ry = rotationValues[1];
-            pose.rz = rotationValues[2];
+            const MVector correctedTranslation = dcc_export_transform::ApplyToPoint(
+                transformPolicy_,
+                MVector(translationValues[0], translationValues[1], translationValues[2]));
+            const MEulerRotation correctedRotation = dcc_export_transform::ApplyToEulerRotation(
+                transformPolicy_,
+                MEulerRotation(rotationValues[0], rotationValues[1], rotationValues[2]));
+            pose.tx = correctedTranslation.x;
+            pose.ty = correctedTranslation.y;
+            pose.tz = correctedTranslation.z;
+            pose.rx = correctedRotation.x;
+            pose.ry = correctedRotation.y;
+            pose.rz = correctedRotation.z;
             frame.poses.push_back(pose);
         }
 
@@ -543,9 +552,12 @@ MStatus SmdSceneExporter::buildTriangles()
                         {
                             return MStatus::kFailure;
                         }
-                        vertex.px = point.x;
-                        vertex.py = point.y;
-                        vertex.pz = point.z;
+                        const MVector correctedPoint = dcc_export_transform::ApplyToPoint(
+                            transformPolicy_,
+                            MVector(point.x, point.y, point.z));
+                        vertex.px = correctedPoint.x;
+                        vertex.py = correctedPoint.y;
+                        vertex.pz = correctedPoint.z;
 
                         MVector normal;
                         status = polygonIt.getNormal(static_cast<int>(vertexInTriangle), normal, MSpace::kObject);
@@ -553,9 +565,10 @@ MStatus SmdSceneExporter::buildTriangles()
                         {
                             return MStatus::kFailure;
                         }
-                        vertex.nx = normal.x;
-                        vertex.ny = normal.y;
-                        vertex.nz = normal.z;
+                        const MVector correctedNormal = dcc_export_transform::ApplyToDirection(transformPolicy_, normal);
+                        vertex.nx = correctedNormal.x;
+                        vertex.ny = correctedNormal.y;
+                        vertex.nz = correctedNormal.z;
 
                         float2 uv{};
                         if (polygonIt.hasUVs() && polygonIt.getUV(static_cast<int>(vertexInTriangle), uv) == MS::kSuccess)

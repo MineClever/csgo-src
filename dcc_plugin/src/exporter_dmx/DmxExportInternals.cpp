@@ -1,5 +1,6 @@
 #include "DmxExportInternals.h"
 
+#include <common/ImportTransformCorrection.h>
 #include <common/MayaCommandUtils.h>
 
 #include <algorithm>
@@ -167,6 +168,7 @@ ExportOptions ParseExportOptions(const MFileObject &fileObject, const MString &o
     exportOptions.binary = IsBinaryExportRequested(fileObject, options);
 
     const std::unordered_map<std::string, std::string> optionMap = ParseOptionMap(options);
+    exportOptions.transformCorrection = dcc_import_transform::ParseTransformCorrection(optionMap);
     exportOptions.exportSkin = ParseBoolOption(optionMap, "exportskin", true);
     exportOptions.exportDeltaStates = ParseBoolOption(optionMap, "exportdeltastates", true);
     exportOptions.exportMetadata = ParseBoolOption(optionMap, "exportmetadata", true);

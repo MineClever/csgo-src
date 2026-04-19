@@ -1,0 +1,86 @@
+global proc MayaSmdExport_setOptionVars(int $forceFactorySettings)
+{
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportTranslateX`) { optionVar -floatValue MayaSmd_exportTranslateX 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportTranslateY`) { optionVar -floatValue MayaSmd_exportTranslateY 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportTranslateZ`) { optionVar -floatValue MayaSmd_exportTranslateZ 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportRotateX`) { optionVar -floatValue MayaSmd_exportRotateX 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportRotateY`) { optionVar -floatValue MayaSmd_exportRotateY 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportRotateZ`) { optionVar -floatValue MayaSmd_exportRotateZ 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportScaleX`) { optionVar -floatValue MayaSmd_exportScaleX 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportScaleY`) { optionVar -floatValue MayaSmd_exportScaleY 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportScaleZ`) { optionVar -floatValue MayaSmd_exportScaleZ 1; }
+}
+
+global proc string MayaSmdExport_defaultOptionsString()
+{
+    return "translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
+}
+
+global proc MayaSmdExport_applyOptionsString(string $options)
+{
+    string $effectiveOptions = $options;
+    if (size($effectiveOptions) == 0) {
+        $effectiveOptions = MayaSmdExport_defaultOptionsString();
+    }
+
+    float $translateX = 0; float $translateY = 0; float $translateZ = 0;
+    float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
+    float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
+
+    string $optionList[];
+    tokenize($effectiveOptions, ";", $optionList);
+    for ($option in $optionList) {
+        string $parts[];
+        tokenize($option, "=", $parts);
+        if (size($parts) < 2) {
+            continue;
+        }
+
+        if ($parts[0] == "translateX") { $translateX = $parts[1]; }
+        else if ($parts[0] == "translateY") { $translateY = $parts[1]; }
+        else if ($parts[0] == "translateZ") { $translateZ = $parts[1]; }
+        else if ($parts[0] == "rotateX") { $rotateX = $parts[1]; }
+        else if ($parts[0] == "rotateY") { $rotateY = $parts[1]; }
+        else if ($parts[0] == "rotateZ") { $rotateZ = $parts[1]; }
+        else if ($parts[0] == "scaleX") { $scaleX = $parts[1]; }
+        else if ($parts[0] == "scaleY") { $scaleY = $parts[1]; }
+        else if ($parts[0] == "scaleZ") { $scaleZ = $parts[1]; }
+    }
+
+    if (`floatFieldGrp -exists smdExportTranslation`) { floatFieldGrp -e -value1 $translateX -value2 $translateY -value3 $translateZ smdExportTranslation; }
+    if (`floatFieldGrp -exists smdExportRotation`) { floatFieldGrp -e -value1 $rotateX -value2 $rotateY -value3 $rotateZ smdExportRotation; }
+    if (`floatFieldGrp -exists smdExportScale`) { floatFieldGrp -e -value1 $scaleX -value2 $scaleY -value3 $scaleZ smdExportScale; }
+}
+
+global proc string MayaSmdExport_collectOptionsString()
+{
+    float $translateX = 0; float $translateY = 0; float $translateZ = 0;
+    float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
+    float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
+
+    if (`floatFieldGrp -exists smdExportTranslation`) {
+        $translateX = `floatFieldGrp -q -value1 smdExportTranslation`;
+        $translateY = `floatFieldGrp -q -value2 smdExportTranslation`;
+        $translateZ = `floatFieldGrp -q -value3 smdExportTranslation`;
+    }
+    if (`floatFieldGrp -exists smdExportRotation`) {
+        $rotateX = `floatFieldGrp -q -value1 smdExportRotation`;
+        $rotateY = `floatFieldGrp -q -value2 smdExportRotation`;
+        $rotateZ = `floatFieldGrp -q -value3 smdExportRotation`;
+    }
+    if (`floatFieldGrp -exists smdExportScale`) {
+        $scaleX = `floatFieldGrp -q -value1 smdExportScale`;
+        $scaleY = `floatFieldGrp -q -value2 smdExportScale`;
+        $scaleZ = `floatFieldGrp -q -value3 smdExportScale`;
+    }
+
+    return ("translateX=" + $translateX
+        + ";translateY=" + $translateY
+        + ";translateZ=" + $translateZ
+        + ";rotateX=" + $rotateX
+        + ";rotateY=" + $rotateY
+        + ";rotateZ=" + $rotateZ
+        + ";scaleX=" + $scaleX
+        + ";scaleY=" + $scaleY
+        + ";scaleZ=" + $scaleZ);
+}

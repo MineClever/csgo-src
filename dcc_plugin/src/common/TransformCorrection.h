@@ -11,7 +11,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace dcc_import_transform
+namespace dcc_transform
 {
 
 struct TransformCorrection
@@ -26,11 +26,11 @@ struct TransformCorrection
     MMatrix Matrix() const;
 };
 
-TransformCorrection ParseTransformCorrection(const std::unordered_map<std::string, std::string> &optionMap);
 bool ParseDoubleOption(
     const std::unordered_map<std::string, std::string> &optionMap,
     const char *key,
     double &value);
+TransformCorrection ParseTransformCorrection(const std::unordered_map<std::string, std::string> &optionMap);
 
 MVector ApplyToPoint(const TransformCorrection &correction, const MVector &point);
 MVector ApplyToTranslationScale(const TransformCorrection &correction, const MVector &translation);
@@ -39,4 +39,26 @@ MVector ApplyToNormal(const TransformCorrection &correction, const MVector &norm
 MQuaternion ApplyToQuaternion(const TransformCorrection &correction, const MQuaternion &quaternion);
 MStatus ApplyPreTransformToObject(const MObject &object, const MMatrix &preTransform);
 
-} // namespace dcc_import_transform
+} // namespace dcc_transform
+
+namespace dcc_export_transform
+{
+
+struct ExportTransformPolicy
+{
+    dcc_transform::TransformCorrection correction;
+
+    bool IsIdentity() const;
+};
+
+std::string NormalizeUpAxisName(std::string axisName);
+ExportTransformPolicy BuildExportTransformPolicy(const dcc_transform::TransformCorrection &correction);
+
+MVector ApplyToPoint(const ExportTransformPolicy &policy, const MVector &point);
+MVector ApplyToDirection(const ExportTransformPolicy &policy, const MVector &direction);
+MQuaternion ApplyToQuaternion(const ExportTransformPolicy &policy, const MQuaternion &quaternion);
+MEulerRotation ApplyToEulerRotation(const ExportTransformPolicy &policy, const MEulerRotation &rotation);
+
+} // namespace dcc_export_transform
+
+namespace dcc_import_transform = dcc_transform;

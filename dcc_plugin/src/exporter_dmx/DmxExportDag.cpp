@@ -32,7 +32,7 @@ static bool ShouldExportRoot(const MDagPath &dagPath)
     return dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint);
 }
 
-Element *BuildTransformElement(DocumentBuilder &builder, const MDagPath &dagPath)
+Element *BuildTransformElement(DocumentBuilder &builder, const MDagPath &dagPath, const ExportContext &context)
 {
     MStatus status;
     MFnTransform transformFn(dagPath, &status);
@@ -57,9 +57,22 @@ Element *BuildTransformElement(DocumentBuilder &builder, const MDagPath &dagPath
         return nullptr;
     }
 
+    const MVector correctedTranslation =
+        dcc_export_transform::ApplyToPoint(context.transformPolicy, translation);
+    const MQuaternion correctedRotation =
+        dcc_export_transform::ApplyToQuaternion(context.transformPolicy, MQuaternion(qx, qy, qz, qw));
+
     Element *transformElement = builder.CreateElement("DmeTransform");
-    SetAttr(*transformElement, "position", ScalarAttr("vector3", FormatVector3(translation.x, translation.y, translation.z)));
-    SetAttr(*transformElement, "orientation", ScalarAttr("quaternion", FormatQuaternion(qx, qy, qz, qw)));
+    SetAttr(
+        *transformElement,
+        "position",
+        ScalarAttr("vector3", FormatVector3(correctedTranslation.x, correctedTranslation.y, correctedTranslation.z)));
+    SetAttr(
+        *transformElement,
+        "orientation",
+        ScalarAttr(
+            "quaternion",
+            FormatQuaternion(correctedRotation.x, correctedRotation.y, correctedRotation.z, correctedRotation.w)));
     return transformElement;
 }
 
@@ -209,7 +222,7 @@ Element *BuildDagElement(DocumentBuilder &builder, const MDagPath &dagPath, Expo
     ClearAttrs(*dagElement);
     dagElement->name = dagNode.name().asChar();
 
-    if (Element *transformElement = BuildTransformElement(builder, dagPath))
+    if (Element *transformElement = BuildTransformElement(builder, dagPath, context))
     {
         context.transformElementByPath[pathKey] = transformElement;
         SetAttr(*dagElement, "transform", builder.ElementRef(transformElement));

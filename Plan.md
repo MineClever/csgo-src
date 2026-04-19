@@ -934,6 +934,241 @@
   - 2026-04-18：SMD mesh 导入已改为共享几何顶点构建，不再把每个 face-vertex 都展开成独立 mesh vertex；焊点条件同时约束位置、法线连续性、骨骼权重集合和材质分组。UV 仍保持 face-vertex 赋值，但同一共享顶点上的相同 UV 坐标现在会复用同一个 UV id，修复“完全破碎”的 UV seam。
   - 2026-04-18：SMD 导入已追加 `Animation FPS` 与 `Flip UV V`。`Animation FPS` 在 UI 默认读取当前 Maya 时间单位对应的 FPS，并通过 option 串下沉为 `animationFps`；导入时会先把 SMD frame index 统一换算成当前 UI 时间值，再用于 base curve、animation layer、source delta 采样和播放区间设置，不改全局 time unit。`Flip UV V` 下沉为 `flipUvV`，默认保持旧行为 `1`，关闭后直接使用原始 `v`。宿主回归已通过：在 `film` 时间单位下，`ctm_fbi/ctm_fbi_anims/rom_skin.smd` 默认导入的 key 间隔为 `1.0`，显式 `animationFps=30` 时为 `0.8`；`ctm_fbi/ctm_fbi.smd` 的首个 UV 在 `flipUvV=1/0` 下分别为 `(0.595830, 0.928641)` 与 `(0.595830, 0.071359)`，满足 `Vflip + Vraw = 1.0`。
   - 当前待办：真正的 DMX clip 语义需要单独做 `sequence / animcmd` 对接，并继续收敛 `source delta` / `animation layer` 的验证边界。
+
+### 11. DMX / SMD 剩余开发计划与里程碑总表（2026-04-19 复核）
+- 状态：进行中
+- 目的：
+  - 将当前仍未完成的 DMX / SMD 主线里程碑集中列出，避免后续只能从历史任务同步记录中反向检索。
+  - 作为后续排期和验收入口，优先记录“仍需继续推进”的能力，而不是重复已完成收口项。
+
+- DMX 剩余里程碑：
+  - `M-DMX-1`：收口最小 facial roundtrip 的几何保真。
+    - 当前 [simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx) 的动画通道已打通，但 text roundtrip 后仍存在 blendShape 几何 diff。
+    - 目标是让“最小 `flexWeight -> blendShape` 动画”和“对应 mesh 几何结果”同时稳定，而不是只通过动画连接 gate。
+  - `M-DMX-2`：补复杂复合动画样例回归。
+    - 需新增 1 到 2 组更接近 Valve 角色资产的复合样例，重点验证 `skin + deltaStates + animation` 与 `sculptTarget -regenerate` fallback 组合场景。
+    - 这条完成前，当前 DMX 动画闭环仍主要停留在最小样例层。
+  - `M-DMX-3`：继续补完整材质网络恢复。
+    - 当前只覆盖基础 lambert/同型 shader、颜色、透明度、diffuse/normal/bump。
+    - 后续仍需扩到 `place2dTexture`、utility 链、更多 shader 类型和更稳定的贴图路径恢复。
+  - `M-DMX-4`：补更高层 facial / rig 语义。
+    - 当前 importer/exporter 只支持最小 `flexWeight` 与最小 `DmeCombinationOperator` 控制器。
+    - 完整 `controls/controlValues` 到 rig 控制网络、组合驱动、修正关系仍未进入稳定承诺范围。
+  - `M-DMX-5`：明确并实现 clip / sequence 高层语义边界。
+    - 当前仍是“单 `DmeAnimationList + DmeChannelsClip` bake 片段”模型。
+    - 后续需单独评估并实现 `sequence / animcmd` 对接，以及多 clip / take / shot 元数据边界。
+  - `M-DMX-6`：继续评估 `exportMetadata=0` 的裁剪边界。
+    - 需要明确哪些非核心字段还能继续瘦身，同时保证 reimport/roundtrip 不退化。
+
+- SMD 剩余里程碑：
+  - `M-SMD-1`：继续收口真实角色样例的 `append/update` 语义。
+    - 当前 `ctm_fbi` 这类真实样例已能基础 import/export/roundtrip，但仍未重新纳入 `append/update gate`。
+    - 后续需要让 SMD 复用匹配显式兼容 Maya 的 rename 前缀与真实场景二次导入行为。
+  - `M-SMD-2`：继续扩真实动画样例回归。
+    - 目前最小骨架/动画闭环已打通，但真实多样例覆盖仍不足。
+    - 后续需要把“可导入导出”继续推进到“可稳定宿主回归”。
+  - `M-SMD-3`：继续与 DMX 对齐统一导入合并策略。
+    - 包括 scene root、namespace、`update/append/animationOnly` 行为与 source-delta 相关边界。
+    - 当前实现已开始共用策略层，但真实样例回归仍需继续覆盖。
+  - `M-SMD-4`：评估导出侧轴向/校正统一抽象。
+    - 当前 SMD 导出还没有与 DMX 完全对齐的导出方向策略层。
+    - 若继续统一，需先抽“导出方向校正层”，再决定是否保留 DMX 旧 `upAxis` 兼容路径。
+
+- DMX / SMD 共用中期里程碑：
+  - `M-SHARED-1`：继续收口剩余的 common / exporter 共用抽象。
+    - 当前 animation、skin、material、exporter 查询层已大幅收口。
+    - 剩余更值得继续看的边角项主要包括：DMX face set 拼装模板、control/blendshape 单通道导出包装、导出方向统一校正层。
+  - `M-SHARED-2`：继续收敛 `source delta` / `animation layer` 的验证边界。
+    - 功能接入已完成，但复杂样例和宿主 gate 仍需要继续补齐，避免把“能跑”误当作“已稳定承诺”。
+  - `M-SHARED-3`：评估动画层 MEL 桥接的替代空间。
+    - 当前 Maya 2022.5 仍需要依赖 MEL 过桥处理 `animLayer / setKeyframe -animLayer`。
+    - 只有在更高 Maya API baseline 下，才适合继续评估完全改成 C++ API 的可行性。
+
+- 当前建议优先级：
+  - 第一优先级：`M-DMX-1`、`M-DMX-2`、`M-SMD-1`
+  - 第二优先级：`M-DMX-5`、`M-DMX-3`、`M-SMD-2`
+  - 第三优先级：`M-DMX-4`、`M-DMX-6`、`M-SMD-4`、`M-SHARED-1~3`
+
+### 12. DMX / SMD 剩余里程碑执行拆解（2026-04-19）
+- 状态：进行中
+- 说明：
+  - 本节把剩余里程碑继续拆成“主要代码入口 / 回归样例 / 完成判据”，后续推进时优先直接对照这里执行。
+  - 若后续实现路径发生变化，应优先更新这里，而不是只在任务同步段落里追加流水记录。
+
+- `M-DMX-1` 最小 facial roundtrip 几何保真：
+  - 主要代码入口：
+    - [DmxImportDeformers.cpp](dcc_plugin/src/importer_dmx/DmxImportDeformers.cpp)
+    - [DmxExportDeformers.cpp](dcc_plugin/src/exporter_dmx/DmxExportDeformers.cpp)
+    - [DmxImportAnimation.cpp](dcc_plugin/src/importer_dmx/DmxImportAnimation.cpp)
+    - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py)
+  - 主要回归样例：
+    - [simple_blendshape_animation.dmx](dcc_plugin/samples/simple_blendshape_animation.dmx)
+  - 完成判据：
+    - 初始导入后 blendShape 动画 gate 保持通过。
+    - text roundtrip 后不再出现 `blendshapeAnimMeshShape at vertex 2` 这类 mesh point diff。
+    - binary roundtrip 不新增新的 blendShape target 丢失或动画丢失。
+
+- `M-DMX-2` 复杂复合动画样例回归：
+  - 主要代码入口：
+    - [DmxImportSession.cpp](dcc_plugin/src/importer_dmx/DmxImportSession.cpp)
+    - [DmxImportAnimation.cpp](dcc_plugin/src/importer_dmx/DmxImportAnimation.cpp)
+    - [DmxImportDeformers.cpp](dcc_plugin/src/importer_dmx/DmxImportDeformers.cpp)
+    - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp)
+    - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py)
+  - 候选样例方向：
+    - `Ellis/DMX/animation/` 下带骨骼动画的真实样例
+    - 同时包含 `skin + deltaStates + animation` 的角色样例
+  - 完成判据：
+    - 至少新增 1 到 2 组复杂样例进入默认或专项回归。
+    - 导入后骨骼、蒙皮、动画和 delta 目标同时有明确 gate。
+    - 导出再导入后不因 `sculptTarget -regenerate` fallback 退化为不稳定路径。
+
+- `M-DMX-3` 完整材质网络恢复：
+  - 主要代码入口：
+    - [DmxImportMeshMaterial.cpp](dcc_plugin/src/importer_dmx/DmxImportMeshMaterial.cpp)
+    - [DmxExportMeshMaterial.cpp](dcc_plugin/src/exporter_dmx/DmxExportMeshMaterial.cpp)
+    - [MaterialUtils.cpp](dcc_plugin/src/common/MaterialUtils.cpp)
+    - [MaterialExportUtils.cpp](dcc_plugin/src/common/MaterialExportUtils.cpp)
+  - 主要回归方向：
+    - 包含 diffuse / normal / bump 之外节点链的 DMX 材质样例
+    - 覆盖 `place2dTexture`、utility 节点和多 shader 类型
+  - 完成判据：
+    - importer 可稳定恢复更多材质节点链，而不是只恢复最小 shader 骨架。
+    - exporter 对应字段回写后，reimport 不出现明显的材质命名或贴图路径退化。
+
+- `M-DMX-4` 更高层 facial / rig 语义：
+  - 主要代码入口：
+    - [DmxImportAnimation.cpp](dcc_plugin/src/importer_dmx/DmxImportAnimation.cpp)
+    - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp)
+    - [DmxImportTranslator.cpp](dcc_plugin/src/importer_dmx/DmxImportTranslator.cpp)
+  - 主要回归方向：
+    - `controlValues`、组合控制器、facial control 网络相关样例
+  - 完成判据：
+    - 明确区分“通用 scalar 通道层”和“facial target 解析层”。
+    - 至少有一组比 `simple_blendshape_animation` 更接近真实 rig 的样例纳入专项 gate。
+
+- `M-DMX-5` clip / sequence 高层语义：
+  - 主要代码入口：
+    - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp)
+    - [DmxImportAnimation.cpp](dcc_plugin/src/importer_dmx/DmxImportAnimation.cpp)
+    - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp)
+  - 主要回归方向：
+    - `DmeAnimationList / DmeChannelsClip / DmeTimeFrame` 之外的 sequence/take/shot 语义样例
+  - 完成判据：
+    - 明确记录哪些 clip/sequence 语义进入稳定承诺，哪些仍显式不支持。
+    - 若实现 `sequence / animcmd` 对接，需要新增独立 gate，不与骨骼/标量/facial gate 混用。
+
+- `M-DMX-6` `exportMetadata=0` 裁剪边界：
+  - 主要代码入口：
+    - [DmxExportTranslator.cpp](dcc_plugin/src/exporter_dmx/DmxExportTranslator.cpp)
+    - [DmxExportMeshMaterial.cpp](dcc_plugin/src/exporter_dmx/DmxExportMeshMaterial.cpp)
+    - [SimpleDmxWrite.cpp](dcc_plugin/src/common_dmx/SimpleDmxWrite.cpp)
+  - 完成判据：
+    - 明确列出可裁剪字段与必须保留字段。
+    - `exportMetadata=0` 下最小 reimport/roundtrip gate 不退化。
+
+- `M-SMD-1` 真实角色样例 `append/update` 收口：
+  - 主要代码入口：
+    - [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp)
+    - [SmdAnimationImporter.cpp](dcc_plugin/src/importer_smd/SmdAnimationImporter.cpp)
+    - [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp)
+    - [SceneMergeStrategy.h](dcc_plugin/src/common/SceneMergeStrategy.h)
+    - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py)
+  - 主要回归样例：
+    - `ctm_fbi/ctm_fbi.smd`
+    - `ctm_fbi/ctm_fbi_anims/rom_skin.smd`
+  - 完成判据：
+    - 真实样例重新纳入 `append/update gate`。
+    - 二次导入时对象复用、rename 前缀兼容、层级命中行为可预测且可回归。
+
+- `M-SMD-2` 真实动画样例回归扩展：
+  - 主要代码入口：
+    - [SmdAnimationImporter.cpp](dcc_plugin/src/importer_smd/SmdAnimationImporter.cpp)
+    - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)
+    - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py)
+  - 主要回归样例：
+    - `MostComplexSampleSet/vcaanim_VertexAnim.smd`
+    - `ctm_fbi/ctm_fbi_anims/` 下真实动画样例
+  - 完成判据：
+    - 至少再补若干真实样例进入稳定 gate。
+    - 区分单帧 skeleton 输入与真正多帧动画输入，避免 gate 语义混淆。
+
+- `M-SMD-3` 与 DMX 对齐统一导入合并策略：
+  - 主要代码入口：
+    - [SceneMergeStrategy.h](dcc_plugin/src/common/SceneMergeStrategy.h)
+    - [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp)
+    - [DmxImportSession.cpp](dcc_plugin/src/importer_dmx/DmxImportSession.cpp)
+  - 完成判据：
+    - scene root、namespace、`update/append/animationOnly` 的行为边界在 DMX/SMD 两侧都有回归覆盖。
+    - 公共策略层不再只停留在“代码共用”，而是有明确的行为级验收。
+
+- `M-SMD-4` 导出方向/轴向统一抽象：
+  - 主要代码入口：
+    - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)
+    - [DmxExportTranslator.cpp](dcc_plugin/src/exporter_dmx/DmxExportTranslator.cpp)
+    - [ExportTransformPolicy.cpp](dcc_plugin/src/common/ExportTransformPolicy.cpp)
+  - 完成判据：
+    - 明确“导出方向校正层”的数据入口与适用范围。
+    - 决定保留 DMX 旧 `upAxis` 兼容路径，还是继续统一到新的导出校正策略。
+  - 任务同步（2026-04-19，第一阶段落地）：
+    - 已新增 [ExportTransformPolicy.h](dcc_plugin/src/common/ExportTransformPolicy.h) / [ExportTransformPolicy.cpp](dcc_plugin/src/common/ExportTransformPolicy.cpp)，作为 DMX / SMD 共用的导出方向策略层。
+    - 当前统一能力包括：
+      - 直接消费导出侧 `TransformCorrection`（translate / rotate / scale）
+      - point / direction / quaternion / Euler rotation 的统一导出校正入口
+    - DMX 侧已接入：
+      - [DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 现会按导出 options 里的 `TransformCorrection` 构建导出策略并下沉到 `ExportContext`
+      - [DmxExportDag.cpp](dcc_plugin/src/exporter_dmx/DmxExportDag.cpp) 的 DAG transform 导出
+      - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) 的 position / orientation 动画采样导出
+      - [DmxExportMesh.cpp](dcc_plugin/src/exporter_dmx/DmxExportMesh.cpp) 的 mesh position / normal / tangent 导出
+    - SMD 侧已接入：
+      - [SmdExportSession.cpp](dcc_plugin/src/exporter_smd/SmdExportSession.cpp) 现会按导出 options 里的 `TransformCorrection` 构建同一套导出策略
+      - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 的 skeleton pose 与 triangle vertex / normal 导出已改为统一经过该策略层
+    - UI / options 层已同步：
+      - [performDmxExport.mel](dcc_plugin/src/mel/performDmxExport.mel) 与 [mayaDmxTranslatorExport.mel](dcc_plugin/src/mel/mayaDmxTranslatorExport.mel) 已新增导出 Translation / Rotation / Scale 三组字段
+      - [doDmxExportArgList.mel](dcc_plugin/src/mel/doDmxExportArgList.mel) 与 [mayaDmxWorkflow](dcc_plugin/src/workflow/MayaDmxWorkflow.h) / [WorkflowExecutor.cpp](dcc_plugin/src/workflow/WorkflowExecutor.cpp) / [WorkflowPresetStore.cpp](dcc_plugin/src/workflow/WorkflowPresetStore.cpp) / [MayaDmxWorkflowCommand.cpp](dcc_plugin/src/workflow/MayaDmxWorkflowCommand.cpp) 已同步下沉这组参数，避免 UI 值只停留在前端
+      - 已新增 [performSmdExport.mel](dcc_plugin/src/mel/performSmdExport.mel) 与 [mayaSmdTranslatorExport.mel](dcc_plugin/src/mel/mayaSmdTranslatorExport.mel)，并在 [plugin_smd/PluginMain.cpp](dcc_plugin/src/plugin_smd/PluginMain.cpp) 注册 SMD exporter file options script，使 SMD 导出也能在 UI 层直接输入同一套 `TransformCorrection`
+    - 回归层已同步：
+      - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已新增 `EXPORT_TRANSFORM_GATE_EXPECTATIONS`，当前先覆盖两条最小导出 gate：
+        - `simple_mesh.dmx`：验证 DMX text export 在带 `TransformCorrection` 时，`DmeTransform.position`、`bindState.positions` 以及 `upAxis` metadata 都按预期写出
+        - `ctm_fbi/ctm_fbi.smd`：验证 SMD text export 在带 `TransformCorrection` 时，首条 skeleton pose 的平移和首个 triangle vertex 的位置都按预期写出
+      - 这类 gate 直接读取导出的文本文件检查数据层，不依赖“再导入后场景看起来对了”的间接结果
+    - 当前边界：
+      - 这轮主要先统一 transform / animation / geometry 的导出自定义变换入口，不在同一轮里继续硬并 skin metadata 矩阵和更高层材质/rig 语义
+      - `Y-up / Z-up` 现在只对 DMX 导出元数据 `upAxis` 有意义，不再驱动导出坐标本身的旋转校正；真正写入数据层的统一变换入口已改为 `TransformCorrection`
+    - 验证：
+      - `cmake --build dcc_plugin\build --config Release --target maya_plugin_dmx maya_plugin_smd` 已通过
+      - `python -m py_compile dcc_plugin/tools/MayaBatchRegression.py` 已通过
+
+- `M-SHARED-1` 剩余 common / exporter 抽象：
+  - 主要代码入口：
+    - [MaterialExportUtils.cpp](dcc_plugin/src/common/MaterialExportUtils.cpp)
+    - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp)
+    - [DmxExportMesh.cpp](dcc_plugin/src/exporter_dmx/DmxExportMesh.cpp)
+    - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp)
+  - 当前候选项：
+    - DMX face set 拼装模板
+    - control / blendshape 单通道导出包装
+    - 导出方向统一校正层
+  - 完成判据：
+    - 新增抽象能同时减少两侧重复，并且不把格式语义混进 shared 层。
+
+- `M-SHARED-2` `source delta` / `animation layer` 验证边界：
+  - 主要代码入口：
+    - [DmxImportAnimation.cpp](dcc_plugin/src/importer_dmx/DmxImportAnimation.cpp)
+    - [SmdSourceDeltaProcessor.cpp](dcc_plugin/src/importer_smd/SmdSourceDeltaProcessor.cpp)
+    - [AnimationCurveUtils.cpp](dcc_plugin/src/common/AnimationCurveUtils.cpp)
+    - [AnimationSampleUtils.cpp](dcc_plugin/src/common/AnimationSampleUtils.cpp)
+  - 完成判据：
+    - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
+    - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。
+
+- `M-SHARED-3` 动画层 MEL 桥接替代评估：
+  - 主要代码入口：
+    - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp)
+    - [AnimationCurveUtils.cpp](dcc_plugin/src/common/AnimationCurveUtils.cpp)
+  - 完成判据：
+    - 若保持 Maya 2022.5 baseline，则明确哪些桥接调用属于“保留项”。
+    - 若未来升级 API baseline，则单独建项评估哪些桥接可迁回 C++ API。
 ## 环境与工具链说明
 
 ### A. 批处理构建包装脚本已做兼容性修复

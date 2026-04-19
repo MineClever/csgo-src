@@ -1,6 +1,7 @@
 #pragma once
 
 #include <common_smd/SimpleSmdDocument.h>
+#include <common/ExportTransformPolicy.h>
 #include <maya/MDagPath.h>
 #include <maya/MPxFileTranslator.h>
 #include <maya/MStatus.h>
@@ -11,7 +12,9 @@
 class SmdSceneExporter
 {
 public:
-    explicit SmdSceneExporter(MPxFileTranslator::FileAccessMode mode);
+    SmdSceneExporter(
+        MPxFileTranslator::FileAccessMode mode,
+        const dcc_export_transform::ExportTransformPolicy &transformPolicy);
 
     MStatus Build();
     const simple_smd::Document &document() const;
@@ -34,6 +37,7 @@ private:
     int findOwningNodeIndex(const MDagPath &dagPath) const;
 
     MPxFileTranslator::FileAccessMode mode_;
+    dcc_export_transform::ExportTransformPolicy transformPolicy_;
     simple_smd::Document document_;
     std::vector<MDagPath> exportRoots_;
     std::vector<MDagPath> meshRoots_;

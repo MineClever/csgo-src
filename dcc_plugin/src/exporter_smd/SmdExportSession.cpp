@@ -1,14 +1,61 @@
 #include "SmdExportSession.h"
 
+#include <common/ExportTransformPolicy.h>
+#include <common/ImportTransformCorrection.h>
 #include <common_smd/MayaSmdCommon.h>
 
 #include <fstream>
+#include <algorithm>
+#include <cctype>
+#include <string>
+#include <unordered_map>
+
+namespace
+{
+std::unordered_map<std::string, std::string> ParseOptionMap(const MString &options)
+{
+    std::unordered_map<std::string, std::string> optionMap;
+    std::string text = options.asChar();
+    size_t start = 0;
+    while (start < text.size())
+    {
+        size_t end = text.find(';', start);
+        if (end == std::string::npos)
+        {
+            end = text.size();
+        }
+
+        const std::string pair = text.substr(start, end - start);
+        const size_t separator = pair.find('=');
+        if (separator != std::string::npos)
+        {
+            std::string key = pair.substr(0, separator);
+            std::transform(key.begin(), key.end(), key.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+            optionMap[key] = pair.substr(separator + 1);
+        }
+
+        start = end + 1;
+    }
+
+    return optionMap;
+}
+
+dcc_export_transform::ExportTransformPolicy BuildSmdExportTransformPolicy(const MString &options)
+{
+    const std::unordered_map<std::string, std::string> optionMap = ParseOptionMap(options);
+    return dcc_export_transform::BuildExportTransformPolicy(dcc_import_transform::ParseTransformCorrection(optionMap));
+}
+}
 
 SmdExportSession::SmdExportSession(const MFileObject &fileObject, const MString &options, MPxFileTranslator::FileAccessMode mode)
     : fileObject_(fileObject)
     , options_(options)
     , mode_(mode)
-    , sceneExporter_(mode)
+    , sceneExporter_(
+        mode,
+        BuildSmdExportTransformPolicy(options))
 {
 }
 

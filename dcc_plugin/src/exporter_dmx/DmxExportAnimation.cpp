@@ -245,7 +245,12 @@ void AnimationExporter::appendCurrentVectorTransformChannel(
     std::vector<std::array<double, 3>> values;
     for (double timeSeconds : times)
     {
-        values.push_back(dcc_animation_export::EvaluateSampleSetValues(samples, timeSeconds, MTime::kSeconds));
+        const std::array<double, 3> rawValues =
+            dcc_animation_export::EvaluateSampleSetValues(samples, timeSeconds, MTime::kSeconds);
+        const MVector correctedValues = dcc_export_transform::ApplyToPoint(
+            context_->transformPolicy,
+            MVector(rawValues[0], rawValues[1], rawValues[2]));
+        values.push_back({correctedValues.x, correctedValues.y, correctedValues.z});
         clipDurationSeconds_ = std::max(clipDurationSeconds_, timeSeconds);
     }
 
@@ -301,7 +306,10 @@ void AnimationExporter::appendCurrentQuaternionTransformChannel(
     {
         const std::array<double, 3> eulerValues =
             dcc_animation_export::EvaluateSampleSetValues(samples, timeSeconds, MTime::kSeconds);
-        values.push_back(MEulerRotation(eulerValues[0], eulerValues[1], eulerValues[2]).asQuaternion());
+        const MQuaternion correctedRotation = dcc_export_transform::ApplyToQuaternion(
+            context_->transformPolicy,
+            MEulerRotation(eulerValues[0], eulerValues[1], eulerValues[2]).asQuaternion());
+        values.push_back(correctedRotation);
         clipDurationSeconds_ = std::max(clipDurationSeconds_, timeSeconds);
     }
 

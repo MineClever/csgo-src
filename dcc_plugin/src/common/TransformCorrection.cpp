@@ -1,4 +1,4 @@
-#include "ImportTransformCorrection.h"
+#include "TransformCorrection.h"
 
 #include <cmath>
 
@@ -11,7 +11,7 @@ constexpr double kEpsilon = 1.0e-8;
 constexpr double kRadiansPerDegree = 3.14159265358979323846 / 180.0;
 }
 
-namespace dcc_import_transform
+namespace dcc_transform
 {
 
 bool TransformCorrection::IsIdentity() const
@@ -178,4 +178,50 @@ MStatus ApplyPreTransformToObject(const MObject &object, const MMatrix &preTrans
     return status ? MS::kSuccess : MS::kFailure;
 }
 
-} // namespace dcc_import_transform
+} // namespace dcc_transform
+
+namespace dcc_export_transform
+{
+
+bool ExportTransformPolicy::IsIdentity() const
+{
+    return correction.IsIdentity();
+}
+
+std::string NormalizeUpAxisName(std::string axisName)
+{
+    for (char &ch : axisName)
+    {
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    }
+    return axisName == "Z" ? "Z" : "Y";
+}
+
+ExportTransformPolicy BuildExportTransformPolicy(const dcc_transform::TransformCorrection &correction)
+{
+    ExportTransformPolicy policy;
+    policy.correction = correction;
+    return policy;
+}
+
+MVector ApplyToPoint(const ExportTransformPolicy &policy, const MVector &point)
+{
+    return dcc_transform::ApplyToPoint(policy.correction, point);
+}
+
+MVector ApplyToDirection(const ExportTransformPolicy &policy, const MVector &direction)
+{
+    return dcc_transform::ApplyToNormal(policy.correction, direction);
+}
+
+MQuaternion ApplyToQuaternion(const ExportTransformPolicy &policy, const MQuaternion &quaternion)
+{
+    return dcc_transform::ApplyToQuaternion(policy.correction, quaternion);
+}
+
+MEulerRotation ApplyToEulerRotation(const ExportTransformPolicy &policy, const MEulerRotation &rotation)
+{
+    return ApplyToQuaternion(policy, rotation.asQuaternion()).asEulerRotation();
+}
+
+} // namespace dcc_export_transform

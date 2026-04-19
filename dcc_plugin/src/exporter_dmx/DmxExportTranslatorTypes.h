@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../common_dmx/SimpleDmxDocument.h"
+#include <common/ExportTransformPolicy.h>
 
 #include <string>
 #include <unordered_map>
@@ -19,6 +20,7 @@ struct ExportContext
     bool exportDeltaStates = true;
     bool exportMetadata = true;
     std::string materialRoot;
+    dcc_export_transform::ExportTransformPolicy transformPolicy;
 };
 
 struct ExportOptions
@@ -29,6 +31,7 @@ struct ExportOptions
     bool exportMetadata = true;
     std::string upAxis = "Y";
     std::string materialRoot;
+    dcc_import_transform::TransformCorrection transformCorrection;
 };
 
 struct IndexedChannel

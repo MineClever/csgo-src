@@ -6,6 +6,15 @@ global proc MayaDmxExport_syncOptionVars(string $version, string $args[])
     optionVar -intValue MayaDmx_exportDeltaStates $args[4];
     optionVar -intValue MayaDmx_exportMetadata $args[5];
     optionVar -stringValue MayaDmx_exportMaterialRoot $args[6];
+    optionVar -floatValue MayaDmx_exportTranslateX $args[7];
+    optionVar -floatValue MayaDmx_exportTranslateY $args[8];
+    optionVar -floatValue MayaDmx_exportTranslateZ $args[9];
+    optionVar -floatValue MayaDmx_exportRotateX $args[10];
+    optionVar -floatValue MayaDmx_exportRotateY $args[11];
+    optionVar -floatValue MayaDmx_exportRotateZ $args[12];
+    optionVar -floatValue MayaDmx_exportScaleX $args[13];
+    optionVar -floatValue MayaDmx_exportScaleY $args[14];
+    optionVar -floatValue MayaDmx_exportScaleZ $args[15];
 }
 
 global proc doDmxExportArgList(string $version, string $args[])
@@ -71,6 +80,15 @@ global proc doDmxExportArgList(string $version, string $args[])
     int $exportDeltaStates = `optionVar -q MayaDmx_exportDeltaStates`;
     int $exportMetadata = `optionVar -q MayaDmx_exportMetadata`;
     string $materialRoot = `optionVar -q MayaDmx_exportMaterialRoot`;
+    float $translateX = `optionVar -q MayaDmx_exportTranslateX`;
+    float $translateY = `optionVar -q MayaDmx_exportTranslateY`;
+    float $translateZ = `optionVar -q MayaDmx_exportTranslateZ`;
+    float $rotateX = `optionVar -q MayaDmx_exportRotateX`;
+    float $rotateY = `optionVar -q MayaDmx_exportRotateY`;
+    float $rotateZ = `optionVar -q MayaDmx_exportRotateZ`;
+    float $scaleX = `optionVar -q MayaDmx_exportScaleX`;
+    float $scaleY = `optionVar -q MayaDmx_exportScaleY`;
+    float $scaleZ = `optionVar -q MayaDmx_exportScaleZ`;
 
     if (!`exists mayaDmxWorkflow`) {
         error "maya_dmx: mayaDmxWorkflow command is not available.";
@@ -84,6 +102,15 @@ global proc doDmxExportArgList(string $version, string $args[])
         -materialRoot $materialRoot
         -encoding $encoding
         -upAxis $upAxis
+        -translateX $translateX
+        -translateY $translateY
+        -translateZ $translateZ
+        -rotateX $rotateX
+        -rotateY $rotateY
+        -rotateZ $rotateZ
+        -scaleX $scaleX
+        -scaleY $scaleY
+        -scaleZ $scaleZ
         -exportSkin ($exportSkin == 1)
         -exportDeltaStates ($exportDeltaStates == 1)
         -exportMetadata ($exportMetadata == 1);

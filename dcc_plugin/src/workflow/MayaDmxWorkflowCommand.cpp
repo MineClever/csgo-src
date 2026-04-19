@@ -23,6 +23,15 @@ MSyntax MayaDmxWorkflowCommand::CreateSyntax()
     syntax.addFlag(kMaterialRootFlag, kMaterialRootLongFlag, MSyntax::kString);
     syntax.addFlag(kEncodingFlag, kEncodingLongFlag, MSyntax::kString);
     syntax.addFlag(kUpAxisFlag, kUpAxisLongFlag, MSyntax::kString);
+    syntax.addFlag(kTranslateXFlag, kTranslateXLongFlag, MSyntax::kDouble);
+    syntax.addFlag(kTranslateYFlag, kTranslateYLongFlag, MSyntax::kDouble);
+    syntax.addFlag(kTranslateZFlag, kTranslateZLongFlag, MSyntax::kDouble);
+    syntax.addFlag(kRotateXFlag, kRotateXLongFlag, MSyntax::kDouble);
+    syntax.addFlag(kRotateYFlag, kRotateYLongFlag, MSyntax::kDouble);
+    syntax.addFlag(kRotateZFlag, kRotateZLongFlag, MSyntax::kDouble);
+    syntax.addFlag(kScaleXFlag, kScaleXLongFlag, MSyntax::kDouble);
+    syntax.addFlag(kScaleYFlag, kScaleYLongFlag, MSyntax::kDouble);
+    syntax.addFlag(kScaleZFlag, kScaleZLongFlag, MSyntax::kDouble);
     syntax.addFlag(kExportSkinFlag, kExportSkinLongFlag, MSyntax::kBoolean);
     syntax.addFlag(kExportDeltaFlag, kExportDeltaLongFlag, MSyntax::kBoolean);
     syntax.addFlag(kExportMetadataFlag, kExportMetadataLongFlag, MSyntax::kBoolean);
@@ -199,6 +208,42 @@ void MayaDmxWorkflowCommand::populatePresetFromArgs(const char *nameFlag)
     if (isFlagSet(kUpAxisFlag))
     {
         arguments().getFlagArgument(kUpAxisFlag, 0, workingPreset_.upAxis);
+    }
+    if (isFlagSet(kTranslateXFlag))
+    {
+        arguments().getFlagArgument(kTranslateXFlag, 0, workingPreset_.translateX);
+    }
+    if (isFlagSet(kTranslateYFlag))
+    {
+        arguments().getFlagArgument(kTranslateYFlag, 0, workingPreset_.translateY);
+    }
+    if (isFlagSet(kTranslateZFlag))
+    {
+        arguments().getFlagArgument(kTranslateZFlag, 0, workingPreset_.translateZ);
+    }
+    if (isFlagSet(kRotateXFlag))
+    {
+        arguments().getFlagArgument(kRotateXFlag, 0, workingPreset_.rotateX);
+    }
+    if (isFlagSet(kRotateYFlag))
+    {
+        arguments().getFlagArgument(kRotateYFlag, 0, workingPreset_.rotateY);
+    }
+    if (isFlagSet(kRotateZFlag))
+    {
+        arguments().getFlagArgument(kRotateZFlag, 0, workingPreset_.rotateZ);
+    }
+    if (isFlagSet(kScaleXFlag))
+    {
+        arguments().getFlagArgument(kScaleXFlag, 0, workingPreset_.scaleX);
+    }
+    if (isFlagSet(kScaleYFlag))
+    {
+        arguments().getFlagArgument(kScaleYFlag, 0, workingPreset_.scaleY);
+    }
+    if (isFlagSet(kScaleZFlag))
+    {
+        arguments().getFlagArgument(kScaleZFlag, 0, workingPreset_.scaleZ);
     }
     if (isFlagSet(kExportSkinFlag))
     {

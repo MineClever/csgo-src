@@ -1,0 +1,51 @@
+global proc string SmdExportOptionsUI(string $parent)
+{
+    setParent $parent;
+    string $layout = `columnLayout -adjustableColumn true mayaSmdTranslatorExportOptions`;
+
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Translation"
+        smdExportTranslation;
+
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Rotation"
+        smdExportRotation;
+
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Scale"
+        smdExportScale;
+
+    return $layout;
+}
+
+global proc int mayaSmdTranslatorExport(string $parent,
+                                        string $action,
+                                        string $initialSettings,
+                                        string $resultCallback)
+{
+    if (!`exists MayaSmdExport_applyOptionsString`) {
+        source "performSmdExport.mel";
+    }
+
+    if ($action == "post") {
+        SmdExportOptionsUI($parent);
+        MayaSmdExport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "fill") {
+        MayaSmdExport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "query") {
+        string $optionsString = MayaSmdExport_collectOptionsString();
+        eval($resultCallback + " \"" + $optionsString + "\"");
+        return 1;
+    }
+
+    return 0;
+}

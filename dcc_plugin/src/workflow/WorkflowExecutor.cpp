@@ -9,9 +9,22 @@
 #include <maya/MSelectionList.h>
 
 #include <filesystem>
+#include <sstream>
 
 namespace maya_dmx
 {
+namespace
+{
+MString FormatOptionDouble(double value)
+{
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(6);
+    stream << value;
+    return stream.str().c_str();
+}
+}
+
 MString WorkflowExecutor::BuildTranslatorOptions(const ExportPreset &preset) const
 {
     MString options;
@@ -30,6 +43,24 @@ MString WorkflowExecutor::BuildTranslatorOptions(const ExportPreset &preset) con
         options += ";materialRoot=";
         options += preset.materialRoot;
     }
+    options += ";translateX=";
+    options += FormatOptionDouble(preset.translateX);
+    options += ";translateY=";
+    options += FormatOptionDouble(preset.translateY);
+    options += ";translateZ=";
+    options += FormatOptionDouble(preset.translateZ);
+    options += ";rotateX=";
+    options += FormatOptionDouble(preset.rotateX);
+    options += ";rotateY=";
+    options += FormatOptionDouble(preset.rotateY);
+    options += ";rotateZ=";
+    options += FormatOptionDouble(preset.rotateZ);
+    options += ";scaleX=";
+    options += FormatOptionDouble(preset.scaleX);
+    options += ";scaleY=";
+    options += FormatOptionDouble(preset.scaleY);
+    options += ";scaleZ=";
+    options += FormatOptionDouble(preset.scaleZ);
     return options;
 }
 

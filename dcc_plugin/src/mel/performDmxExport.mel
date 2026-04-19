@@ -23,11 +23,21 @@ global proc MayaDmxExport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportMaterialRoot`) {
         optionVar -stringValue MayaDmx_exportMaterialRoot "";
     }
+
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportTranslateX`) { optionVar -floatValue MayaDmx_exportTranslateX 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportTranslateY`) { optionVar -floatValue MayaDmx_exportTranslateY 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportTranslateZ`) { optionVar -floatValue MayaDmx_exportTranslateZ 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportRotateX`) { optionVar -floatValue MayaDmx_exportRotateX 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportRotateY`) { optionVar -floatValue MayaDmx_exportRotateY 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportRotateZ`) { optionVar -floatValue MayaDmx_exportRotateZ 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportScaleX`) { optionVar -floatValue MayaDmx_exportScaleX 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportScaleY`) { optionVar -floatValue MayaDmx_exportScaleY 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportScaleZ`) { optionVar -floatValue MayaDmx_exportScaleZ 1; }
 }
 
 global proc string MayaDmxExport_defaultOptionsString()
 {
-    return "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;exportMetadata=1;materialRoot=";
+    return "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;exportMetadata=1;materialRoot=;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
 }
 
 global proc string MayaDmxExport_collectOptionVarString()
@@ -39,13 +49,31 @@ global proc string MayaDmxExport_collectOptionVarString()
     int $exportDeltaStates = `optionVar -q MayaDmx_exportDeltaStates`;
     int $exportMetadata = `optionVar -q MayaDmx_exportMetadata`;
     string $materialRoot = `optionVar -q MayaDmx_exportMaterialRoot`;
+    float $translateX = `optionVar -q MayaDmx_exportTranslateX`;
+    float $translateY = `optionVar -q MayaDmx_exportTranslateY`;
+    float $translateZ = `optionVar -q MayaDmx_exportTranslateZ`;
+    float $rotateX = `optionVar -q MayaDmx_exportRotateX`;
+    float $rotateY = `optionVar -q MayaDmx_exportRotateY`;
+    float $rotateZ = `optionVar -q MayaDmx_exportRotateZ`;
+    float $scaleX = `optionVar -q MayaDmx_exportScaleX`;
+    float $scaleY = `optionVar -q MayaDmx_exportScaleY`;
+    float $scaleZ = `optionVar -q MayaDmx_exportScaleZ`;
 
     return ("encoding=" + $encoding
         + ";upAxis=" + $upAxis
         + ";exportSkin=" + $exportSkin
         + ";exportDeltaStates=" + $exportDeltaStates
         + ";exportMetadata=" + $exportMetadata
-        + ";materialRoot=" + $materialRoot);
+        + ";materialRoot=" + $materialRoot
+        + ";translateX=" + $translateX
+        + ";translateY=" + $translateY
+        + ";translateZ=" + $translateZ
+        + ";rotateX=" + $rotateX
+        + ";rotateY=" + $rotateY
+        + ";rotateZ=" + $rotateZ
+        + ";scaleX=" + $scaleX
+        + ";scaleY=" + $scaleY
+        + ";scaleZ=" + $scaleZ);
 }
 
 global proc MayaDmxExport_applyOptionsString(string $options)
@@ -61,6 +89,9 @@ global proc MayaDmxExport_applyOptionsString(string $options)
     int $exportDeltaStates = 1;
     int $exportMetadata = 1;
     string $materialRoot = "";
+    float $translateX = 0; float $translateY = 0; float $translateZ = 0;
+    float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
+    float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
 
     string $optionList[];
     tokenize($effectiveOptions, ";", $optionList);
@@ -85,6 +116,24 @@ global proc MayaDmxExport_applyOptionsString(string $options)
             $exportMetadata = $value;
         } else if ($key == "materialRoot") {
             $materialRoot = $value;
+        } else if ($key == "translateX") {
+            $translateX = $value;
+        } else if ($key == "translateY") {
+            $translateY = $value;
+        } else if ($key == "translateZ") {
+            $translateZ = $value;
+        } else if ($key == "rotateX") {
+            $rotateX = $value;
+        } else if ($key == "rotateY") {
+            $rotateY = $value;
+        } else if ($key == "rotateZ") {
+            $rotateZ = $value;
+        } else if ($key == "scaleX") {
+            $scaleX = $value;
+        } else if ($key == "scaleY") {
+            $scaleY = $value;
+        } else if ($key == "scaleZ") {
+            $scaleZ = $value;
         }
     }
 
@@ -106,6 +155,9 @@ global proc MayaDmxExport_applyOptionsString(string $options)
     if (`textFieldGrp -exists dmxExportMaterialRoot`) {
         textFieldGrp -e -text $materialRoot dmxExportMaterialRoot;
     }
+    if (`floatFieldGrp -exists dmxExportTranslation`) { floatFieldGrp -e -value1 $translateX -value2 $translateY -value3 $translateZ dmxExportTranslation; }
+    if (`floatFieldGrp -exists dmxExportRotation`) { floatFieldGrp -e -value1 $rotateX -value2 $rotateY -value3 $rotateZ dmxExportRotation; }
+    if (`floatFieldGrp -exists dmxExportScale`) { floatFieldGrp -e -value1 $scaleX -value2 $scaleY -value3 $scaleZ dmxExportScale; }
 }
 
 global proc string MayaDmxExport_collectOptionsString()
@@ -139,13 +191,40 @@ global proc string MayaDmxExport_collectOptionsString()
     if (`textFieldGrp -exists dmxExportMaterialRoot`) {
         $materialRoot = `textFieldGrp -q -text dmxExportMaterialRoot`;
     }
+    float $translateX = 0; float $translateY = 0; float $translateZ = 0;
+    float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
+    float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
+    if (`floatFieldGrp -exists dmxExportTranslation`) {
+        $translateX = `floatFieldGrp -q -value1 dmxExportTranslation`;
+        $translateY = `floatFieldGrp -q -value2 dmxExportTranslation`;
+        $translateZ = `floatFieldGrp -q -value3 dmxExportTranslation`;
+    }
+    if (`floatFieldGrp -exists dmxExportRotation`) {
+        $rotateX = `floatFieldGrp -q -value1 dmxExportRotation`;
+        $rotateY = `floatFieldGrp -q -value2 dmxExportRotation`;
+        $rotateZ = `floatFieldGrp -q -value3 dmxExportRotation`;
+    }
+    if (`floatFieldGrp -exists dmxExportScale`) {
+        $scaleX = `floatFieldGrp -q -value1 dmxExportScale`;
+        $scaleY = `floatFieldGrp -q -value2 dmxExportScale`;
+        $scaleZ = `floatFieldGrp -q -value3 dmxExportScale`;
+    }
 
     return ("encoding=" + $encoding
         + ";upAxis=" + $upAxis
         + ";exportSkin=" + $exportSkin
         + ";exportDeltaStates=" + $exportDeltaStates
         + ";exportMetadata=" + $exportMetadata
-        + ";materialRoot=" + $materialRoot);
+        + ";materialRoot=" + $materialRoot
+        + ";translateX=" + $translateX
+        + ";translateY=" + $translateY
+        + ";translateZ=" + $translateZ
+        + ";rotateX=" + $rotateX
+        + ";rotateY=" + $rotateY
+        + ";rotateZ=" + $rotateZ
+        + ";scaleX=" + $scaleX
+        + ";scaleY=" + $scaleY
+        + ";scaleZ=" + $scaleZ);
 }
 
 global proc MayaDmx_exportSetup(string $parent, int $forceFactorySettings)
@@ -183,6 +262,24 @@ global proc MayaDmx_exportCallback(string $parent, int $exportAll, int $doIt)
             optionVar -intValue MayaDmx_exportMetadata $parts[1];
         } else if ($parts[0] == "materialRoot") {
             optionVar -stringValue MayaDmx_exportMaterialRoot $parts[1];
+        } else if ($parts[0] == "translateX") {
+            optionVar -floatValue MayaDmx_exportTranslateX $parts[1];
+        } else if ($parts[0] == "translateY") {
+            optionVar -floatValue MayaDmx_exportTranslateY $parts[1];
+        } else if ($parts[0] == "translateZ") {
+            optionVar -floatValue MayaDmx_exportTranslateZ $parts[1];
+        } else if ($parts[0] == "rotateX") {
+            optionVar -floatValue MayaDmx_exportRotateX $parts[1];
+        } else if ($parts[0] == "rotateY") {
+            optionVar -floatValue MayaDmx_exportRotateY $parts[1];
+        } else if ($parts[0] == "rotateZ") {
+            optionVar -floatValue MayaDmx_exportRotateZ $parts[1];
+        } else if ($parts[0] == "scaleX") {
+            optionVar -floatValue MayaDmx_exportScaleX $parts[1];
+        } else if ($parts[0] == "scaleY") {
+            optionVar -floatValue MayaDmx_exportScaleY $parts[1];
+        } else if ($parts[0] == "scaleZ") {
+            optionVar -floatValue MayaDmx_exportScaleZ $parts[1];
         }
     }
 
@@ -294,6 +391,15 @@ global proc string[] captureDmxExportOptionVars(int $version, int $exportAll)
     $args[4] = $exportDeltaStatesString;
     $args[5] = $exportMetadataString;
     $args[6] = `optionVar -q MayaDmx_exportMaterialRoot`;
+    $args[7] = `optionVar -q MayaDmx_exportTranslateX`;
+    $args[8] = `optionVar -q MayaDmx_exportTranslateY`;
+    $args[9] = `optionVar -q MayaDmx_exportTranslateZ`;
+    $args[10] = `optionVar -q MayaDmx_exportRotateX`;
+    $args[11] = `optionVar -q MayaDmx_exportRotateY`;
+    $args[12] = `optionVar -q MayaDmx_exportRotateZ`;
+    $args[13] = `optionVar -q MayaDmx_exportScaleX`;
+    $args[14] = `optionVar -q MayaDmx_exportScaleY`;
+    $args[15] = `optionVar -q MayaDmx_exportScaleZ`;
 
     return $args;
 }

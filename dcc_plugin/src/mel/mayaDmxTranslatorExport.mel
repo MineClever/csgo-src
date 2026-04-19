@@ -37,6 +37,21 @@ global proc string MayaDmxTranslatorExport_buildFileTypeUI(string $parent)
         -label "Material Root"
         dmxExportMaterialRoot;
 
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Translation"
+        dmxExportTranslation;
+
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Rotation"
+        dmxExportRotation;
+
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Scale"
+        dmxExportScale;
+
     return $layout;
 }
 

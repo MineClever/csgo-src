@@ -13,6 +13,15 @@ struct ExportPreset
     MString materialRoot;
     MString dmxEncoding = "text";
     MString upAxis = "Y";
+    double translateX = 0.0;
+    double translateY = 0.0;
+    double translateZ = 0.0;
+    double rotateX = 0.0;
+    double rotateY = 0.0;
+    double rotateZ = 0.0;
+    double scaleX = 1.0;
+    double scaleY = 1.0;
+    double scaleZ = 1.0;
     bool exportSkin = true;
     bool exportDeltaStates = true;
     bool exportMetadata = true;

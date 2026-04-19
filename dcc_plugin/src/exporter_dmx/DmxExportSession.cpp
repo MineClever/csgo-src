@@ -7,6 +7,8 @@
 #include "../common_dmx/MayaDmxCommon.h"
 #include "../common_dmx/SimpleDmxWrite.h"
 
+#include <common/ExportTransformPolicy.h>
+
 #include <fstream>
 #include <string>
 #include <vector>
@@ -77,6 +79,7 @@ MStatus DmxExportSession::BuildDocument()
     context.exportDeltaStates = exportOptions_.exportDeltaStates;
     context.exportMetadata = exportOptions_.exportMetadata;
     context.materialRoot = exportOptions_.materialRoot;
+    context.transformPolicy = dcc_export_transform::BuildExportTransformPolicy(exportOptions_.transformCorrection);
 
     simple_dmx::Element *modelElement = builder.CreateElement("DmeModel", "maya_export");
     SetAttr(*modelElement, "upAxis", ScalarAttr("string", exportOptions_.upAxis));

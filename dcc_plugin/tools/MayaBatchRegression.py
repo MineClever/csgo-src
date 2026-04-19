@@ -281,6 +281,26 @@ SOURCE_DELTA_IMPORT_GATE_EXPECTATIONS = {
     },
 }
 
+EXPORT_TRANSFORM_GATE_EXPECTATIONS = {
+    "simple_mesh": {
+        "format": "dmx",
+        "export_options": "translateX=1;translateY=2;translateZ=3;rotateX=0;rotateY=0;rotateZ=0;scaleX=2;scaleY=2;scaleZ=2;upAxis=Z",
+        "expected_up_axis": "Z",
+        "expected_transform_position": [1.0, 2.0, 3.0],
+        "expected_bind_positions": [
+            [1.0, 2.0, 3.0],
+            [5.0, 2.0, 3.0],
+            [1.0, 6.0, 3.0],
+        ],
+    },
+    "ctm_fbi/ctm_fbi.smd": {
+        "format": "smd",
+        "export_options": "translateX=1;translateY=2;translateZ=3;rotateX=0;rotateY=0;rotateZ=0;scaleX=2;scaleY=2;scaleZ=2",
+        "expected_first_pose_translation": [1.0, 87.649666, -2.707102],
+        "expected_first_triangle_position": [10.024704, 145.244324, -3.181958],
+    },
+}
+
 
 def snapshot_scene_animation_only_counts(cmds):
     return {
@@ -1393,6 +1413,169 @@ def validate_source_delta_import_gate(cmds, plugin_paths_by_format, sample_dir, 
                 )
 
 
+def parse_float_triplet(text):
+    values = [float(component) for component in text.strip().split()]
+    if len(values) != 3:
+        raise RuntimeError(f"Expected float triplet, got: {text}")
+    return values
+
+
+def assert_close_triplet(actual, expected, label, tolerance=1.0e-5):
+    if len(actual) != 3 or len(expected) != 3:
+        raise RuntimeError(f"{label}: invalid triplet lengths actual={actual} expected={expected}")
+    for actual_value, expected_value in zip(actual, expected):
+        if abs(actual_value - expected_value) > tolerance:
+            raise RuntimeError(
+                f"{label}: value mismatch actual={actual} expected={expected}"
+            )
+
+
+def parse_exported_dmx_transform_gate_data(exported_path):
+    with open(exported_path, "r", encoding="utf-8") as exported_file:
+        contents = exported_file.read()
+
+    lines = contents.splitlines()
+    up_axis = None
+    first_transform_position = None
+    bind_positions = []
+
+    for line in lines:
+        stripped = line.strip()
+        if up_axis is None and stripped.startswith('"upAxis" "string"'):
+            up_axis = stripped.split('"')[-2]
+        if first_transform_position is None and stripped.startswith('"position" "vector3"'):
+            first_transform_position = parse_float_triplet(stripped.split('"')[-2])
+        if stripped == '"positions" "vector3_array"':
+            break
+
+    positions_start = contents.find('"positions" "vector3_array"')
+    if positions_start >= 0:
+        bracket_start = contents.find('[', positions_start)
+        bracket_end = contents.find(']', bracket_start)
+        positions_block = contents[bracket_start + 1:bracket_end]
+        for raw_line in positions_block.splitlines():
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith('"') and stripped.endswith('"'):
+                bind_positions.append(parse_float_triplet(stripped.strip('"')))
+
+    return {
+        "up_axis": up_axis,
+        "transform_position": first_transform_position,
+        "bind_positions": bind_positions,
+    }
+
+
+def parse_exported_smd_transform_gate_data(exported_path):
+    with open(exported_path, "r", encoding="utf-8") as exported_file:
+        lines = exported_file.readlines()
+
+    first_pose_translation = None
+    first_triangle_position = None
+    in_skeleton = False
+    in_triangles = False
+    pending_material = False
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("//"):
+            continue
+
+        if stripped == "skeleton":
+            in_skeleton = True
+            continue
+        if in_skeleton:
+            if stripped == "end":
+                in_skeleton = False
+                continue
+            if stripped.startswith("time "):
+                continue
+            parts = stripped.split()
+            if len(parts) >= 7:
+                first_pose_translation = [float(parts[1]), float(parts[2]), float(parts[3])]
+                break
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("//"):
+            continue
+        if stripped == "triangles":
+            in_triangles = True
+            pending_material = True
+            continue
+        if not in_triangles:
+            continue
+        if stripped == "end":
+            break
+        if pending_material:
+            pending_material = False
+            continue
+
+        parts = stripped.split()
+        if len(parts) >= 9:
+            first_triangle_position = [float(parts[1]), float(parts[2]), float(parts[3])]
+            break
+
+    return {
+        "first_pose_translation": first_pose_translation,
+        "first_triangle_position": first_triangle_position,
+    }
+
+
+def validate_export_transform_gate(exported_path, case_name, format_name, export_variant_name, export_options):
+    normalized_case_name = case_name.replace("\\", "/")
+    expectation = EXPORT_TRANSFORM_GATE_EXPECTATIONS.get(normalized_case_name)
+    if not expectation:
+        return
+
+    if expectation["format"] != format_name or export_variant_name != "text":
+        return
+
+    normalized_expected_options = expectation["export_options"].replace(" ", "")
+    normalized_actual_options = (export_options or "").replace(" ", "")
+    if normalized_actual_options != normalized_expected_options:
+        return
+
+    if format_name == "dmx":
+        parsed = parse_exported_dmx_transform_gate_data(exported_path)
+        if parsed["up_axis"] != expectation["expected_up_axis"]:
+            raise RuntimeError(
+                f"Export transform gate failed for {normalized_case_name}. "
+                f"expected upAxis={expectation['expected_up_axis']} got {parsed['up_axis']}"
+            )
+        assert_close_triplet(
+            parsed["transform_position"],
+            expectation["expected_transform_position"],
+            f"Export transform gate failed for {normalized_case_name} transform position",
+        )
+        if len(parsed["bind_positions"]) < len(expectation["expected_bind_positions"]):
+            raise RuntimeError(
+                f"Export transform gate failed for {normalized_case_name}. "
+                f"insufficient bind positions: {parsed['bind_positions']}"
+            )
+        for index, expected_position in enumerate(expectation["expected_bind_positions"]):
+            assert_close_triplet(
+                parsed["bind_positions"][index],
+                expected_position,
+                f"Export transform gate failed for {normalized_case_name} bind position {index}",
+            )
+        return
+
+    if format_name == "smd":
+        parsed = parse_exported_smd_transform_gate_data(exported_path)
+        assert_close_triplet(
+            parsed["first_pose_translation"],
+            expectation["expected_first_pose_translation"],
+            f"Export transform gate failed for {normalized_case_name} first pose",
+        )
+        assert_close_triplet(
+            parsed["first_triangle_position"],
+            expectation["expected_first_triangle_position"],
+            f"Export transform gate failed for {normalized_case_name} first triangle",
+        )
+
+
 def verify_roundtrip(
     cmds,
     plugin_paths,
@@ -1567,6 +1750,14 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
             export_kwargs["options"] = export_variant["options"]
         cmds.file(**export_kwargs)
 
+        validate_export_transform_gate(
+            exported_path,
+            case_name,
+            format_name,
+            export_variant["name"],
+            export_variant["options"],
+        )
+
         verify_roundtrip(
             cmds,
             [plugin_path],
@@ -1628,6 +1819,38 @@ def run_case(cmds, plugin_paths_by_format, sample_dir, output_dir, case_name, im
             output_dir,
             case_name,
             import_options="applyAxisCorrection=0",
+        )
+
+    transform_gate_expectation = EXPORT_TRANSFORM_GATE_EXPECTATIONS.get(case_name.replace("\\", "/"))
+    if transform_gate_expectation and not import_options:
+        transform_gate_extension = ".dmx" if format_name == "dmx" else ".smd"
+        cmds.file(new=True, force=True)
+        ensure_plugins_loaded(cmds, [plugin_path])
+        before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+        cmds.file(input_path, **import_kwargs)
+        imported_roots = collect_imported_roots(cmds, before_assemblies)
+        if imported_roots:
+            cmds.select(imported_roots, replace=True)
+        else:
+            cmds.select(clear=True)
+
+        transform_exported_path = os.path.join(
+            output_dir,
+            f"{case_output_name}.transform_gate{transform_gate_extension}",
+        )
+        cmds.file(rename=transform_exported_path)
+        cmds.file(
+            force=True,
+            exportSelected=True,
+            type=format_config["export_type"],
+            options=transform_gate_expectation["export_options"],
+        )
+        validate_export_transform_gate(
+            transform_exported_path,
+            case_name,
+            format_name,
+            "text",
+            transform_gate_expectation["export_options"],
         )
 
 

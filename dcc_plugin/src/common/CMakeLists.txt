@@ -5,8 +5,8 @@ add_library(maya_common STATIC
     AnimationSampleUtils.h
     ExportAnimationUtils.cpp
     ExportAnimationUtils.h
-    ImportTransformCorrection.cpp
-    ImportTransformCorrection.h
+    TransformCorrection.cpp
+    TransformCorrection.h
     MaterialExportUtils.cpp
     MaterialExportUtils.h
     MaterialUtils.cpp
