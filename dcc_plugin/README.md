@@ -207,9 +207,14 @@ Regression inputs can also live under subdirectories of `dcc_plugin/samples/`. C
 - `maya_module/` - local module payload staged for Maya installation
 - `samples/` - small text/binary DMX files for manual plugin testing
 - `tools/` - small command-line helpers for sample conversion and regression prep, including Maya standalone regression
-- `src/common_dmx/` - shared utilities and diagnostics
+- `src/common/` - truly shared utilities used by both DMX and SMD paths
+- `src/common_dmx/` - DMX-only common data/model helpers
+- `src/common_smd/` - SMD-only shared document helpers
 - `src/importer_dmx/` - DMX importer translator
+- `src/importer_smd/` - SMD importer translator
 - `src/exporter_dmx/` - DMX exporter translator
+- `src/exporter_smd/` - SMD exporter translator
 - `src/mel/` - MEL source files for option boxes and workflow UI helpers
 - `src/workflow/` - workflow-layer preset, batch manifest, and export execution management
 - `src/plugin_dmx/` - plugin entry point and translator registration
+- `src/plugin_smd/` - SMD plugin entry point and translator registration

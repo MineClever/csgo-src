@@ -613,7 +613,7 @@
     - 同拓扑场景：先手工改一个顶点位置，再做第二次 `importMode=update`，mesh 几何会恢复到原始样例。
     - 不同拓扑场景：先手工改 mesh 拓扑，再做第二次 `importMode=update`，会保留被修改后的 mesh，并产出包含 `update skipped mesh overwrite because existing mesh topology did not match incoming mesh` 的 warning。
     当前该 gate 已实跑通过。
-  - 2026-04-12：已开始执行 `executeCommand` 统一收口的第一轮落地，新增 [MayaCommandUtils.h](dcc_plugin/src/common/MayaCommandUtils.h) / [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp)，并通过 `maya_dmx_common` 向 `maya_smd_common` 共享。当前已把业务层散落的 `MGlobal::executeCommand` 入口先统一收到 helper 中，业务侧已改用显式 helper，剩余 MEL 只保留在 helper 实现里，且都附了保留原因注释。当前已完成的首批替换包括：
+  - 2026-04-12：已开始执行 `executeCommand` 统一收口的第一轮落地，新增 [MayaCommandUtils.h](dcc_plugin/src/common/MayaCommandUtils.h) / [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp)，并通过共享 common 层向 DMX / SMD 双侧复用。当前已把业务层散落的 `MGlobal::executeCommand` 入口先统一收到 helper 中，业务侧已改用显式 helper，剩余 MEL 只保留在 helper 实现里，且都附了保留原因注释。当前已完成的首批替换包括：
     - 已 API 化：
       - `delete` 已知 node：改为 `maya_cmd::DeleteNodeByName()`，当前内部走 `MGlobal::deleteNode()`。
       - `duplicate` DAG 节点：改为 `maya_cmd::DuplicateDagNode()`，当前内部走 `MFnDagNode::duplicate()`。
@@ -865,7 +865,7 @@
     - `FindAnimationCurveForPlug()`：统一从 destination plug 反查 animCurve source node
     - `AppendCurveTimes()`：统一按给定 `MTime::Unit` 追加并去重关键帧时间
     - `EvaluateCurveOrValue()`：统一按给定 `MTime::Unit` 求 animCurve 值，curve 缺失时回退静态 plug 值
-    当前 [DmxExportInternals.h](dcc_plugin/src/exporter_dmx/DmxExportInternals.h) 已改为仅保留“按秒导出”的薄封装，让 [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) 继续沿用原调用面；[SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 已去掉本地重复的曲线查找/帧时间收集/求值 helper，改为直接复用 `dcc_plugin/src/common` 里的公共实现，并按 `MTime::uiUnit()` 处理 SMD frame 采样。最小验证已通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。当前残留 warning 仍主要是 exporter 侧若干旧文件的 `C4819` 编码提示（例如 [DmxExportInternals.h](dcc_plugin/src/exporter_dmx/DmxExportInternals.h)），与本轮功能改动无关。若继续沿 exporter 共用层推进，下一步更适合评估“多通道 transform 采样收集（TX/TY/TZ、RX/RY/RZ）”或材质导出侧的 shadingGroup/material 读取骨架，而不是继续压缩已经很薄的单曲线 helper。
+    当前 [DmxExportInternals.h](dcc_plugin/src/exporter_dmx/DmxExportInternals.h) 已改为仅保留“按秒导出”的薄封装，让 [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) 继续沿用原调用面；[SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 已去掉本地重复的曲线查找/帧时间收集/求值 helper，改为直接复用 `dcc_plugin/src/common` 里的公共实现，并按 `MTime::uiUnit()` 处理 SMD frame 采样。最小验证已通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。这轮曾暴露 exporter 侧若干旧文件的 `C4819` 编码提示，但后续已经在目录/命名整理阶段一并清理。若继续沿 exporter 共用层推进，下一步更适合评估“多通道 transform 采样收集（TX/TY/TZ、RX/RY/RZ）”或材质导出侧的 shadingGroup/material 读取骨架，而不是继续压缩已经很薄的单曲线 helper。
   - 2026-04-19：已继续把 exporter 侧“多通道 transform 采样收集”收进 [ExportAnimationUtils.h](dcc_plugin/src/common/ExportAnimationUtils.h) / [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp)。当前新增并复用的公共 helper 包括：
     - `BuildChannelSampleSet()`：统一按三通道 attribute 名集合抓取 `plug + animCurve` 对
     - `AppendSampleSetTimes()`：统一把三通道关键帧时间并入同一个时间集合
@@ -881,7 +881,7 @@
     - `appendCurrentVectorTransformChannel()`：统一 position 这类三通道 -> `vector3 log` -> `DmeChannel` 的构建流程
     - `appendCurrentQuaternionTransformChannel()`：统一 rotation 这类三通道 -> Euler 求值 -> quaternion log -> `DmeChannel` 的构建流程
     - `appendCurrentScaleAnimationChannels()`：已改为基于 `GetTransformAttributeNames(Scale)` + `BuildChannelSampleSet()` 成组抓取 `scaleX/Y/Z`，不再逐个手写 `findPlug()`
-    这样 DMX exporter 当前的 position / rotation / scale 导出都已经接上统一的 transform 通道定义与 sample set 抓取骨架；剩余差异主要只剩 `float/vector3/quaternion` 三种 log 序列化细节，以及 control / blendshape 动画的单通道收集包装。最小验证再次通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。当前残留 warning 仍主要是 exporter 旧文件的 `C4819` 编码提示，与本轮功能改动无关。
+    这样 DMX exporter 当前的 position / rotation / scale 导出都已经接上统一的 transform 通道定义与 sample set 抓取骨架；剩余差异主要只剩 `float/vector3/quaternion` 三种 log 序列化细节，以及 control / blendshape 动画的单通道收集包装。最小验证再次通过 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`。当时看到的 exporter 旧文件 `C4819` 编码提示，已在后续 warning 清理阶段修复。
   - 2026-04-19：已继续把 DMX exporter 的三类 log 序列化骨架压成统一入口。[DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) / [DmxExportAnimation.h](dcc_plugin/src/exporter_dmx/DmxExportAnimation.h) 现已新增 `buildFormattedLog()`，统一处理：
     - `time` 字符串数组生成
     - `Dme*LogLayer` 创建与 `times/values` 属性写入
@@ -906,7 +906,7 @@
     - [dcc_plugin/CMakeLists.txt](dcc_plugin/CMakeLists.txt) 已改为引用 `src/common_dmx`、`src/importer_dmx`、`src/exporter_dmx`、`src/plugin_dmx`
     - `dcc_plugin` 内部 include 前缀、相对路径引用、计划文档中的相关路径记录已同步切到新目录名
     - 迁移后已重新执行 `cmake --build dcc_plugin\build --config Release --target maya_dmx maya_smd`，DMX / SMD 插件均可通过编译
-    当前未发现因目录规范化引入的新编译错误。残留 warning 仍主要是既有的 `C4819` 编码提示，以及 [DmxImportDeformers.cpp](dcc_plugin/src/importer_dmx/DmxImportDeformers.cpp) 里的原有 `C4244`，与本轮目录迁移无关。后续若还要继续统一命名，才值得评估是否连 CMake target 名（如 `maya_dmx_common` / `maya_dmx_import` / `maya_dmx_export`）一起调整；当前目录层面已经完成规范化并保持构建稳定。
+    当前未发现因目录规范化引入新的编译错误。当时仍残留的 `C4819` / `C4244` warning 已在后续 warning 清理阶段修复；后续统一命名也已继续推进到内部 CMake target 层。
   - 2026-04-19：已继续把“真正公用”与“仅 DMX 公用”重新拆开，并同步完成内部 CMake target 统一命名。新增脚本 [split_common_dirs.py](dcc_plugin/tools/split_common_dirs.py)，本轮实际完成：
     - 共享 helper 已从 `src/common_dmx` 回迁到 [src/common](dcc_plugin/src/common)，包括 `AnimationCurveUtils`、`AnimationSampleUtils`、`ExportAnimationUtils`、`ImportTransformCorrection`、`MaterialExportUtils`、`MaterialUtils`、`MayaCommandUtils`、`SkinClusterUtils`、`ImportPolicy.h`、`SceneMergeStrategy.h`、`SourceDeltaUtils.h`
     - `src/common_dmx` 现在只保留 DMX 专用内容：`MayaDmxCommon.*` 与 `SimpleDmx*`
@@ -921,7 +921,12 @@
       - `src/plugin_dmx` / `src/plugin_smd` -> `maya_plugin_dmx` / `maya_plugin_smd`
     - 输出插件文件名保持不变，仍生成 `maya_dmx.mll` 与 `maya_smd.mll`
     - 新的验证命令已切为：`cmake --build dcc_plugin\build --config Release --target maya_plugin_dmx maya_plugin_smd maya_dmx_sample_tool`
-    本轮验证已通过，说明 shared/common 回拆和 target 重命名没有破坏现有构建链。当前残留 warning 仍主要是既有的 `C4819` 编码提示，以及 [DmxImportDeformers.cpp](dcc_plugin/src/importer_dmx/DmxImportDeformers.cpp) 里的原有 `C4244`，与本轮拆分和重命名无关。
+    本轮验证已通过，说明 shared/common 回拆和 target 重命名没有破坏现有构建链。后续已继续清理掉当时残留的 `C4819` 与 `C4244` warning。
+  - 2026-04-19：已完成剩余 warning 的最小修复，并与当前代码结构重新对齐文档说明。当前处理包括：
+    - 将 [DmxExportInternals.h](dcc_plugin/src/exporter_dmx/DmxExportInternals.h)、[DmxExportDag.h](dcc_plugin/src/exporter_dmx/DmxExportDag.h)、[DmxExportMesh.h](dcc_plugin/src/exporter_dmx/DmxExportMesh.h)、[DmxImportInternals.h](dcc_plugin/src/importer_dmx/DmxImportInternals.h)、[DmxImportDag.h](dcc_plugin/src/importer_dmx/DmxImportDag.h)、[DmxImportMesh.h](dcc_plugin/src/importer_dmx/DmxImportMesh.h) 注释里的 Unicode em dash 改为 ASCII `-`，清掉 `C4819`
+    - 将 [DmxImportDeformers.cpp](dcc_plugin/src/importer_dmx/DmxImportDeformers.cpp) 中 warning 文本拼接里的 `vertexCount` 改为显式 `static_cast<int>(vertexCount)`，清掉 `C4244`
+    - 同步修正 [dcc_plugin/README.md](dcc_plugin/README.md) 的当前目录布局描述，以及本计划里若干已过时的“残留 warning”说明
+    当前重新执行 `cmake --build dcc_plugin\build --config Release --target maya_plugin_dmx maya_plugin_smd maya_dmx_sample_tool` 已不再出现上述 warning，说明当前文档、结构与构建状态已经对齐。
   - 2026-04-18：评估结果显示，Maya 2022.5 里动画层相关 C++ API 覆盖不足，当前 `animLayer / setKeyframe -animLayer` 仍需要 MEL 包装；若未来升级 SDK baseline，再考虑用 `MAnimUtil` 的更高版本接口替换。
   - 2026-04-18：当前可直接用 OpenMayaAnim 保留的仅是 `MFnAnimCurve` 这类普通曲线写入；动画层创建、挂接、查曲线仍需要 MEL 过桥，后续若升级到更高 Maya 版本再评估替换。
   - 2026-04-18：帧率自适应不宜默认接入导入流程。DMX 有 `frameRate` / `timeFrame` 元数据，理论上可作为可选覆盖；SMD 只有帧序号，没有可靠 fps 来源。若要切 Maya time unit，应作为显式导入选项而不是自动行为。
