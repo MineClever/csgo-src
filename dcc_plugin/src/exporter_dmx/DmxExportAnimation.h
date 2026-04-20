@@ -71,6 +71,7 @@ private:
         const std::string &logNameSuffix,
         const std::string &channelNameSuffix);
     void bindCurrentDagContext(const MDagPath &dagPath);
+    bool currentDagIsTopLevelNode() const;
     void appendCurrentPositionAnimationChannels();
     void appendCurrentRotationAnimationChannels();
     void appendCurrentScaleAnimationChannels();

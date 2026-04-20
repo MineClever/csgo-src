@@ -32,7 +32,16 @@ static bool ShouldExportRoot(const MDagPath &dagPath)
     return dagPath.hasFn(MFn::kTransform) || dagPath.hasFn(MFn::kJoint);
 }
 
-Element *BuildTransformElement(DocumentBuilder &builder, const MDagPath &dagPath, const ExportContext &context)
+bool IsTopLevelExportNode(const MDagPath &dagPath, const ExportContext &context)
+{
+    return dagPath.isValid() && context.topLevelDagPaths.find(DagPathKey(dagPath)) != context.topLevelDagPaths.end();
+}
+
+Element *BuildTransformElement(
+    DocumentBuilder &builder,
+    const MDagPath &dagPath,
+    const ExportContext &context,
+    bool isTopLevelNode)
 {
     MStatus status;
     MFnTransform transformFn(dagPath, &status);
@@ -57,10 +66,15 @@ Element *BuildTransformElement(DocumentBuilder &builder, const MDagPath &dagPath
         return nullptr;
     }
 
-    const MVector correctedTranslation =
-        dcc_export_transform::ApplyToPoint(context.transformPolicy, translation);
-    const MQuaternion correctedRotation =
-        dcc_export_transform::ApplyToQuaternion(context.transformPolicy, MQuaternion(qx, qy, qz, qw));
+    MVector correctedTranslation = translation;
+    MQuaternion correctedRotation(qx, qy, qz, qw);
+    if (isTopLevelNode)
+    {
+        correctedTranslation = dcc_export_transform::ApplyToTopLevelTranslation(context.transformPolicy, translation);
+        correctedRotation = dcc_export_transform::ApplyToTopLevelQuaternion(
+            context.transformPolicy,
+            correctedRotation);
+    }
 
     Element *transformElement = builder.CreateElement("DmeTransform");
     SetAttr(
@@ -222,7 +236,11 @@ Element *BuildDagElement(DocumentBuilder &builder, const MDagPath &dagPath, Expo
     ClearAttrs(*dagElement);
     dagElement->name = dagNode.name().asChar();
 
-    if (Element *transformElement = BuildTransformElement(builder, dagPath, context))
+    if (Element *transformElement = BuildTransformElement(
+            builder,
+            dagPath,
+            context,
+            IsTopLevelExportNode(dagPath, context)))
     {
         context.transformElementByPath[pathKey] = transformElement;
         SetAttr(*dagElement, "transform", builder.ElementRef(transformElement));

@@ -5,6 +5,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace dmx_export_translator
@@ -16,6 +17,7 @@ struct ExportContext
     std::unordered_map<std::string, simple_dmx::Element *> dagElementByPath;
     std::unordered_map<std::string, simple_dmx::Element *> transformElementByPath;
     std::unordered_map<std::string, simple_dmx::Element *> floatTargetElementByName;
+    std::unordered_set<std::string> topLevelDagPaths;
     bool exportSkin = true;
     bool exportDeltaStates = true;
     bool exportMetadata = true;

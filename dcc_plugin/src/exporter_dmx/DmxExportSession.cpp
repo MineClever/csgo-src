@@ -80,6 +80,10 @@ MStatus DmxExportSession::BuildDocument()
     context.exportMetadata = exportOptions_.exportMetadata;
     context.materialRoot = exportOptions_.materialRoot;
     context.transformPolicy = dcc_export_transform::BuildExportTransformPolicy(exportOptions_.transformCorrection);
+    for (const MDagPath &rootPath : exportRoots_)
+    {
+        context.topLevelDagPaths.insert(DagPathKey(rootPath));
+    }
 
     simple_dmx::Element *modelElement = builder.CreateElement("DmeModel", "maya_export");
     SetAttr(*modelElement, "upAxis", ScalarAttr("string", exportOptions_.upAxis));

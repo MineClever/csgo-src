@@ -422,6 +422,19 @@
       "expected_first_triangle_position": [0.0, 0.0, 0.0]
     }
   },
+  "dmx_selected_export_gate_expectations": {
+    "simple_skinned_mesh": {
+      "export_options": "translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1",
+      "corrected_export_options": "translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=90;scaleX=1;scaleY=1;scaleZ=1",
+      "expected_changed_transform_names": ["simple_skinned_model"],
+      "expected_corrected_orientation": [0.0, 0.0, 0.707107, 0.707107],
+      "expected_corrected_bind_positions": [
+        [0.0, 0.0, 0.0],
+        [0.0, 2.0, 0.0],
+        [-2.0, 0.0, 0.0]
+      ]
+    }
+  },
   "vta_import_gate_expectations": {
     "humans_sdk/male_sdk/male_06_expressions.vta": {
       "base_case": "humans_sdk/male_sdk/male_06_reference.smd",

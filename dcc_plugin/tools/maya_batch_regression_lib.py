@@ -1254,6 +1254,13 @@ class GateValidator:
         return values
 
     @staticmethod
+    def parse_float_quad(text):
+        values = [float(component) for component in text.strip().split()]
+        if len(values) != 4:
+            raise RuntimeError(f"Expected float quad, got: {text}")
+        return values
+
+    @staticmethod
     def assert_close_triplet(actual, expected, label, tolerance=1.0e-3):
         if len(actual) != 3 or len(expected) != 3:
             raise RuntimeError(f"{label}: invalid triplet lengths actual={actual} expected={expected}")
@@ -1269,13 +1276,58 @@ class GateValidator:
         up_axis = None
         first_transform_position = None
         bind_positions = []
+        transform_data_by_name = {}
+        element_stack = []
 
         for line in lines:
             stripped = line.strip()
+            if stripped in ('"DmeDag"', '"DmeJoint"'):
+                element_stack.append({
+                    "kind": "dag",
+                    "name": None,
+                })
+                continue
+            if stripped.endswith('"DmeTransform"'):
+                parent_name = None
+                for element in reversed(element_stack):
+                    if element["kind"] == "dag" and element.get("name"):
+                        parent_name = element["name"]
+                        break
+                element_stack.append({
+                    "kind": "transform",
+                    "parent_name": parent_name,
+                    "position": None,
+                    "orientation": None,
+                })
+                continue
+            if stripped == "{":
+                continue
+            if stripped == "}":
+                if element_stack:
+                    closed_element = element_stack.pop()
+                    if (
+                        closed_element["kind"] == "transform"
+                        and closed_element.get("parent_name")
+                        and (closed_element.get("position") is not None or closed_element.get("orientation") is not None)
+                    ):
+                        transform_data_by_name[closed_element["parent_name"]] = {
+                            "position": closed_element.get("position"),
+                            "orientation": closed_element.get("orientation"),
+                        }
+                continue
             if up_axis is None and stripped.startswith('"upAxis" "string"'):
                 up_axis = stripped.split('"')[-2]
             if first_transform_position is None and stripped.startswith('"position" "vector3"'):
                 first_transform_position = self.parse_float_triplet(stripped.split('"')[-2])
+            if element_stack:
+                current_element = element_stack[-1]
+                if current_element["kind"] == "dag" and current_element.get("name") is None and stripped.startswith('"name" "string"'):
+                    current_element["name"] = stripped.split('"')[-2]
+                elif current_element["kind"] == "transform":
+                    if current_element.get("position") is None and stripped.startswith('"position" "vector3"'):
+                        current_element["position"] = self.parse_float_triplet(stripped.split('"')[-2])
+                    elif current_element.get("orientation") is None and stripped.startswith('"orientation" "quaternion"'):
+                        current_element["orientation"] = self.parse_float_quad(stripped.split('"')[-2])
             if stripped == '"positions" "vector3_array"':
                 break
 
@@ -1310,6 +1362,7 @@ class GateValidator:
             "up_axis": up_axis,
             "transform_position": first_transform_position,
             "bind_positions": bind_positions,
+            "transform_data_by_name": transform_data_by_name,
         }
 
     def parse_exported_smd_transform_gate_data(self, exported_path):
@@ -1611,6 +1664,110 @@ class GateValidator:
             f"SMD selected export gate failed for {normalized_case_name} corrected first pose rotation",
         )
 
+    def validate_dmx_selected_export_gate(self, case_name):
+        expectation = self.ctx.config.get_case_expectation("dmx_selected_export_gate_expectations", case_name)
+        if not expectation:
+            return
+
+        normalized_case_name = self.ctx.config.normalize_case_name(case_name)
+        input_path = self.ctx.resolve_input_path(case_name)
+        input_format_name = self.ctx.detect_format(input_path)
+        input_format_config = self.ctx.config.get_format_config(input_format_name)
+        dmx_format_config = self.ctx.config.get_format_config("dmx")
+        cmds = self.ctx.cmds
+
+        self.ctx.ensure_plugins_loaded([
+            self.ctx.plugin_paths_by_format[input_format_name],
+            self.ctx.plugin_paths_by_format["dmx"],
+        ])
+
+        cmds.file(new=True, force=True)
+        before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+        cmds.file(input_path, **self.ctx.build_import_kwargs(input_format_config))
+        imported_roots = self.ctx.collect_imported_roots(before_assemblies)
+        if not imported_roots:
+            raise RuntimeError(
+                f"DMX selected export gate failed for {normalized_case_name}. import produced no DAG roots"
+            )
+
+        cmds.select(imported_roots, replace=True)
+        plain_exported_path = os.path.join(
+            self.ctx.output_dir,
+            f"{self.ctx.make_case_output_name(case_name)}.selected_export_plain.dmx",
+        )
+        corrected_exported_path = os.path.join(
+            self.ctx.output_dir,
+            f"{self.ctx.make_case_output_name(case_name)}.selected_export_corrected.dmx",
+        )
+
+        cmds.file(rename=plain_exported_path)
+        cmds.file(
+            force=True,
+            exportSelected=True,
+            type=dmx_format_config.export_type,
+            options=expectation["export_options"],
+        )
+        plain_parsed = self.parse_exported_dmx_transform_gate_data(plain_exported_path)
+
+        cmds.file(rename=corrected_exported_path)
+        cmds.file(
+            force=True,
+            exportSelected=True,
+            type=dmx_format_config.export_type,
+            options=expectation["corrected_export_options"],
+        )
+        corrected_parsed = self.parse_exported_dmx_transform_gate_data(corrected_exported_path)
+
+        if len(corrected_parsed["bind_positions"]) < len(expectation["expected_corrected_bind_positions"]):
+            raise RuntimeError(
+                f"DMX selected export gate failed for {normalized_case_name}. "
+                f"insufficient corrected bind positions: {corrected_parsed['bind_positions']}"
+            )
+
+        for index, expected_position in enumerate(expectation["expected_corrected_bind_positions"]):
+            self.assert_close_triplet(
+                corrected_parsed["bind_positions"][index],
+                expected_position,
+                f"DMX selected export gate failed for {normalized_case_name} corrected bind position {index}",
+            )
+
+        changed_transform_names = []
+        all_transform_names = sorted(
+            set(plain_parsed["transform_data_by_name"]) | set(corrected_parsed["transform_data_by_name"])
+        )
+        for transform_name in all_transform_names:
+            if plain_parsed["transform_data_by_name"].get(transform_name) != corrected_parsed["transform_data_by_name"].get(transform_name):
+                changed_transform_names.append(transform_name)
+
+        if changed_transform_names != expectation["expected_changed_transform_names"]:
+            raise RuntimeError(
+                f"DMX selected export gate failed for {normalized_case_name}. "
+                f"expected changed transforms {expectation['expected_changed_transform_names']} got {changed_transform_names}"
+            )
+
+        corrected_transform = corrected_parsed["transform_data_by_name"].get(
+            expectation["expected_changed_transform_names"][0]
+        )
+        if not corrected_transform:
+            raise RuntimeError(
+                f"DMX selected export gate failed for {normalized_case_name}. "
+                f"missing corrected transform for {expectation['expected_changed_transform_names'][0]}"
+            )
+
+        corrected_orientation = corrected_transform.get("orientation")
+        if corrected_orientation is None:
+            raise RuntimeError(
+                f"DMX selected export gate failed for {normalized_case_name}. "
+                f"missing corrected orientation for {expectation['expected_changed_transform_names'][0]}"
+            )
+
+        for actual_value, expected_value in zip(corrected_orientation, expectation["expected_corrected_orientation"]):
+            if abs(actual_value - expected_value) > 1.0e-3:
+                raise RuntimeError(
+                    f"DMX selected export gate failed for {normalized_case_name} corrected orientation: "
+                    f"actual={corrected_orientation} expected={expectation['expected_corrected_orientation']}"
+                )
+
     def validate_vta_import_gate(self, case_name):
         expectation = self.ctx.config.get_case_expectation("vta_import_gate_expectations", case_name)
         if not expectation:
@@ -1783,6 +1940,7 @@ class RegressionRunner:
         animation_layer_export_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.animation_layer_export_gate.txt")
         source_delta_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.source_delta_gate.txt")
         smd_selected_export_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.smd_selected_export_gate.txt")
+        dmx_selected_export_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.dmx_selected_export_gate.txt")
 
         import_kwargs = self.ctx.build_import_kwargs(format_config, import_options)
         cmds = self.ctx.cmds
@@ -1881,6 +2039,9 @@ class RegressionRunner:
 
             self.validator.validate_source_delta_import_gate(case_name)
             self.ctx.write_marker(source_delta_gate_marker)
+
+            self.validator.validate_dmx_selected_export_gate(case_name)
+            self.ctx.write_marker(dmx_selected_export_gate_marker)
 
             self.validator.validate_smd_selected_export_gate(case_name)
             self.ctx.write_marker(smd_selected_export_gate_marker)

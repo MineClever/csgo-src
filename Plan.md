@@ -1369,6 +1369,33 @@
         - 完整默认回归再次通过：`28` 个 case、`8` 并发、单 case `300s` 超时，墙钟约 `82.7s`。
       - 当前残留：
         - 仍有非阻塞 warning：`VaccineKiller.mod` 权限 warning、部分 `append/update` 材质 rename warning、以及 `complex_chr_mesh` 的 bind pose warning；本轮修复后它们未阻塞完整回归。
+    - 2026-04-20 DMX 导出对齐同类修复：
+      - 目标：
+        - 对齐 SMD 侧的“selected export + 输入校正矩阵”语义，避免 DMX 导出把校正矩阵错误地下沉到子骨/子 transform。
+      - 已定位问题：
+        - [DmxExportDag.cpp](dcc_plugin/src/exporter_dmx/DmxExportDag.cpp) 之前构建 `DmeTransform` 时，对所有导出 transform 都直接应用了导出校正矩阵；这会把 `root_joint`、mesh carrier transform 等子节点一起旋转/平移。
+        - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) 之前对位置/旋转动画通道也做了同样的“逐节点全量校正”，和 import 侧只修正顶层节点的语义不一致。
+      - 已完成修复：
+        - [DmxExportTranslatorTypes.h](dcc_plugin/src/exporter_dmx/DmxExportTranslatorTypes.h) / [DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp)
+          - 在 `ExportContext` 中显式记录 `exportRoots_` 对应的顶层 DAG path 集合，避免顶层判定再依赖递归注册顺序或父路径推断。
+        - [DmxExportDag.cpp](dcc_plugin/src/exporter_dmx/DmxExportDag.cpp)
+          - 静态 `DmeTransform.position/orientation` 现在只对顶层导出节点应用 `ApplyToTopLevelTranslation` / `ApplyToTopLevelQuaternion`。
+          - 子 joint / 子 transform 保持局部姿态原样；mesh `bindState/baseStates` 顶点与法线仍继续走几何级全局校正，保证导出几何与输入矩阵一致。
+        - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp)
+          - 位置/旋转动画通道改成仅对顶层导出节点应用 top-level 校正；子节点动画曲线保持局部值不变。
+        - [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json) / [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py)
+          - 新增 `dmx_selected_export_gate_expectations` 与 `validate_dmx_selected_export_gate()`。
+          - gate 会导出 plain/corrected 两份 text DMX，校验：
+            - 只有预期的顶层 transform 发生变化；
+            - 子骨与 mesh transform 不再被重复校正；
+            - `bindState` 顶点位置仍按输入矩阵正确变换。
+      - 已验证：
+        - `simple_skinned_mesh` targeted gate 通过：
+          - corrected DMX 中仅 `simple_skinned_model` 的 `orientation` 变化；
+          - `root_joint` 与 `skinned_mesh_node` 保持局部姿态不变；
+          - corrected `bind_positions` 为 `[0,0,0]`、`[0,2,0]`、`[-2,0,0]`，符合 `rotateZ=90` 预期。
+        - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过，且 Maya UI 实际加载目录 `maya_module\plug-ins\windows\2022\` 已同步最新 `.mll`。
+        - 默认完整并发回归再次通过：`28` 个 case、`8` 并发、单 case `300s` 超时，墙钟约 `75.2s`。
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。
