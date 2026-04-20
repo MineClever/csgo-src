@@ -1,7 +1,6 @@
 #include "SmdSceneExporter.h"
 
 #include <common/ExportAnimationUtils.h>
-#include <common/ExportTransformUtils.h>
 #include <common/MaterialExportUtils.h>
 #include <common_smd/MayaSmdCommon.h>
 
@@ -626,17 +625,17 @@ MStatus SmdSceneExporter::applyDocumentTransformCorrection()
             }
 
             const simple_smd::Node &node = document_.nodes[pose.boneIndex];
-            MVector correctedTranslation = dcc_export_document::ApplyLocalTranslation(
+            MVector correctedTranslation = dcc_export_transform::ApplyToLocalTranslation(
                 transformPolicy_,
                 MVector(pose.tx, pose.ty, pose.tz));
             MEulerRotation correctedRotation(pose.rx, pose.ry, pose.rz);
 
             if (node.parentIndex < 0)
             {
-                correctedTranslation = dcc_export_document::ApplyTopLevelTranslation(
+                correctedTranslation = dcc_export_transform::ApplyToTopLevelTranslation(
                     transformPolicy_,
                     MVector(pose.tx, pose.ty, pose.tz));
-                correctedRotation = dcc_export_document::ApplyTopLevelEulerRotation(
+                correctedRotation = dcc_export_transform::ApplyToTopLevelEulerRotation(
                     transformPolicy_,
                     correctedRotation);
             }
@@ -654,10 +653,10 @@ MStatus SmdSceneExporter::applyDocumentTransformCorrection()
     {
         for (simple_smd::TriangleVertex &vertex : triangle.vertices)
         {
-            const MVector correctedPoint = dcc_export_document::ApplyBakedMeshPoint(
+            const MVector correctedPoint = dcc_export_transform::ApplyToBakedMeshPoint(
                 transformPolicy_,
                 MVector(vertex.px, vertex.py, vertex.pz));
-            const MVector correctedNormal = dcc_export_document::ApplyBakedMeshNormal(
+            const MVector correctedNormal = dcc_export_transform::ApplyToBakedMeshNormal(
                 transformPolicy_,
                 MVector(vertex.nx, vertex.ny, vertex.nz));
 
@@ -674,10 +673,10 @@ MStatus SmdSceneExporter::applyDocumentTransformCorrection()
     {
         for (simple_smd::VertexAnimationSample &sample : frame.samples)
         {
-            const MVector correctedPoint = dcc_export_document::ApplyBakedMeshPoint(
+            const MVector correctedPoint = dcc_export_transform::ApplyToBakedMeshPoint(
                 transformPolicy_,
                 MVector(sample.px, sample.py, sample.pz));
-            const MVector correctedNormal = dcc_export_document::ApplyBakedMeshNormal(
+            const MVector correctedNormal = dcc_export_transform::ApplyToBakedMeshNormal(
                 transformPolicy_,
                 MVector(sample.nx, sample.ny, sample.nz));
 

@@ -56,6 +56,12 @@ ExportTransformPolicy BuildExportTransformPolicy(const dcc_transform::TransformC
 
 MVector ApplyToPoint(const ExportTransformPolicy &policy, const MVector &point);
 MVector ApplyToDirection(const ExportTransformPolicy &policy, const MVector &direction);
+MVector ApplyToLocalTranslation(const ExportTransformPolicy &policy, const MVector &translation);
+MVector ApplyToLocalNormal(const ExportTransformPolicy &policy, const MVector &normal);
+MVector ApplyToLocalTangent(const ExportTransformPolicy &policy, const MVector &tangent);
+double ApplyToLocalTangentHandedness(const ExportTransformPolicy &policy, double tangentHandedness);
+MVector ApplyToBakedMeshPoint(const ExportTransformPolicy &policy, const MVector &point);
+MVector ApplyToBakedMeshNormal(const ExportTransformPolicy &policy, const MVector &normal);
 MVector ApplyToTopLevelTranslation(const ExportTransformPolicy &policy, const MVector &translation);
 MQuaternion ApplyToQuaternion(const ExportTransformPolicy &policy, const MQuaternion &quaternion);
 MQuaternion ApplyToTopLevelQuaternion(const ExportTransformPolicy &policy, const MQuaternion &quaternion);

@@ -3,8 +3,6 @@ add_library(maya_common STATIC
     AnimationCurveUtils.h
     AnimationSampleUtils.cpp
     AnimationSampleUtils.h
-    ExportTransformUtils.cpp
-    ExportTransformUtils.h
     ExportAnimationUtils.cpp
     ExportAnimationUtils.h
     TransformCorrection.cpp

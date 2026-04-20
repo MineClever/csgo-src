@@ -9,6 +9,7 @@ namespace dcc_transform_detail
 {
 constexpr double kEpsilon = 1.0e-8;
 constexpr double kRadiansPerDegree = 3.14159265358979323846 / 180.0;
+constexpr double kCorrectionEpsilon = 1.0e-8;
 } // namespace dcc_transform_detail
 
 using namespace dcc_transform_detail;
@@ -184,6 +185,19 @@ MStatus ApplyPreTransformToObject(const MObject &object, const MMatrix &preTrans
 
 namespace dcc_export_transform
 {
+namespace dcc_export_transform_detail
+{
+
+dcc_transform::TransformCorrection BuildScaleOnlyCorrection(const dcc_transform::TransformCorrection &correction)
+{
+    dcc_transform::TransformCorrection scaleOnlyCorrection;
+    scaleOnlyCorrection.scale[0] = correction.scale[0];
+    scaleOnlyCorrection.scale[1] = correction.scale[1];
+    scaleOnlyCorrection.scale[2] = correction.scale[2];
+    return scaleOnlyCorrection;
+}
+
+} // namespace dcc_export_transform_detail
 
 bool ExportTransformPolicy::IsIdentity() const
 {
@@ -214,6 +228,42 @@ MVector ApplyToPoint(const ExportTransformPolicy &policy, const MVector &point)
 MVector ApplyToDirection(const ExportTransformPolicy &policy, const MVector &direction)
 {
     return dcc_transform::ApplyToNormal(policy.correction, direction);
+}
+
+MVector ApplyToLocalTranslation(const ExportTransformPolicy &policy, const MVector &translation)
+{
+    return dcc_transform::ApplyToTranslationScale(policy.correction, translation);
+}
+
+MVector ApplyToLocalNormal(const ExportTransformPolicy &policy, const MVector &normal)
+{
+    return dcc_transform::ApplyToNormal(dcc_export_transform_detail::BuildScaleOnlyCorrection(policy.correction), normal);
+}
+
+MVector ApplyToLocalTangent(const ExportTransformPolicy &policy, const MVector &tangent)
+{
+    MVector corrected(
+        tangent.x * policy.correction.scale[0],
+        tangent.y * policy.correction.scale[1],
+        tangent.z * policy.correction.scale[2]);
+    return corrected.length() > kCorrectionEpsilon ? corrected.normal() : tangent;
+}
+
+double ApplyToLocalTangentHandedness(const ExportTransformPolicy &policy, double tangentHandedness)
+{
+    const double determinantSign =
+        policy.correction.scale[0] * policy.correction.scale[1] * policy.correction.scale[2];
+    return determinantSign < 0.0 ? -tangentHandedness : tangentHandedness;
+}
+
+MVector ApplyToBakedMeshPoint(const ExportTransformPolicy &policy, const MVector &point)
+{
+    return ApplyToPoint(policy, point);
+}
+
+MVector ApplyToBakedMeshNormal(const ExportTransformPolicy &policy, const MVector &normal)
+{
+    return ApplyToDirection(policy, normal);
 }
 
 MVector ApplyToTopLevelTranslation(const ExportTransformPolicy &policy, const MVector &translation)

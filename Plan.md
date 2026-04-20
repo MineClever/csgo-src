@@ -1577,6 +1577,35 @@
                 - 并发度 `8`
                 - 单 case 超时 `300s`
                 - 整批墙钟约 `99s`
+          - 2026-04-21 清理导出校正公共层（合并 `ExportTransformUtils` 到 `TransformCorrection`）：
+            - 评估：
+              - `ExportTransformUtils.*` 里的 helper 本质上只是对 `ExportTransformPolicy` 的再包装，没有独立状态，也没有脱离 `TransformCorrection` 的单独职责。
+              - 其中大部分逻辑和 [TransformCorrection.cpp](dcc_plugin/src/common/TransformCorrection.cpp) 已有实现重复，只是换了一层命名空间：
+                - local translation / normal / tangent / tangent handedness
+                - baked mesh point / normal
+                - top-level translation / quaternion / euler
+              - 保留单独文件只会让调用层多依赖一个头，后续更容易出现 API 分叉。
+            - 调整：
+              - 已将这些 helper 全部并回 [TransformCorrection.h](dcc_plugin/src/common/TransformCorrection.h) / [TransformCorrection.cpp](dcc_plugin/src/common/TransformCorrection.cpp)，统一放在 `dcc_export_transform` 命名空间下：
+                - `ApplyToLocalTranslation`
+                - `ApplyToLocalNormal`
+                - `ApplyToLocalTangent`
+                - `ApplyToLocalTangentHandedness`
+                - `ApplyToBakedMeshPoint`
+                - `ApplyToBakedMeshNormal`
+              - [DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 与 [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 都已切回只 include `TransformCorrection.h`。
+              - `ExportTransformUtils.h/.cpp` 已删除，`common/CMakeLists.txt` 已同步移除。
+            - 匿名 namespace：
+              - 这轮没有再引入匿名 namespace。
+              - `TransformCorrection.cpp` 中新增的导出细节 helper 放在具名 `dcc_export_transform_detail` 下，而不是匿名 `namespace`。
+            - 验证：
+              - `cmd /c dcc_plugin\\BuildPlugin.bat Release` 通过
+              - 完整默认回归再次通过：
+                - `mayapy dcc_plugin/tools/MayaBatchRegression.py --plugin dcc_plugin/maya_module/plug-ins/windows/2022/maya_dmx.mll --plugin-smd dcc_plugin/maya_module/plug-ins/windows/2022/maya_smd.mll --samples dcc_plugin/samples --output dcc_plugin/build/maya_batch_regression/final_full_after_transform_correction_merge`
+                - `28` 个默认 case 全部通过
+                - 并发度 `8`
+                - 单 case 超时 `300s`
+                - 整批墙钟约 `110s`
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。

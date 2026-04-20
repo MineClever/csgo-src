@@ -7,7 +7,6 @@
 #include <common_dmx/MayaDmxCommon.h>
 #include <common_dmx/SimpleDmxWrite.h>
 
-#include <common/ExportTransformUtils.h>
 #include <common/TransformCorrection.h>
 
 #include <maya/MMatrix.h>
@@ -160,11 +159,11 @@ void CorrectVector3Array(
         MVector corrected = parsed;
         if (useDirectionTransform)
         {
-            corrected = dcc_export_document::ApplyLocalNormal(policy, parsed);
+            corrected = dcc_export_transform::ApplyToLocalNormal(policy, parsed);
         }
         else if (useScaleOnly)
         {
-            corrected = dcc_export_document::ApplyLocalTranslation(policy, parsed);
+            corrected = dcc_export_transform::ApplyToLocalTranslation(policy, parsed);
         }
         else
         {
@@ -197,7 +196,7 @@ void CorrectDeltaPositionArray(
             continue;
         }
 
-        const MVector corrected = dcc_export_document::ApplyLocalTranslation(policy, parsed);
+        const MVector corrected = dcc_export_transform::ApplyToLocalTranslation(policy, parsed);
         correctedValues.push_back(FormatVector3(corrected.x, corrected.y, corrected.z));
     }
 
@@ -227,9 +226,9 @@ void CorrectVector4Array(
             continue;
         }
 
-        const MVector corrected = dcc_export_document::ApplyLocalTangent(policy, parsed);
+        const MVector corrected = dcc_export_transform::ApplyToLocalTangent(policy, parsed);
         correctedValues.push_back(
-            FormatVector4(corrected.x, corrected.y, corrected.z, dcc_export_document::ApplyLocalTangentHandedness(policy, w)));
+            FormatVector4(corrected.x, corrected.y, corrected.z, dcc_export_transform::ApplyToLocalTangentHandedness(policy, w)));
     }
 
     SetAttr(*element, attributeName, ScalarArrayAttr(attribute->declaredType, std::move(correctedValues)));
@@ -302,14 +301,14 @@ void CorrectTopLevelTransformElement(
     MVector position;
     if (ParseVector3String(FindAttributeString(transformElement, "position"), position))
     {
-        const MVector corrected = dcc_export_document::ApplyTopLevelTranslation(policy, position);
+        const MVector corrected = dcc_export_transform::ApplyToTopLevelTranslation(policy, position);
         SetAttr(*transformElement, "position", ScalarAttr("vector3", FormatVector3(corrected.x, corrected.y, corrected.z)));
     }
 
     MQuaternion orientation;
     if (ParseQuaternionString(FindAttributeString(transformElement, "orientation"), orientation))
     {
-        const MQuaternion corrected = dcc_export_document::ApplyTopLevelQuaternion(policy, orientation);
+        const MQuaternion corrected = dcc_export_transform::ApplyToTopLevelQuaternion(policy, orientation);
         SetAttr(
             *transformElement,
             "orientation",
@@ -329,7 +328,7 @@ void CorrectChildTransformElement(
     MVector position;
     if (ParseVector3String(FindAttributeString(transformElement, "position"), position))
     {
-        const MVector corrected = dcc_export_document::ApplyLocalTranslation(policy, position);
+        const MVector corrected = dcc_export_transform::ApplyToLocalTranslation(policy, position);
         SetAttr(*transformElement, "position", ScalarAttr("vector3", FormatVector3(corrected.x, corrected.y, corrected.z)));
     }
 }
@@ -384,7 +383,7 @@ void CorrectAnimationLayerValues(
                 continue;
             }
 
-            const MQuaternion corrected = dcc_export_document::ApplyTopLevelQuaternion(policy, parsed);
+            const MQuaternion corrected = dcc_export_transform::ApplyToTopLevelQuaternion(policy, parsed);
             correctedValues.push_back(FormatQuaternion(corrected.x, corrected.y, corrected.z, corrected.w));
             continue;
         }
@@ -396,7 +395,7 @@ void CorrectAnimationLayerValues(
             continue;
         }
 
-        const MVector corrected = dcc_export_document::ApplyTopLevelTranslation(policy, parsed);
+        const MVector corrected = dcc_export_transform::ApplyToTopLevelTranslation(policy, parsed);
         correctedValues.push_back(FormatVector3(corrected.x, corrected.y, corrected.z));
     }
 
@@ -478,8 +477,8 @@ void CorrectAnimationChannels(
                     }
 
                     const MVector corrected = topLevelTransformElements.find(targetElement) != topLevelTransformElements.end() ?
-                        dcc_export_document::ApplyTopLevelTranslation(policy, parsed) :
-                        dcc_export_document::ApplyLocalTranslation(policy, parsed);
+                        dcc_export_transform::ApplyToTopLevelTranslation(policy, parsed) :
+                        dcc_export_transform::ApplyToLocalTranslation(policy, parsed);
                     correctedValues.push_back(FormatVector3(corrected.x, corrected.y, corrected.z));
                 }
                 SetAttr(*layerElement, "values", ScalarArrayAttr(valuesAttribute->declaredType, std::move(correctedValues)));
