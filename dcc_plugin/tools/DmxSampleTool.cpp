@@ -5,7 +5,7 @@
 #include <iostream>
 #include <string>
 
-namespace
+namespace dmx_sample_tool_detail
 {
 std::string ReadFile(const char *path)
 {
@@ -37,7 +37,9 @@ bool EndsWith(const std::string &value, const std::string &suffix)
 {
     return value.size() >= suffix.size() && value.substr(value.size() - suffix.size()) == suffix;
 }
-}
+} // namespace dmx_sample_tool_detail
+
+using namespace dmx_sample_tool_detail;
 
 int main(int argc, char **argv)
 {

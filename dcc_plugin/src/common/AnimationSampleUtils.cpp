@@ -15,7 +15,7 @@
 namespace dcc_animation
 {
 
-namespace
+namespace detail
 {
 
 MStatus SampleLayerPlugValue(
@@ -71,7 +71,9 @@ MStatus SampleLayerPlugValue(
     return MS::kSuccess;
 }
 
-} // namespace
+} // namespace detail
+
+using namespace detail;
 
 CurrentTimeGuard::CurrentTimeGuard()
     : previousTime_(MAnimControl::currentTime())

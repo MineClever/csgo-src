@@ -2,7 +2,7 @@
 
 namespace simple_dmx
 {
-namespace
+namespace detail
 {
 struct ValueTypeInfo
 {
@@ -80,7 +80,9 @@ const ValueTypeInfo *FindValueTypeInfo(std::uint8_t binaryTypeCode)
     }
     return nullptr;
 }
-}
+} // namespace detail
+
+using namespace detail;
 
 ValueType ValueTypeFromDeclaredType(const std::string &declaredType)
 {

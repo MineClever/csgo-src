@@ -5,7 +5,7 @@
 
 #include <maya/MFnPlugin.h>
 
-namespace
+namespace plugin_smd_detail
 {
 constexpr const char *kImportOptionsScriptName = "mayaSmdTranslatorImport";
 constexpr const char *kExportOptionsScriptName = "mayaSmdTranslatorExport";
@@ -44,41 +44,41 @@ MStatus DeregisterTranslator(MFnPlugin &plugin, const char *name)
 
     return MS::kSuccess;
 }
-}
+} // namespace plugin_smd_detail
 
 MStatus initializePlugin(MObject object)
 {
     MFnPlugin plugin(object, maya_smd::kPluginVendor, maya_smd::kPluginVersion, "Any");
 
-    MStatus status = RegisterTranslator(
+    MStatus status = plugin_smd_detail::RegisterTranslator(
         plugin,
         maya_smd::kImporterTranslatorName,
         &SmdImportTranslator::Create,
-        kImportOptionsScriptName,
-        kImportDefaultOptions);
+        plugin_smd_detail::kImportOptionsScriptName,
+        plugin_smd_detail::kImportDefaultOptions);
     if (!status)
     {
         return MStatus::kFailure;
     }
 
-    status = RegisterTranslator(
+    status = plugin_smd_detail::RegisterTranslator(
         plugin,
         maya_smd::kExporterTranslatorName,
         &SmdExportTranslator::Create,
-        kExportOptionsScriptName,
-        kExportDefaultOptions);
+        plugin_smd_detail::kExportOptionsScriptName,
+        plugin_smd_detail::kExportDefaultOptions);
     if (!status)
     {
         plugin.deregisterFileTranslator(maya_smd::kImporterTranslatorName);
         return MStatus::kFailure;
     }
 
-    status = RegisterTranslator(
+    status = plugin_smd_detail::RegisterTranslator(
         plugin,
         maya_smd::kVtaImporterTranslatorName,
         &VtaImportTranslator::Create,
-        kImportOptionsScriptName,
-        kImportDefaultOptions);
+        plugin_smd_detail::kImportOptionsScriptName,
+        plugin_smd_detail::kImportDefaultOptions);
     if (!status)
     {
         plugin.deregisterFileTranslator(maya_smd::kExporterTranslatorName);
@@ -93,19 +93,19 @@ MStatus uninitializePlugin(MObject object)
 {
     MFnPlugin plugin(object);
 
-    MStatus status = DeregisterTranslator(plugin, maya_smd::kVtaImporterTranslatorName);
+    MStatus status = plugin_smd_detail::DeregisterTranslator(plugin, maya_smd::kVtaImporterTranslatorName);
     if (!status)
     {
         return MStatus::kFailure;
     }
 
-    status = DeregisterTranslator(plugin, maya_smd::kExporterTranslatorName);
+    status = plugin_smd_detail::DeregisterTranslator(plugin, maya_smd::kExporterTranslatorName);
     if (!status)
     {
         return MStatus::kFailure;
     }
 
-    status = DeregisterTranslator(plugin, maya_smd::kImporterTranslatorName);
+    status = plugin_smd_detail::DeregisterTranslator(plugin, maya_smd::kImporterTranslatorName);
     if (!status)
     {
         return MStatus::kFailure;

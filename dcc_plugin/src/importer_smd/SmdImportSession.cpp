@@ -17,7 +17,7 @@
 #include <maya/MQuaternion.h>
 #include <maya/MVector.h>
 
-namespace
+namespace smd_import_session_detail
 {
 struct SmdImportDocumentNormalizer
 {
@@ -132,7 +132,9 @@ struct SmdImportDocumentNormalizer
         }
     }
 };
-}
+} // namespace smd_import_session_detail
+
+using namespace smd_import_session_detail;
 
 SmdImportSession::SmdImportSession(const MFileObject &fileObject, const MString &options)
     : fileObject_(fileObject), options_(options)

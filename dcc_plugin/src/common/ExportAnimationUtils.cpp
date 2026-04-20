@@ -13,7 +13,7 @@
 
 namespace dcc_animation_export
 {
-namespace
+namespace detail
 {
 constexpr std::array<const char *, 3> kTranslateAttributeNames = {"translateX", "translateY", "translateZ"};
 constexpr std::array<const char *, 3> kRotateAttributeNames = {"rotateX", "rotateY", "rotateZ"};
@@ -55,7 +55,9 @@ private:
     MTime previousTime_;
 };
 
-}
+} // namespace detail
+
+using namespace detail;
 
 std::vector<MObject> FindAnimationCurvesForPlug(const MPlug &plug)
 {

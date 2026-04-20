@@ -10,7 +10,7 @@
 
 namespace simple_dmx
 {
-namespace
+namespace detail
 {
 constexpr int kCurrentBinaryEncoding = 5;
 
@@ -589,10 +589,13 @@ bool ReadArrayAttribute(
         return false;
     }
 }
-}
+
+} // namespace detail
 
 bool ParseBinaryDocument(const std::string &bytes, Document &document, std::string &errorMessage)
 {
+    using namespace detail;
+
     document.m_root.reset();
     document.m_ownedElements.clear();
     document.m_elementsById.clear();
@@ -918,4 +921,4 @@ bool ParseBinaryDocument(const std::string &bytes, Document &document, std::stri
 
     return true;
 }
-}
+} // namespace simple_dmx

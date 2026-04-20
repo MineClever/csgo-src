@@ -7,7 +7,7 @@
 
 namespace maya_dmx
 {
-namespace
+namespace detail
 {
 MString FormatPresetDouble(double value)
 {
@@ -17,7 +17,7 @@ MString FormatPresetDouble(double value)
     stream << value;
     return stream.str().c_str();
 }
-}
+} // namespace detail
 
 MString WorkflowPresetStore::SerializePreset(const ExportPreset &preset) const
 {
@@ -26,15 +26,15 @@ MString WorkflowPresetStore::SerializePreset(const ExportPreset &preset) const
     serialized += ";materialRoot=" + workflow_support::EscapeValue(preset.materialRoot);
     serialized += ";dmxEncoding=" + workflow_support::EscapeValue(preset.dmxEncoding);
     serialized += ";upAxis=" + workflow_support::EscapeValue(preset.upAxis);
-    serialized += ";translateX=" + FormatPresetDouble(preset.translateX);
-    serialized += ";translateY=" + FormatPresetDouble(preset.translateY);
-    serialized += ";translateZ=" + FormatPresetDouble(preset.translateZ);
-    serialized += ";rotateX=" + FormatPresetDouble(preset.rotateX);
-    serialized += ";rotateY=" + FormatPresetDouble(preset.rotateY);
-    serialized += ";rotateZ=" + FormatPresetDouble(preset.rotateZ);
-    serialized += ";scaleX=" + FormatPresetDouble(preset.scaleX);
-    serialized += ";scaleY=" + FormatPresetDouble(preset.scaleY);
-    serialized += ";scaleZ=" + FormatPresetDouble(preset.scaleZ);
+    serialized += ";translateX=" + detail::FormatPresetDouble(preset.translateX);
+    serialized += ";translateY=" + detail::FormatPresetDouble(preset.translateY);
+    serialized += ";translateZ=" + detail::FormatPresetDouble(preset.translateZ);
+    serialized += ";rotateX=" + detail::FormatPresetDouble(preset.rotateX);
+    serialized += ";rotateY=" + detail::FormatPresetDouble(preset.rotateY);
+    serialized += ";rotateZ=" + detail::FormatPresetDouble(preset.rotateZ);
+    serialized += ";scaleX=" + detail::FormatPresetDouble(preset.scaleX);
+    serialized += ";scaleY=" + detail::FormatPresetDouble(preset.scaleY);
+    serialized += ";scaleZ=" + detail::FormatPresetDouble(preset.scaleZ);
     serialized += ";exportSkin=";
     serialized += preset.exportSkin ? "1" : "0";
     serialized += ";exportDeltaStates=";

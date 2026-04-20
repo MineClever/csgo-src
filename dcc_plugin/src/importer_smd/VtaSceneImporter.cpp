@@ -21,7 +21,7 @@
 #include <maya/MSelectionList.h>
 #include <maya/MStringArray.h>
 
-namespace
+namespace vta_scene_importer_detail
 {
 constexpr const char *kSmdRawVertexMapAttribute = "mayaSmdRawVertexMap";
 
@@ -216,7 +216,9 @@ void CollectSelectedMeshBindingsRecursive(const MDagPath &candidatePath, std::ve
         bindings.push_back(binding);
     }
 }
-}
+} // namespace vta_scene_importer_detail
+
+using namespace vta_scene_importer_detail;
 
 VtaSceneImporter::VtaSceneImporter(
     std::shared_ptr<const simple_smd::Document> document,

@@ -19,7 +19,7 @@
 namespace maya_cmd
 {
 
-namespace
+namespace detail
 {
 
 MStatus ResolvePlugCommandNames(
@@ -196,7 +196,9 @@ MStatus CreateAnimationLayerCurveForPlug(
     return MS::kSuccess;
 }
 
-} // namespace
+} // namespace detail
+
+using namespace detail;
 
 bool TryGetNodeByName(const MString &nodeName, MObject &nodeObject)
 {

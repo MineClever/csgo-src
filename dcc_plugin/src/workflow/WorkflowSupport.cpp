@@ -7,14 +7,14 @@
 
 #include <algorithm>
 
-namespace
+namespace workflow_support_detail
 {
 void AppendChar(MString &text, char ch)
 {
     const char charText[] = {ch, '\0'};
     text += charText;
 }
-}
+} // namespace workflow_support_detail
 
 namespace maya_dmx
 {
@@ -46,13 +46,13 @@ MString UnescapeValue(const MString &value)
                 result += "\n";
                 break;
             default:
-                AppendChar(result, chars[i]);
+                workflow_support_detail::AppendChar(result, chars[i]);
                 break;
             }
         }
         else
         {
-            AppendChar(result, chars[i]);
+            workflow_support_detail::AppendChar(result, chars[i]);
         }
     }
     return result;
@@ -126,7 +126,7 @@ bool DecodeHexString(const MString &value, MString &decoded)
             return false;
         }
 
-        AppendChar(decoded, static_cast<char>((hi << 4) | lo));
+        workflow_support_detail::AppendChar(decoded, static_cast<char>((hi << 4) | lo));
     }
 
     return true;
@@ -183,8 +183,8 @@ std::vector<MString> SplitEscaped(const MString &text, char delimiter)
         const char ch = chars[i];
         if (escaped)
         {
-            AppendChar(current, '\\');
-            AppendChar(current, ch);
+            workflow_support_detail::AppendChar(current, '\\');
+            workflow_support_detail::AppendChar(current, ch);
             escaped = false;
             continue;
         }
@@ -199,11 +199,11 @@ std::vector<MString> SplitEscaped(const MString &text, char delimiter)
             current = "";
             continue;
         }
-        AppendChar(current, ch);
+        workflow_support_detail::AppendChar(current, ch);
     }
     if (escaped)
     {
-        AppendChar(current, '\\');
+        workflow_support_detail::AppendChar(current, '\\');
     }
     parts.push_back(current);
     return parts;

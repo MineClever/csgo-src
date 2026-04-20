@@ -14,7 +14,7 @@
 
 namespace simple_dmx
 {
-namespace
+namespace detail
 {
 std::vector<double> ParseNumberList(const std::string &text)
 {
@@ -907,7 +907,9 @@ private:
     std::vector<std::string> m_strings;
     std::unordered_map<std::string, std::int32_t> m_stringToIndex;
 };
-}
+} // namespace detail
+
+using namespace detail;
 
 std::string SerializeDocumentText(const Document &document)
 {

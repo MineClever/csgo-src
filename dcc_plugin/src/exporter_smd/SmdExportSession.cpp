@@ -9,7 +9,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace
+namespace smd_export_session_detail
 {
 std::unordered_map<std::string, std::string> ParseOptionMap(const MString &options)
 {
@@ -46,7 +46,9 @@ dcc_export_transform::ExportTransformPolicy BuildSmdExportTransformPolicy(const 
     const std::unordered_map<std::string, std::string> optionMap = ParseOptionMap(options);
     return dcc_export_transform::BuildExportTransformPolicy(dcc_import_transform::ParseTransformCorrection(optionMap));
 }
-}
+} // namespace smd_export_session_detail
+
+using namespace smd_export_session_detail;
 
 SmdExportSession::SmdExportSession(const MFileObject &fileObject, const MString &options, MPxFileTranslator::FileAccessMode mode)
     : fileObject_(fileObject)

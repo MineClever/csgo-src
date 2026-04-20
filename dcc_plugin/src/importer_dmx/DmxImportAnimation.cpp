@@ -30,7 +30,7 @@
 namespace dmx_import_impl
 {
 
-namespace
+namespace detail
 {
 
 constexpr double kSourceDeltaRadiansToDegrees = 180.0 / 3.14159265358979323846;
@@ -60,7 +60,9 @@ dcc_import_policy::SourceDeltaMode ParseSourceDeltaModeValue(const std::string &
     return dcc_import_policy::SourceDeltaMode::None;
 }
 
-} // namespace
+} // namespace detail
+
+using namespace detail;
 
 AnimationImporter::AnimationImporter(std::shared_ptr<ImportContext> context)
     : context_(context)

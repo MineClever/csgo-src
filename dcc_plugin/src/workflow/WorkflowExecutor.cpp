@@ -13,7 +13,7 @@
 
 namespace maya_dmx
 {
-namespace
+namespace detail
 {
 MString FormatOptionDouble(double value)
 {
@@ -23,7 +23,7 @@ MString FormatOptionDouble(double value)
     stream << value;
     return stream.str().c_str();
 }
-}
+} // namespace detail
 
 MString WorkflowExecutor::BuildTranslatorOptions(const ExportPreset &preset) const
 {
@@ -44,23 +44,23 @@ MString WorkflowExecutor::BuildTranslatorOptions(const ExportPreset &preset) con
         options += preset.materialRoot;
     }
     options += ";translateX=";
-    options += FormatOptionDouble(preset.translateX);
+    options += detail::FormatOptionDouble(preset.translateX);
     options += ";translateY=";
-    options += FormatOptionDouble(preset.translateY);
+    options += detail::FormatOptionDouble(preset.translateY);
     options += ";translateZ=";
-    options += FormatOptionDouble(preset.translateZ);
+    options += detail::FormatOptionDouble(preset.translateZ);
     options += ";rotateX=";
-    options += FormatOptionDouble(preset.rotateX);
+    options += detail::FormatOptionDouble(preset.rotateX);
     options += ";rotateY=";
-    options += FormatOptionDouble(preset.rotateY);
+    options += detail::FormatOptionDouble(preset.rotateY);
     options += ";rotateZ=";
-    options += FormatOptionDouble(preset.rotateZ);
+    options += detail::FormatOptionDouble(preset.rotateZ);
     options += ";scaleX=";
-    options += FormatOptionDouble(preset.scaleX);
+    options += detail::FormatOptionDouble(preset.scaleX);
     options += ";scaleY=";
-    options += FormatOptionDouble(preset.scaleY);
+    options += detail::FormatOptionDouble(preset.scaleY);
     options += ";scaleZ=";
-    options += FormatOptionDouble(preset.scaleZ);
+    options += detail::FormatOptionDouble(preset.scaleZ);
     return options;
 }
 

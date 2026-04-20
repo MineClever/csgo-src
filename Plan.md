@@ -812,6 +812,14 @@
   - 2026-04-18：进一步把 DMX / SMD 的层级查找与归一化辅助收进 `SceneMergeResolver` 和文件内 struct，减少匿名命名空间自由函数，提升后续复用空间。
   - 2026-04-18：`SceneMergeStrategy` 与 `SceneMergeResolver` 已合并到同一个头文件，避免双文件同步维护。
   - 2026-04-18：`SmdSceneImporter` 已继续拆分为面向对象结构，匿名命名空间辅助逻辑改为具名 `smd_import_impl` 工具单元，transform 动画导入与 source delta 采样分别落到 `SmdAnimationImporter`、`SmdSourceDeltaProcessor`，`SmdSceneImporter` 自身只保留场景骨架/层级搭建与调度职责。
+  - 2026-04-20：已完成 `dcc_plugin/src` 与 `dcc_plugin/tools` 的匿名 `namespace` 清理，当前全文检索 `rg -n -U "namespace\\s*\\n\\{" dcc_plugin/src dcc_plugin/tools` 已无命中。
+    - 对已有外层模块命名空间的实现文件，统一改为具名 `detail` 子命名空间，并把调用点改成显式 `detail::...`。
+    - 对无外层命名空间的实现文件，统一改为文件级具名命名空间，如 `plugin_dmx_detail`、`plugin_smd_detail`、`smd_export_session_detail`、`workflow_support_detail`、`vta_scene_importer_detail`。
+    - 本轮未额外引入新的大型对象层；仅在既有 importer/exporter/session 对象化基础上，把残留文件级 helper 收口到具名命名空间，避免为了“去匿名”再制造无收益抽象。
+  - 2026-04-20：匿名命名空间清理后的验证结果：
+    - `cmd /c dcc_plugin\\BuildPlugin.bat Release` 复编通过。
+    - 默认完整回归再次通过，`28` 个默认 case、`8` 并发、单 case 超时 `300s`，整批墙钟约 `85.849s`。
+    - 当前仍保留既有非阻塞 warning：`VaccineKiller.mod` 权限 warning、`append/update` 材质 rename warning、以及部分 bind pose warning；本轮未新增功能性回归。
   - 2026-04-19：继续确认“共用函数/方法整合”仍是明确计划项，不是临时想法。当前主线包括：把 importer/exporter 双侧共用类型、工具函数和辅助结构继续迁入 `dcc_plugin/src/common`；把 DMX / SMD 的场景合并、层级解析与 source delta 公共逻辑维持在统一入口下收口。现阶段优先级不变，仍属于中期重构主线。
   - 2026-04-19：已进一步盘点“下一批适合继续收进 common”的散落逻辑，建议优先级如下：
     - 第一优先级：动画层写入与 base curve 覆盖辅助。DMX [DmxImportAnimation.cpp](dcc_plugin/src/importer_dmx/DmxImportAnimation.cpp) 与 SMD [SmdAnimationImporter.cpp](dcc_plugin/src/importer_smd/SmdAnimationImporter.cpp) 仍各自维护“确定 layer 名、清旧曲线、写 animCurveTL/TA、source-delta 时切 layer / base”的流程，适合抽成统一 `AnimationCurveImportUtils` 或同级 helper。

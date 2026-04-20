@@ -5,11 +5,13 @@
 #include <maya/MFnTransform.h>
 #include <maya/MPoint.h>
 
-namespace
+namespace dcc_transform_detail
 {
 constexpr double kEpsilon = 1.0e-8;
 constexpr double kRadiansPerDegree = 3.14159265358979323846 / 180.0;
-}
+} // namespace dcc_transform_detail
+
+using namespace dcc_transform_detail;
 
 namespace dcc_transform
 {

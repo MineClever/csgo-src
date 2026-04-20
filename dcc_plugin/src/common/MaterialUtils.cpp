@@ -9,7 +9,7 @@
 namespace dcc_material
 {
 
-namespace
+namespace detail
 {
 
 std::string SanitizeMaterialNodeName(std::string value, const char *fallback)
@@ -35,7 +35,9 @@ std::string SanitizeMaterialNodeName(std::string value, const char *fallback)
     return value.empty() ? std::string(fallback) : value;
 }
 
-} // namespace
+} // namespace detail
+
+using namespace detail;
 
 MaterialNodeNames BuildMaterialNodeNames(
     const std::string &baseName,

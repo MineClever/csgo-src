@@ -5,7 +5,7 @@
 
 #include <maya/MFnPlugin.h>
 
-namespace
+namespace plugin_dmx_detail
 {
 constexpr const char *kWorkflowCommandName = "mayaDmxWorkflow";
 constexpr const char *kImportOptionsScriptName = "mayaDmxTranslatorImport";
@@ -65,36 +65,40 @@ MStatus DeregisterCommand(MFnPlugin &plugin, const char *name)
     }
     return MS::kSuccess;
 }
-}
+} // namespace plugin_dmx_detail
 
 MStatus initializePlugin(MObject object)
 {
     MFnPlugin plugin(object, maya_dmx::kPluginVendor, maya_dmx::kPluginVersion, "Any");
 
-    MStatus status = RegisterTranslator(
+    MStatus status = plugin_dmx_detail::RegisterTranslator(
         plugin,
         maya_dmx::kImporterTranslatorName,
         &DmxImportTranslator::Create,
-        kImportOptionsScriptName,
-        kImportDefaultOptions);
+        plugin_dmx_detail::kImportOptionsScriptName,
+        plugin_dmx_detail::kImportDefaultOptions);
     if (!status)
     {
         return MStatus::kFailure;
     }
 
-    status = RegisterTranslator(
+    status = plugin_dmx_detail::RegisterTranslator(
         plugin,
         maya_dmx::kExporterTranslatorName,
         &DmxExportTranslator::Create,
-        kExportOptionsScriptName,
-        kExportDefaultOptions);
+        plugin_dmx_detail::kExportOptionsScriptName,
+        plugin_dmx_detail::kExportDefaultOptions);
     if (!status)
     {
         plugin.deregisterFileTranslator(maya_dmx::kImporterTranslatorName);
         return MStatus::kFailure;
     }
 
-    status = RegisterCommand(plugin, kWorkflowCommandName, &MayaDmxWorkflowCommand::Create, &MayaDmxWorkflowCommand::CreateSyntax);
+    status = plugin_dmx_detail::RegisterCommand(
+        plugin,
+        plugin_dmx_detail::kWorkflowCommandName,
+        &MayaDmxWorkflowCommand::Create,
+        &MayaDmxWorkflowCommand::CreateSyntax);
     if (!status)
     {
         plugin.deregisterFileTranslator(maya_dmx::kExporterTranslatorName);

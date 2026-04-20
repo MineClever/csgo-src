@@ -6,7 +6,7 @@
 
 namespace maya_smd
 {
-namespace
+namespace detail
 {
 bool HasExtension(const MFileObject &fileObject, const char *extension)
 {
@@ -16,7 +16,9 @@ bool HasExtension(const MFileObject &fileObject, const char *extension)
     const size_t extensionLength = strlen(extension);
     return fileNameLength >= extensionLength && strcmp(fileName + fileNameLength - extensionLength, extension) == 0;
 }
-}
+} // namespace detail
+
+using namespace detail;
 
 bool HasSmdExtension(const MFileObject &fileObject)
 {

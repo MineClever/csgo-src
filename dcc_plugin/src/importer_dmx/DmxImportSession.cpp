@@ -27,7 +27,7 @@ using simple_dmx::FindAttributeString;
 using dmx_import_translator::ImportContext;
 using namespace dmx_import_impl;
 
-namespace
+namespace dmx_import_session_detail
 {
 struct DmxImportDocumentNormalizer
 {
@@ -443,7 +443,9 @@ DmxImportSession::DmxImportSession(const MFileObject &fileObject, const MString 
     : filePath_(fileObject.rawFullName())
     , optionsText_(options)
 {
-}
+} // namespace dmx_import_session_detail
+
+using namespace dmx_import_session_detail;
 
 MStatus DmxImportSession::Run()
 {
