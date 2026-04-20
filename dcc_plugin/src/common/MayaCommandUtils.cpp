@@ -1,6 +1,8 @@
 #include "MayaCommandUtils.h"
 
+#include <maya/MDoubleArray.h>
 #include <maya/MDGModifier.h>
+#include <maya/MFnAnimCurve.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnMesh.h>
@@ -10,6 +12,7 @@
 #include <maya/MItDependencyGraph.h>
 #include <maya/MPlugArray.h>
 #include <maya/MSelectionList.h>
+#include <maya/MTimeArray.h>
 
 #include <unordered_set>
 
@@ -133,6 +136,61 @@ MStatus SetAnimationLayerOverrideModeImpl(
         {
             return MS::kFailure;
         }
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus CreateAnimationLayerCurveForPlug(
+    const MString &layerName,
+    const MString &nodeName,
+    const MString &attrName,
+    const MPlug &plug,
+    double timeValue,
+    bool timesAreSeconds,
+    double value,
+    MObject &curveObject)
+{
+    curveObject = MObject::kNullObj;
+
+    double commandValue = value;
+    if (PlugUsesAngleUnits(plug))
+    {
+        commandValue = commandValue * (180.0 / 3.14159265358979323846);
+    }
+
+    MString command("setKeyframe -animLayer \"");
+    command += layerName;
+    command += "\" -attribute \"";
+    command += attrName;
+    command += "\" -time ";
+    command += timeValue;
+    if (timesAreSeconds)
+    {
+        command += "sec";
+    }
+    command += " -value ";
+    command += commandValue;
+    command += " \"";
+    command += nodeName;
+    command += "\"";
+
+    MStatus status = MGlobal::executeCommand(command, false, false);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MStringArray curveNames;
+    status = FindAnimationLayerCurvesForPlug(layerName, plug, curveNames);
+    if (!status || curveNames.length() == 0)
+    {
+        return MS::kFailure;
+    }
+
+    if (!TryGetNodeByName(curveNames[0], curveObject) || curveObject.isNull() || !curveObject.hasFn(MFn::kAnimCurve))
+    {
+        return MS::kFailure;
     }
 
     return MS::kSuccess;
@@ -984,39 +1042,84 @@ MStatus SetKeyframesOnAnimationLayer(
         return MS::kFailure;
     }
 
-    for (size_t keyIndex = 0; keyIndex < keyCount; ++keyIndex)
+    if (keepAdditiveMode)
     {
-        double commandValue = values[keyIndex];
-        if (PlugUsesAngleUnits(plug))
+        for (size_t keyIndex = 0; keyIndex < keyCount; ++keyIndex)
         {
-            commandValue = commandValue * (180.0 / 3.14159265358979323846);
+            double commandValue = values[keyIndex];
+            if (PlugUsesAngleUnits(plug))
+            {
+                commandValue = commandValue * (180.0 / 3.14159265358979323846);
+            }
+
+            MString command("setKeyframe -animLayer \"");
+            command += layerName;
+            command += "\" -attribute \"";
+            command += attrName;
+            command += "\" -time ";
+            command += times[keyIndex];
+            if (timesAreSeconds)
+            {
+                command += "sec";
+            }
+            command += " -value ";
+            command += commandValue;
+            command += " \"";
+            command += nodeName;
+            command += "\"";
+            status = MGlobal::executeCommand(command, false, false);
+            if (!status)
+            {
+                return MS::kFailure;
+            }
         }
 
-        MString command("setKeyframe -animLayer \"");
-        command += layerName;
-        command += "\" -attribute \"";
-        command += attrName;
-        command += "\" -time ";
-        command += times[keyIndex];
-        if (timesAreSeconds)
-        {
-            command += "sec";
-        }
-        command += " -value ";
-        command += commandValue;
-        command += " \"";
-        command += nodeName;
-        command += "\"";
-        status = MGlobal::executeCommand(command, false, false);
+        status = SetAnimationLayerOverrideModeImpl(layerName, false);
+        return status ? MS::kSuccess : MS::kFailure;
+    }
+
+    MObject curveObject;
+    status = CreateAnimationLayerCurveForPlug(
+        layerName,
+        nodeName,
+        attrName,
+        plug,
+        times[0],
+        timesAreSeconds,
+        values[0],
+        curveObject);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    if (keyCount > 1)
+    {
+        MFnAnimCurve curveFn(curveObject, &status);
         if (!status)
         {
             return MS::kFailure;
         }
-    }
 
-    if (keepAdditiveMode)
-    {
-        status = SetAnimationLayerOverrideModeImpl(layerName, false);
+        const MTime::Unit timeUnit = timesAreSeconds ? MTime::kSeconds : MTime::uiUnit();
+        MTimeArray timeArray;
+        MDoubleArray valueArray;
+        timeArray.setLength(static_cast<unsigned int>(keyCount - 1));
+        valueArray.setLength(static_cast<unsigned int>(keyCount - 1));
+        for (size_t keyIndex = 1; keyIndex < keyCount; ++keyIndex)
+        {
+            const unsigned int arrayIndex = static_cast<unsigned int>(keyIndex - 1);
+            timeArray[arrayIndex] = MTime(times[keyIndex], timeUnit);
+            valueArray[arrayIndex] = values[keyIndex];
+        }
+
+        status = curveFn.addKeys(
+            &timeArray,
+            &valueArray,
+            MFnAnimCurve::kTangentLinear,
+            MFnAnimCurve::kTangentLinear,
+            false,
+            nullptr);
         if (!status)
         {
             return MS::kFailure;

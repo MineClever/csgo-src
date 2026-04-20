@@ -1284,7 +1284,7 @@
       - 当前证据不支持“导出瓶颈主要来自过多 MEL 指令”：
         - 导出热路径主要位于 [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) 与 [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp)。
         - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 里的 `MGlobal::executeCommand` / `animLayer` / `setKeyframe` 主要用于 import 与 animation-layer 写入，不在本次导出热点主路径上。
-      - 2026-04-20 修复结果：
+    - 2026-04-20 修复结果：
         - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) 已把多 layer 曲线发现从手写递归改成 Maya 原生 `MItDependencyGraph` 上游遍历，并补 `CurveCache` 复用结果。
         - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) 已把向量通道采样改成“每个 sample set / 每个时刻只切一次时间”，不再对同一时刻的 `tx/ty/tz`、`rx/ry/rz` 分别切时间。
         - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) 已接入曲线缓存。
@@ -1295,6 +1295,49 @@
         - 修复后回归：
           - `Ellis/DMX/animation/c2m1_mechanic_intro.dmx`、`MostComplexSampleSet/vcaanim_VertexAnim(.smd)` 专项回归通过。
           - 默认完整并发回归再次通过，整批约 `280s` 完成，较本轮修复前的并发完整回归进一步下降。
+    - 2026-04-20 多层导入性能评估：
+      - 已做“animationOnly 直接写 base”与“animationOnly 写 Maya animation layer”对照：
+        - `Ellis/DMX/animation/c2m1_mechanic_intro.dmx`
+          - base：约 `0.694s`
+          - layer：约 `6.387s`
+          - 额外 layer 开销：约 `5.693s`
+        - `ctm_fbi/ctm_fbi_anims/rom_skin.smd`
+          - base：约 `0.438s`
+          - layer：约 `31.953s`
+          - 额外 layer 开销：约 `31.515s`
+      - 已统计单层导入后的 layer 规模：
+        - `Ellis c1m1`：`474` 条 layer curves，约 `31545` keys，导入约 `7.891s`
+        - `Ellis c2m1`：`462` 条 layer curves，约 `25899` keys，导入约 `6.623s`
+        - `rom_skin.smd`：`486` 条 layer curves，约 `194400` keys，导入约 `34.981s`
+        - `shield_deploy.smd`：`486` 条 layer curves，约 `15066` keys，导入约 `3.063s`
+      - 结论：
+        - 多层导入当前的主要瓶颈不在 DMX/SMD 解析，也不在 scene target 解析，而在“写 Maya animation layer key”这一步。
+        - 当前公共路径 [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) `SetKeyframesOnAnimationLayer()` 仍是：
+          - 每个 plug 先跑一次 `animLayer -e -attribute`
+          - 再跑一次 `animLayer -q -findCurveForPlug`
+          - 然后对每个 key 单独执行一次 MEL `setKeyframe -animLayer ...`
+        - 因此当前复杂度基本接近“每个 plug 常数个 MEL 命令 + 每个 key 一条 MEL 命令”；`rom_skin.smd` 这种 `19.4` 万 key 的样例天然会被拖慢。
+      - 优化空间：
+        - 很大，且热点明确。
+        - 第一优先级“layer curve 建立后改走 `MFnAnimCurve` API 批量写 key”已完成：
+          - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 现已改为先用一次 `setKeyframe -animLayer` 建立目标 layer curve，再用 `MFnAnimCurve` 写入剩余 key。
+          - 非 `source delta` / 非 additive 路径进一步从逐个 `addKey` 改成一次 `addKeys` 批量提交，继续压低大 key 数样例的 API 调用次数。
+          - `keepAdditiveMode=true` 仍保留逐 key MEL 路径，避免 additive/source-delta 层语义被直接写 curve 破坏。
+        - 修复后重新实测：
+          - `Ellis/DMX/animation/c2m1_mechanic_intro.dmx`
+            - base：约 `0.735s`
+            - layer：约 `2.200s`
+            - 额外 layer 开销：约 `1.465s`
+          - `ctm_fbi/ctm_fbi_anims/rom_skin.smd`
+            - base：约 `0.654s`
+            - layer：约 `1.008s`
+            - 额外 layer 开销：约 `0.354s`
+        - 修复后回归：
+          - `simple_source_delta_overlay(.smd)`、`simple_source_delta_overlay_scene_reference(.smd)`、`ctm_fbi_anims/rom_skin.smd`、`Ellis/DMX/animation/c2m1_mechanic_intro.dmx` 专项回归通过。
+          - 默认完整并发回归再次通过，`28` 个默认 case、`8` 并发，整批墙钟约 `86.415s`。
+        - 当前判断：
+          - 多层导入的主瓶颈已经不再是“逐 key MEL 写 layer”；剩余耗时更多落在 Maya 自身场景导入/打开与少量 layer query 上。
+          - 下一优先级若继续优化，可只考虑给 `FindAnimationLayerCurvesForPlug()` / `ClearAnimationLayerCurve()` 增加导入会话级缓存；预期收益应明显小于本轮。
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。
