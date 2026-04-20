@@ -1492,6 +1492,7 @@ class GateValidator:
         first_pose_translation = None
         first_pose_rotation = None
         first_triangle_position = None
+        first_triangle_positions = []
         frame_zero_poses = {}
         in_skeleton = False
         in_triangles = False
@@ -1545,13 +1546,19 @@ class GateValidator:
 
             parts = stripped.split()
             if len(parts) >= 9:
-                first_triangle_position = [float(parts[1]), float(parts[2]), float(parts[3])]
-                break
+                triangle_position = [float(parts[1]), float(parts[2]), float(parts[3])]
+                if first_triangle_position is None:
+                    first_triangle_position = triangle_position
+                if len(first_triangle_positions) < 3:
+                    first_triangle_positions.append(triangle_position)
+                if len(first_triangle_positions) == 3:
+                    break
 
         return {
             "first_pose_translation": first_pose_translation,
             "first_pose_rotation": first_pose_rotation,
             "first_triangle_position": first_triangle_position,
+            "first_triangle_positions": first_triangle_positions,
             "frame_zero_poses": frame_zero_poses,
         }
 
@@ -1783,6 +1790,20 @@ class GateValidator:
             expectation["expected_corrected_first_pose_rotation"],
             f"SMD selected export gate failed for {normalized_case_name} corrected first pose rotation",
         )
+
+        expected_corrected_triangle_positions = expectation.get("expected_corrected_triangle_positions")
+        if expected_corrected_triangle_positions:
+            if len(corrected_parsed["first_triangle_positions"]) < len(expected_corrected_triangle_positions):
+                raise RuntimeError(
+                    f"SMD selected export gate failed for {normalized_case_name}. "
+                    f"insufficient corrected triangle positions: {corrected_parsed['first_triangle_positions']}"
+                )
+            for index, expected_position in enumerate(expected_corrected_triangle_positions):
+                self.assert_close_triplet(
+                    corrected_parsed["first_triangle_positions"][index],
+                    expected_position,
+                    f"SMD selected export gate failed for {normalized_case_name} corrected triangle position {index}",
+                )
 
     def validate_dmx_selected_export_gate(self, case_name):
         expectation = self.ctx.config.get_case_expectation("dmx_selected_export_gate_expectations", case_name)

@@ -419,7 +419,12 @@
       "corrected_export_options": "translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=90;scaleX=1;scaleY=1;scaleZ=1",
       "expected_changed_bones": [0],
       "expected_corrected_first_pose_rotation": [0.0, 0.0, 1.570796],
-      "expected_first_triangle_position": [0.0, 0.0, 0.0]
+      "expected_first_triangle_position": [0.0, 0.0, 0.0],
+      "expected_corrected_triangle_positions": [
+        [0.0, 0.0, 0.0],
+        [0.0, 2.0, 0.0],
+        [-2.0, 0.0, 0.0]
+      ]
     }
   },
   "dmx_selected_export_gate_expectations": {

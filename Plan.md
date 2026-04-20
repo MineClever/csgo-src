@@ -1530,10 +1530,53 @@
               - `simple_mesh` 定向回归通过
               - 完整默认回归再次通过：
                 - `mayapy dcc_plugin/tools/MayaBatchRegression.py --plugin dcc_plugin/maya_module/plug-ins/windows/2022/maya_dmx.mll --plugin-smd dcc_plugin/maya_module/plug-ins/windows/2022/maya_smd.mll --samples dcc_plugin/samples --output dcc_plugin/build/maya_batch_regression/final_full_after_dmx_normal_fix`
+              - `28` 个默认 case 全部通过
+              - 并发度 `8`
+              - 单 case 超时 `300s`
+              - 整批墙钟约 `96s`
+          - 2026-04-21 SMD / DMX 导出校正语义对齐与共用抽象：
+            - 目标：
+              - 检查 SMD 导出校正方式，尽量与 DMX 当前“DOM 后处理 + root/hierarchy 闭合”的行为保持一致。
+              - 将两边已经稳定重合的逻辑抽到 `common` 统一维护，避免再次语义漂移。
+            - 已完成的共用抽象：
+              - 新增：
+                - [ExportTransformUtils.h](dcc_plugin/src/common/ExportTransformUtils.h)
+                - [ExportTransformUtils.cpp](dcc_plugin/src/common/ExportTransformUtils.cpp)
+              - 统一收口了这些语义 helper：
+                - top-level translation / quaternion / euler rotation 修正
+                - local translation（scale-only）修正
+                - local normal / tangent / tangent handedness 修正
+                - baked mesh point / normal 修正
+              - [DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 和 [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 现已都改为通过 `common` helper 调用，不再各自维护一套分叉实现。
+            - 评估结论：
+              - DMX：
+                - 仍保持当前已验证通过的语义：
+                  - top-level transform 负责旋转/平移
+                  - child local / mesh local positions 只做 scale-only
+                  - local normals/tangents 只做 scale 相关修正
+              - SMD：
+                - `skeleton` 的 top-level / child pose 修正可以和 DMX 共用同一套语义。
+                - 但 `triangles` / VTA sample 不能像 DMX 一样完全切到 local-only。
+                - 这轮实测把 SMD mesh 点位改成 local-only 后，复杂 gate `ctm_fbi/ctm_fbi.smd` 会失败，`rotate_z_90` 下 mesh world-space 明显不再跟随旋转。
+                - 说明由于 SMD 本身缺少 DMX 那样的独立 mesh hierarchy / bind metadata 表达能力，mesh 顶点与法线仍必须保留 baked correction，才能闭合 world-space 结果。
+            - 因此当前统一策略是：
+              - root / hierarchy pose 语义尽量对齐 DMX
+              - mesh correction 路径按格式能力区分：
+                - DMX：local-only mesh correction
+                - SMD：baked mesh point / normal correction
+            - 回归补充：
+              - [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py) 的 `smd_selected_export_gate` 已扩展支持校验首个 triangle 的多个顶点。
+              - [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json) 中 `simple_skinned_mesh` 的 SMD gate 已记录当前稳定语义：
+                - root bone rotation 改变
+                - corrected triangle 顶点按 baked 旋转结果输出
+            - 最终验证：
+              - 定向 `simple_skinned_mesh` SMD gate 通过
+              - 完整默认回归再次通过：
+                - `mayapy dcc_plugin/tools/MayaBatchRegression.py --plugin dcc_plugin/maya_module/plug-ins/windows/2022/maya_dmx.mll --plugin-smd dcc_plugin/maya_module/plug-ins/windows/2022/maya_smd.mll --samples dcc_plugin/samples --output dcc_plugin/build/maya_batch_regression/final_full_after_smd_dmx_alignment2`
                 - `28` 个默认 case 全部通过
                 - 并发度 `8`
                 - 单 case 超时 `300s`
-                - 整批墙钟约 `96s`
+                - 整批墙钟约 `99s`
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。
