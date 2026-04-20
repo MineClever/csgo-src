@@ -1481,7 +1481,30 @@
             - 下一步应优先对齐 [DmxImportSession.cpp](dcc_plugin/src/importer_dmx/DmxImportSession.cpp) 里的 `NormalizeDocumentForImportCorrection()` 语义，确认导出端 DOM 后处理与 importer 的 top-level transform / mesh / upAxis 约定完全一致。
         - 当前回归结论：
           - `ctm_fbi/ctm_fbi.smd` 复杂 gate 通过。
-          - `complex_chr_mesh.dmx` 复杂 gate 当前已从“node + mesh 全错”收敛为“纯旋转通过、混合 TRS 下仅 skinned mesh 仍失败”，默认完整回归暂时仍不能重新宣告全绿。
+          - `complex_chr_mesh.dmx` 复杂 gate 已继续收口通过：
+            - `rotate_z_90 / trs_mixed_a / trs_mixed_b` 现在都能通过。
+            - 最终有效做法是：对“带导出校正”的 DMX，不再写 `mayaGeomMatrix / mayaBindPreMatrix`，让 importer 直接回退到 corrected hierarchy 下的默认 `geomMatrix` / `bindPreMatrix` 推导。
+          - `simple_skinned_mesh` 的旧 DMX selected-export gate 之前把“校正后 bind positions 必须直接旋转改写”当成契约，这已经和当前更稳定的 DMX DOM 语义不一致；现已按新语义改为：
+            - bind positions 保持 mesh-local
+            - 真正的空间变化由 corrected transform hierarchy + 默认 skin metadata 闭合
+          - `simple_mesh` 的旧 DMX export-transform gate 也已同步改成新语义：
+            - `expected_transform_position` 继续校验顶层导出 transform 的平移修正
+            - `expected_bind_positions` 改为校验 mesh-local 且按 scale 修正后的点位，不再假设顶点会被平移直接烘焙进 bind positions
+          - 2026-04-21 本轮最终验证：
+            - 已执行完整默认并发回归：
+              - `mayapy dcc_plugin/tools/MayaBatchRegression.py --plugin dcc_plugin/maya_module/plug-ins/windows/2022/maya_dmx.mll --plugin-smd dcc_plugin/maya_module/plug-ins/windows/2022/maya_smd.mll --samples dcc_plugin/samples --output dcc_plugin/build/maya_batch_regression/final_full_after_dmx_fix2`
+            - 结果：
+              - `28` 个默认 case 全部通过
+              - 并发度 `8`
+              - 单 case 超时 `300s`
+              - 整批墙钟约 `105s`
+            - 现结论：
+              - DMX 复杂 scene-transform gate、selected-export gate、export-transform gate 语义已经统一到“DOM 后处理 + hierarchy/world-space 闭合”路径
+              - 当前不再要求 DMX 导出把所有 mesh bind positions 直接烘焙成世界空间结果
+              - 已知非阻塞 warning 仍只有：
+                - `VaccineKiller.mod` 权限 warning
+                - 部分 `append/update` case 的材质 rename warning
+                - 个别 skin/bind pose warning
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。

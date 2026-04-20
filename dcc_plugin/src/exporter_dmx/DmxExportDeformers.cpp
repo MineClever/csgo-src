@@ -286,13 +286,17 @@ void DeformerExporter::AppendSkinningData(const MDagPath &meshPath, Element &ver
         }
     }
 
-    MPlug geomMatrixPlug = skinClusterNodeFn.findPlug("geomMatrix", true, &status);
-    if (status)
+    const bool emitBindPoseMetadata = context_->transformPolicy.IsIdentity();
+    if (emitBindPoseMetadata)
     {
-        const std::string geomMatrixValue = ReadMatrixPlugValue(geomMatrixPlug);
-        if (!geomMatrixValue.empty())
+        MPlug geomMatrixPlug = skinClusterNodeFn.findPlug("geomMatrix", true, &status);
+        if (status)
         {
-            SetAttr(*vertexDataElement_, "mayaGeomMatrix", ScalarAttr("string", geomMatrixValue));
+            const std::string geomMatrixValue = ReadMatrixPlugValue(geomMatrixPlug);
+            if (!geomMatrixValue.empty())
+            {
+                SetAttr(*vertexDataElement_, "mayaGeomMatrix", ScalarAttr("string", geomMatrixValue));
+            }
         }
     }
 
@@ -325,7 +329,7 @@ void DeformerExporter::AppendSkinningData(const MDagPath &meshPath, Element &ver
     {
         SetAttr(*vertexDataElement_, "mayaInfluencePaths", ScalarArrayAttr("string_array", std::move(influencePathValues)));
     }
-    if (!bindPreMatrixValues.empty())
+    if (emitBindPoseMetadata && !bindPreMatrixValues.empty())
     {
         SetAttr(*vertexDataElement_, "mayaBindPreMatrix", ScalarArrayAttr("string_array", std::move(bindPreMatrixValues)));
     }

@@ -401,9 +401,9 @@
       "expected_up_axis": "Z",
       "expected_transform_position": [1.0, 2.0, 3.0],
       "expected_bind_positions": [
-        [1.0, 2.0, 3.0],
-        [5.0, 2.0, 3.0],
-        [1.0, 6.0, 3.0]
+        [0.0, 0.0, 0.0],
+        [4.0, 0.0, 0.0],
+        [0.0, 4.0, 0.0]
       ]
     },
     "ctm_fbi/ctm_fbi.smd": {
@@ -430,8 +430,8 @@
       "expected_corrected_orientation": [0.0, 0.0, 0.707107, 0.707107],
       "expected_corrected_bind_positions": [
         [0.0, 0.0, 0.0],
-        [0.0, 2.0, 0.0],
-        [-2.0, 0.0, 0.0]
+        [2.0, 0.0, 0.0],
+        [0.0, 2.0, 0.0]
       ]
     }
   },

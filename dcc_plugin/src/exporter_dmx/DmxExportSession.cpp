@@ -237,31 +237,15 @@ void CorrectMatrixMetadata(
     Element *vertexDataElement,
     const dcc_export_transform::ExportTransformPolicy &policy)
 {
-    Attribute *bindPreMatrixAttribute = FindMutableAttribute(vertexDataElement, "mayaBindPreMatrix");
-    if (!bindPreMatrixAttribute || bindPreMatrixAttribute->kind != Attribute::Kind::StringArray)
-    {
-        return;
-    }
-
-    const MMatrix inverseCorrection = policy.correction.Matrix().inverse();
-    std::vector<std::string> correctedValues;
-    correctedValues.reserve(bindPreMatrixAttribute->stringArray.size());
-    for (const std::string &value : bindPreMatrixAttribute->stringArray)
-    {
-        MMatrix parsedMatrix;
-        if (!ParseMatrixStringLocal(value, parsedMatrix))
-        {
-            correctedValues.push_back(value);
-            continue;
-        }
-
-        correctedValues.push_back(FormatMatrix(inverseCorrection * parsedMatrix));
-    }
-
-    SetAttr(
-        *vertexDataElement,
-        "mayaBindPreMatrix",
-        ScalarArrayAttr(bindPreMatrixAttribute->declaredType, std::move(correctedValues)));
+    (void)policy;
+    vertexDataElement->attributes.erase("mayaGeomMatrix");
+    vertexDataElement->attributes.erase("mayaBindPreMatrix");
+    vertexDataElement->attributeOrder.erase(
+        std::remove(vertexDataElement->attributeOrder.begin(), vertexDataElement->attributeOrder.end(), "mayaGeomMatrix"),
+        vertexDataElement->attributeOrder.end());
+    vertexDataElement->attributeOrder.erase(
+        std::remove(vertexDataElement->attributeOrder.begin(), vertexDataElement->attributeOrder.end(), "mayaBindPreMatrix"),
+        vertexDataElement->attributeOrder.end());
 }
 
 void CorrectVertexDataElement(
