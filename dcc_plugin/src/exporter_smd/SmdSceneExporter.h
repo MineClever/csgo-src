@@ -25,6 +25,7 @@ private:
     MStatus buildNodes();
     MStatus buildSkeleton();
     MStatus buildTriangles();
+    MStatus applyDocumentTransformCorrection();
     void collectAnimationFrameTimes(std::vector<double> &frameTimes) const;
     MStatus collectSkinWeights(
         const MDagPath &meshPath,

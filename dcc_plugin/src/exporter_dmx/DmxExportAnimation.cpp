@@ -249,18 +249,10 @@ void AnimationExporter::appendCurrentVectorTransformChannel(
     }
 
     std::vector<std::array<double, 3>> values;
-    const bool isTopLevelNode = currentDagIsTopLevelNode();
     for (double timeSeconds : times)
     {
-        std::array<double, 3> transformedValues =
+        const std::array<double, 3> transformedValues =
             dcc_animation_export::EvaluateSampleSetValues(samples, timeSeconds, MTime::kSeconds);
-        if (isTopLevelNode)
-        {
-            const MVector correctedValues = dcc_export_transform::ApplyToTopLevelTranslation(
-                context_->transformPolicy,
-                MVector(transformedValues[0], transformedValues[1], transformedValues[2]));
-            transformedValues = {correctedValues.x, correctedValues.y, correctedValues.z};
-        }
         values.push_back(transformedValues);
         clipDurationSeconds_ = std::max(clipDurationSeconds_, timeSeconds);
     }
@@ -314,19 +306,11 @@ void AnimationExporter::appendCurrentQuaternionTransformChannel(
     }
 
     std::vector<MQuaternion> values;
-    const bool isTopLevelNode = currentDagIsTopLevelNode();
     for (double timeSeconds : times)
     {
         const std::array<double, 3> eulerValues =
             dcc_animation_export::EvaluateSampleSetValues(samples, timeSeconds, MTime::kSeconds);
-        MQuaternion correctedRotation = MEulerRotation(eulerValues[0], eulerValues[1], eulerValues[2]).asQuaternion();
-        if (isTopLevelNode)
-        {
-            correctedRotation = dcc_export_transform::ApplyToTopLevelQuaternion(
-                context_->transformPolicy,
-                correctedRotation);
-        }
-        values.push_back(correctedRotation);
+        values.push_back(MEulerRotation(eulerValues[0], eulerValues[1], eulerValues[2]).asQuaternion());
         clipDurationSeconds_ = std::max(clipDurationSeconds_, timeSeconds);
     }
 

@@ -228,7 +228,7 @@ MQuaternion ApplyToQuaternion(const ExportTransformPolicy &policy, const MQuater
 
 MQuaternion ApplyToTopLevelQuaternion(const ExportTransformPolicy &policy, const MQuaternion &quaternion)
 {
-    return policy.correction.RotationQuaternion() * quaternion;
+    return dcc_transform::ApplyToQuaternion(policy.correction, quaternion);
 }
 
 MEulerRotation ApplyToEulerRotation(const ExportTransformPolicy &policy, const MEulerRotation &rotation)

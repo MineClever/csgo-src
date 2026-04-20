@@ -66,27 +66,17 @@ Element *BuildTransformElement(
         return nullptr;
     }
 
-    MVector correctedTranslation = translation;
-    MQuaternion correctedRotation(qx, qy, qz, qw);
-    if (isTopLevelNode)
-    {
-        correctedTranslation = dcc_export_transform::ApplyToTopLevelTranslation(context.transformPolicy, translation);
-        correctedRotation = dcc_export_transform::ApplyToTopLevelQuaternion(
-            context.transformPolicy,
-            correctedRotation);
-    }
-
     Element *transformElement = builder.CreateElement("DmeTransform");
     SetAttr(
         *transformElement,
         "position",
-        ScalarAttr("vector3", FormatVector3(correctedTranslation.x, correctedTranslation.y, correctedTranslation.z)));
+        ScalarAttr("vector3", FormatVector3(translation.x, translation.y, translation.z)));
     SetAttr(
         *transformElement,
         "orientation",
         ScalarAttr(
             "quaternion",
-            FormatQuaternion(correctedRotation.x, correctedRotation.y, correctedRotation.z, correctedRotation.w)));
+            FormatQuaternion(qx, qy, qz, qw)));
     return transformElement;
 }
 

@@ -94,10 +94,7 @@ Element *BuildMeshElement(DocumentBuilder &builder, const MDagPath &meshPath, Ex
     positions.reserve(meshPoints.length());
     for (unsigned int i = 0; i < meshPoints.length(); ++i)
     {
-        const MVector correctedPoint = dcc_export_transform::ApplyToPoint(
-            context.transformPolicy,
-            MVector(meshPoints[i].x, meshPoints[i].y, meshPoints[i].z));
-        positions.push_back(FormatVector3(correctedPoint.x, correctedPoint.y, correctedPoint.z));
+        positions.push_back(FormatVector3(meshPoints[i].x, meshPoints[i].y, meshPoints[i].z));
     }
 
     std::vector<std::string> positionsIndices;
@@ -146,8 +143,7 @@ Element *BuildMeshElement(DocumentBuilder &builder, const MDagPath &meshPath, Ex
             MVector normal;
             if (polygonIt.getNormal(localVertex, normal, MSpace::kObject) == MS::kSuccess)
             {
-                const MVector correctedNormal = dcc_export_transform::ApplyToDirection(context.transformPolicy, normal);
-                const std::string normalKey = FormatVector3(correctedNormal.x, correctedNormal.y, correctedNormal.z);
+                const std::string normalKey = FormatVector3(normal.x, normal.y, normal.z);
                 auto [normalIt, inserted] = normalMap.emplace(normalKey, static_cast<int>(normals.size()));
                 if (inserted)
                 {
@@ -187,8 +183,7 @@ Element *BuildMeshElement(DocumentBuilder &builder, const MDagPath &meshPath, Ex
                     MSpace::kObject,
                     &uvSetNames[0]) == MS::kSuccess)
             {
-                const MVector correctedTangent = dcc_export_transform::ApplyToDirection(context.transformPolicy, tangent);
-                const std::string tangentKey = FormatVector4(correctedTangent.x, correctedTangent.y, correctedTangent.z, 1.0);
+                const std::string tangentKey = FormatVector4(tangent.x, tangent.y, tangent.z, 1.0);
                 auto [tangentIt, inserted] = tangentChannel.valueMap.emplace(
                     tangentKey,
                     static_cast<int>(tangentChannel.values.size()));

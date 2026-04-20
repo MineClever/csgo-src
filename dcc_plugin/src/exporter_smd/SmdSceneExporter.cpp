@@ -36,6 +36,7 @@ std::string DagPathKey(const MDagPath &dagPath)
 {
     return dagPath.fullPathName().asChar();
 }
+
 }
 
 SmdSceneExporter::SmdSceneExporter(
@@ -87,7 +88,13 @@ MStatus SmdSceneExporter::Build()
         return MStatus::kFailure;
     }
 
-    return buildTriangles();
+    status = buildTriangles();
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    return applyDocumentTransformCorrection();
 }
 
 const simple_smd::Document &SmdSceneExporter::document() const
@@ -411,20 +418,12 @@ MStatus SmdSceneExporter::buildSkeleton()
                 dcc_animation_export::EvaluateSampleSetValues(transformSamplesByNode[nodeIndex].translation, frameTime, MTime::uiUnit());
             const std::array<double, 3> rotationValues =
                 dcc_animation_export::EvaluateSampleSetValues(transformSamplesByNode[nodeIndex].rotation, frameTime, MTime::uiUnit());
-            const bool isTopLevelNode = document_.nodes[nodeIndex].parentIndex < 0;
-            MVector correctedTranslation(translationValues[0], translationValues[1], translationValues[2]);
-            MEulerRotation correctedRotation(rotationValues[0], rotationValues[1], rotationValues[2]);
-            if (isTopLevelNode)
-            {
-                correctedTranslation = dcc_export_transform::ApplyToTopLevelTranslation(transformPolicy_, correctedTranslation);
-                correctedRotation = dcc_export_transform::ApplyToTopLevelEulerRotation(transformPolicy_, correctedRotation);
-            }
-            pose.tx = correctedTranslation.x;
-            pose.ty = correctedTranslation.y;
-            pose.tz = correctedTranslation.z;
-            pose.rx = correctedRotation.x;
-            pose.ry = correctedRotation.y;
-            pose.rz = correctedRotation.z;
+            pose.tx = translationValues[0];
+            pose.ty = translationValues[1];
+            pose.tz = translationValues[2];
+            pose.rx = rotationValues[0];
+            pose.ry = rotationValues[1];
+            pose.rz = rotationValues[2];
             frame.poses.push_back(pose);
         }
 
@@ -570,12 +569,9 @@ MStatus SmdSceneExporter::buildTriangles()
                         {
                             return MStatus::kFailure;
                         }
-                        const MVector correctedPoint = dcc_export_transform::ApplyToPoint(
-                            transformPolicy_,
-                            MVector(point.x, point.y, point.z));
-                        vertex.px = correctedPoint.x;
-                        vertex.py = correctedPoint.y;
-                        vertex.pz = correctedPoint.z;
+                        vertex.px = point.x;
+                        vertex.py = point.y;
+                        vertex.pz = point.z;
 
                         MVector normal;
                         status = polygonIt.getNormal(static_cast<int>(vertexInTriangle), normal, MSpace::kObject);
@@ -583,10 +579,9 @@ MStatus SmdSceneExporter::buildTriangles()
                         {
                             return MStatus::kFailure;
                         }
-                        const MVector correctedNormal = dcc_export_transform::ApplyToDirection(transformPolicy_, normal);
-                        vertex.nx = correctedNormal.x;
-                        vertex.ny = correctedNormal.y;
-                        vertex.nz = correctedNormal.z;
+                        vertex.nx = normal.x;
+                        vertex.ny = normal.y;
+                        vertex.nz = normal.z;
 
                         float2 uv{};
                         if (polygonIt.hasUVs() && polygonIt.getUV(static_cast<int>(vertexInTriangle), uv) == MS::kSuccess)
@@ -607,6 +602,90 @@ MStatus SmdSceneExporter::buildTriangles()
                     document_.triangles.push_back(triangle);
                 }
             }
+        }
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus SmdSceneExporter::applyDocumentTransformCorrection()
+{
+    if (transformPolicy_.IsIdentity())
+    {
+        return MS::kSuccess;
+    }
+
+    for (simple_smd::SkeletonFrame &frame : document_.skeletonFrames)
+    {
+        for (simple_smd::SkeletonPose &pose : frame.poses)
+        {
+            if (pose.boneIndex < 0 || static_cast<size_t>(pose.boneIndex) >= document_.nodes.size())
+            {
+                continue;
+            }
+
+            const simple_smd::Node &node = document_.nodes[pose.boneIndex];
+            MVector correctedTranslation = dcc_transform::ApplyToTranslationScale(
+                transformPolicy_.correction,
+                MVector(pose.tx, pose.ty, pose.tz));
+            MEulerRotation correctedRotation(pose.rx, pose.ry, pose.rz);
+
+            if (node.parentIndex < 0)
+            {
+                correctedTranslation = dcc_export_transform::ApplyToTopLevelTranslation(
+                    transformPolicy_,
+                    MVector(pose.tx, pose.ty, pose.tz));
+                correctedRotation = dcc_export_transform::ApplyToTopLevelEulerRotation(
+                    transformPolicy_,
+                    correctedRotation);
+            }
+
+            pose.tx = correctedTranslation.x;
+            pose.ty = correctedTranslation.y;
+            pose.tz = correctedTranslation.z;
+            pose.rx = correctedRotation.x;
+            pose.ry = correctedRotation.y;
+            pose.rz = correctedRotation.z;
+        }
+    }
+
+    for (simple_smd::Triangle &triangle : document_.triangles)
+    {
+        for (simple_smd::TriangleVertex &vertex : triangle.vertices)
+        {
+            const MVector correctedPoint = dcc_export_transform::ApplyToPoint(
+                transformPolicy_,
+                MVector(vertex.px, vertex.py, vertex.pz));
+            const MVector correctedNormal = dcc_export_transform::ApplyToDirection(
+                transformPolicy_,
+                MVector(vertex.nx, vertex.ny, vertex.nz));
+
+            vertex.px = correctedPoint.x;
+            vertex.py = correctedPoint.y;
+            vertex.pz = correctedPoint.z;
+            vertex.nx = correctedNormal.x;
+            vertex.ny = correctedNormal.y;
+            vertex.nz = correctedNormal.z;
+        }
+    }
+
+    for (simple_smd::VertexAnimationFrame &frame : document_.vertexAnimationFrames)
+    {
+        for (simple_smd::VertexAnimationSample &sample : frame.samples)
+        {
+            const MVector correctedPoint = dcc_export_transform::ApplyToPoint(
+                transformPolicy_,
+                MVector(sample.px, sample.py, sample.pz));
+            const MVector correctedNormal = dcc_export_transform::ApplyToDirection(
+                transformPolicy_,
+                MVector(sample.nx, sample.ny, sample.nz));
+
+            sample.px = correctedPoint.x;
+            sample.py = correctedPoint.y;
+            sample.pz = correctedPoint.z;
+            sample.nx = correctedNormal.x;
+            sample.ny = correctedNormal.y;
+            sample.nz = correctedNormal.z;
         }
     }
 

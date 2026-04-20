@@ -435,6 +435,56 @@
       ]
     }
   },
+  "selected_export_scene_transform_gate_expectations": {
+    "complex_chr_mesh": {
+      "sample_nodes": ["pelvis", "head_0", "hand_R", "ankle_L"],
+      "sample_mesh_vertices": [
+        {"mesh_suffix": "Mesh002Shape", "indices": [0, 40, 80]},
+        {"mesh_suffix": "Object001Shape", "indices": [0, 50, 100]}
+      ],
+      "matrix_variants": [
+        {
+          "name": "rotate_z_90",
+          "options": "translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=90;scaleX=1;scaleY=1;scaleZ=1",
+          "compare_axes": false
+        },
+        {
+          "name": "trs_mixed_a",
+          "options": "translateX=13;translateY=-7;translateZ=5;rotateX=20;rotateY=-35;rotateZ=15;scaleX=1.25;scaleY=1.25;scaleZ=1.25",
+          "compare_axes": false
+        },
+        {
+          "name": "trs_mixed_b",
+          "options": "translateX=-3;translateY=11;translateZ=-9;rotateX=-90;rotateY=45;rotateZ=120;scaleX=0.5;scaleY=0.5;scaleZ=0.5",
+          "compare_axes": false
+        }
+      ]
+    },
+    "ctm_fbi/ctm_fbi.smd": {
+      "sample_nodes": ["pelvis", "head_0", "hand_R", "ankle_L"],
+      "sample_mesh_vertices": [
+        {"mesh_suffix": "ctm_fbi_v2_body_variantBShape1", "indices": [0, 100, 500]},
+        {"mesh_suffix": "ctm_fbi_v2_headShape1", "indices": [0, 100, 500]}
+      ],
+      "matrix_variants": [
+        {
+          "name": "rotate_z_90",
+          "options": "translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=90;scaleX=1;scaleY=1;scaleZ=1",
+          "compare_axes": false
+        },
+        {
+          "name": "trs_mixed_a",
+          "options": "translateX=13;translateY=-7;translateZ=5;rotateX=20;rotateY=-35;rotateZ=15;scaleX=1.25;scaleY=1.25;scaleZ=1.25",
+          "compare_axes": false
+        },
+        {
+          "name": "trs_mixed_b",
+          "options": "translateX=-3;translateY=11;translateZ=-9;rotateX=-90;rotateY=45;rotateZ=120;scaleX=0.5;scaleY=0.5;scaleZ=0.5",
+          "compare_axes": false
+        }
+      ]
+    }
+  },
   "vta_import_gate_expectations": {
     "humans_sdk/male_sdk/male_06_expressions.vta": {
       "base_case": "humans_sdk/male_sdk/male_06_reference.smd",

@@ -1268,6 +1268,102 @@ class GateValidator:
             if abs(actual_value - expected_value) > tolerance:
                 raise RuntimeError(f"{label}: value mismatch actual={actual} expected={expected}")
 
+    @staticmethod
+    def parse_export_option_map(options):
+        option_map = {}
+        for option_entry in (options or "").split(";"):
+            stripped = option_entry.strip()
+            if not stripped or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            option_map[key.strip().lower()] = value.strip()
+        return option_map
+
+    @classmethod
+    def build_correction_matrix(cls, options):
+        import math
+        import maya.api.OpenMaya as om
+
+        option_map = cls.parse_export_option_map(options)
+        translate = om.MVector(
+            float(option_map.get("translatex", "0")),
+            float(option_map.get("translatey", "0")),
+            float(option_map.get("translatez", "0")),
+        )
+        rotation = om.MEulerRotation(
+            math.radians(float(option_map.get("rotatex", "0"))),
+            math.radians(float(option_map.get("rotatey", "0"))),
+            math.radians(float(option_map.get("rotatez", "0"))),
+            om.MEulerRotation.kXYZ,
+        )
+        scale = (
+            float(option_map.get("scalex", "1")),
+            float(option_map.get("scaley", "1")),
+            float(option_map.get("scalez", "1")),
+        )
+
+        transform = om.MTransformationMatrix()
+        transform.setTranslation(translate, om.MSpace.kTransform)
+        transform.setRotation(rotation.asQuaternion())
+        transform.setScale(scale, om.MSpace.kTransform)
+        return transform.asMatrix()
+
+    @staticmethod
+    def resolve_unique_node_by_suffix(cmds, suffix):
+        candidate_matches = cmds.ls("*|" + suffix, long=True) or []
+        if not candidate_matches:
+            candidate_matches = cmds.ls(suffix, long=True) or []
+        unique_matches = sorted(set(candidate_matches))
+        if len(unique_matches) != 1:
+            raise RuntimeError(f"Expected exactly one node ending with {suffix}, got {unique_matches}")
+        return unique_matches[0]
+
+    @staticmethod
+    def resolve_unique_mesh_by_suffix(cmds, mesh_suffix):
+        candidate_matches = [
+            mesh_path
+            for mesh_path in (cmds.ls(type="mesh", long=True) or [])
+            if mesh_path.endswith(mesh_suffix) and not cmds.getAttr(mesh_path + ".intermediateObject")
+        ]
+        unique_matches = sorted(set(candidate_matches))
+        if len(unique_matches) != 1:
+            raise RuntimeError(f"Expected exactly one visible mesh ending with {mesh_suffix}, got {unique_matches}")
+        return unique_matches[0]
+
+    @staticmethod
+    def sample_node_world_frame(cmds, node_path):
+        import maya.api.OpenMaya as om
+
+        selection = om.MSelectionList()
+        selection.add(node_path)
+        world_matrix = selection.getDagPath(0).inclusiveMatrix()
+        sample_points = {
+            "origin": om.MPoint(0.0, 0.0, 0.0) * world_matrix,
+            "x_axis": om.MPoint(1.0, 0.0, 0.0) * world_matrix,
+            "y_axis": om.MPoint(0.0, 1.0, 0.0) * world_matrix,
+            "z_axis": om.MPoint(0.0, 0.0, 1.0) * world_matrix,
+        }
+        return {
+            sample_name: [sample_point.x, sample_point.y, sample_point.z]
+            for sample_name, sample_point in sample_points.items()
+        }
+
+    @staticmethod
+    def sample_mesh_vertex_positions(cmds, mesh_path, vertex_indices):
+        sampled_positions = {}
+        for vertex_index in vertex_indices:
+            sampled_positions[vertex_index] = list(
+                cmds.pointPosition(f"{mesh_path}.vtx[{vertex_index}]", world=True)
+            )
+        return sampled_positions
+
+    @classmethod
+    def apply_matrix_to_triplet(cls, matrix, triplet):
+        import maya.api.OpenMaya as om
+
+        transformed_point = om.MPoint(triplet[0], triplet[1], triplet[2]) * matrix
+        return [transformed_point.x, transformed_point.y, transformed_point.z]
+
     def parse_exported_dmx_transform_gate_data(self, exported_path):
         with open(exported_path, "r", encoding="utf-8") as exported_file:
             contents = exported_file.read()
@@ -1768,6 +1864,114 @@ class GateValidator:
                     f"actual={corrected_orientation} expected={expectation['expected_corrected_orientation']}"
                 )
 
+    def validate_selected_export_scene_transform_gate(self, case_name):
+        expectation = self.ctx.config.get_case_expectation("selected_export_scene_transform_gate_expectations", case_name)
+        if not expectation:
+            return
+
+        normalized_case_name = self.ctx.config.normalize_case_name(case_name)
+        input_path = self.ctx.resolve_input_path(case_name)
+        format_name = self.ctx.detect_format(input_path)
+        format_config = self.ctx.config.get_format_config(format_name)
+        export_variant = next(variant for variant in format_config.export_variants if variant.name == "text")
+        cmds = self.ctx.cmds
+
+        self.ctx.ensure_plugins_loaded([self.ctx.plugin_paths_by_format[format_name]])
+
+        cmds.file(new=True, force=True)
+        before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+        cmds.file(input_path, **self.ctx.build_import_kwargs(format_config))
+        imported_roots = self.ctx.collect_imported_roots(before_assemblies)
+        if not imported_roots:
+            raise RuntimeError(
+                f"Selected export scene transform gate failed for {normalized_case_name}. import produced no DAG roots"
+            )
+
+        baseline_node_frames = {}
+        for node_suffix in expectation["sample_nodes"]:
+            node_path = self.resolve_unique_node_by_suffix(cmds, node_suffix)
+            baseline_node_frames[node_suffix] = self.sample_node_world_frame(cmds, node_path)
+
+        baseline_mesh_positions = {}
+        for mesh_spec in expectation["sample_mesh_vertices"]:
+            mesh_path = self.resolve_unique_mesh_by_suffix(cmds, mesh_spec["mesh_suffix"])
+            baseline_mesh_positions[mesh_spec["mesh_suffix"]] = self.sample_mesh_vertex_positions(
+                cmds,
+                mesh_path,
+                mesh_spec["indices"],
+            )
+
+        for matrix_variant in expectation["matrix_variants"]:
+            correction_matrix = self.build_correction_matrix(matrix_variant["options"])
+
+            cmds.file(new=True, force=True)
+            before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+            cmds.file(input_path, **self.ctx.build_import_kwargs(format_config))
+            imported_roots = self.ctx.collect_imported_roots(before_assemblies)
+            if imported_roots:
+                cmds.select(imported_roots, replace=True)
+            else:
+                cmds.select(clear=True)
+
+            exported_path = os.path.join(
+                self.ctx.output_dir,
+                f"{self.ctx.make_case_output_name(case_name)}.scene_transform_gate.{matrix_variant['name']}{export_variant.extension}",
+            )
+            cmds.file(rename=exported_path)
+            cmds.file(
+                force=True,
+                exportSelected=True,
+                type=format_config.export_type,
+                options=matrix_variant["options"],
+            )
+
+            cmds.file(new=True, force=True)
+            before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+            cmds.file(exported_path, **self.ctx.build_import_kwargs(format_config))
+            reimported_roots = self.ctx.collect_imported_roots(before_assemblies)
+            if not reimported_roots:
+                raise RuntimeError(
+                    f"Selected export scene transform gate failed for {normalized_case_name}. "
+                    f"reimport produced no DAG roots for matrix {matrix_variant['name']}"
+                )
+
+            for node_suffix, baseline_frame in baseline_node_frames.items():
+                candidate_frame = self.sample_node_world_frame(
+                    cmds,
+                    self.resolve_unique_node_by_suffix(cmds, node_suffix),
+                )
+                sample_names = ["origin"] if not matrix_variant.get("compare_axes", False) else list(baseline_frame.keys())
+                for sample_name in sample_names:
+                    baseline_triplet = baseline_frame[sample_name]
+                    expected_triplet = self.apply_matrix_to_triplet(correction_matrix, baseline_triplet)
+                    self.assert_close_triplet(
+                        candidate_frame[sample_name],
+                        expected_triplet,
+                        (
+                            f"Selected export scene transform gate failed for {normalized_case_name} "
+                            f"node={node_suffix} sample={sample_name} matrix={matrix_variant['name']}"
+                        ),
+                        tolerance=2.0e-3,
+                    )
+
+            for mesh_suffix, baseline_vertices in baseline_mesh_positions.items():
+                candidate_vertices = self.sample_mesh_vertex_positions(
+                    cmds,
+                    self.resolve_unique_mesh_by_suffix(cmds, mesh_suffix),
+                    sorted(baseline_vertices.keys()),
+                )
+                for vertex_index, baseline_triplet in baseline_vertices.items():
+                    expected_triplet = self.apply_matrix_to_triplet(correction_matrix, baseline_triplet)
+                    self.assert_close_triplet(
+                        candidate_vertices[vertex_index],
+                        expected_triplet,
+                        (
+                            f"Selected export scene transform gate failed for {normalized_case_name} "
+                            f"mesh={mesh_suffix} vertex={vertex_index} matrix={matrix_variant['name']}"
+                        ),
+                        tolerance=2.0e-3,
+                    )
+
     def validate_vta_import_gate(self, case_name):
         expectation = self.ctx.config.get_case_expectation("vta_import_gate_expectations", case_name)
         if not expectation:
@@ -1941,6 +2145,7 @@ class RegressionRunner:
         source_delta_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.source_delta_gate.txt")
         smd_selected_export_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.smd_selected_export_gate.txt")
         dmx_selected_export_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.dmx_selected_export_gate.txt")
+        scene_transform_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.scene_transform_gate.txt")
 
         import_kwargs = self.ctx.build_import_kwargs(format_config, import_options)
         cmds = self.ctx.cmds
@@ -2045,6 +2250,9 @@ class RegressionRunner:
 
             self.validator.validate_smd_selected_export_gate(case_name)
             self.ctx.write_marker(smd_selected_export_gate_marker)
+
+            self.validator.validate_selected_export_scene_transform_gate(case_name)
+            self.ctx.write_marker(scene_transform_gate_marker)
 
         if format_name == "dmx" and original_skins and not import_options:
             self.run_case(case_name, import_options="applyAxisCorrection=0")

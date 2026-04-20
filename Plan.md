@@ -1396,6 +1396,92 @@
           - corrected `bind_positions` 为 `[0,0,0]`、`[0,2,0]`、`[-2,0,0]`，符合 `rotateZ=90` 预期。
         - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过，且 Maya UI 实际加载目录 `maya_module\plug-ins\windows\2022\` 已同步最新 `.mll`。
         - 默认完整并发回归再次通过：`28` 个 case、`8` 并发、单 case `300s` 超时，墙钟约 `75.2s`。
+    - 2026-04-21 导出校正矩阵 DOM 层重算评估：
+      - 背景：
+        - 现有 SMD/DMX 导出逻辑主要是在 Maya DAG 采样阶段直接改写顶层 transform 的平移/旋转，并对 mesh 点位/法线做几何级修正后立即写出文件。
+        - 该做法在 `simple_skinned_mesh` 这类轻量样例上可通过，但无法充分覆盖“完整骨架 + 多 mesh + 非均匀 scale + 复合旋转/平移”的组合。
+      - 已新增更严格的回归门：
+        - [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json)
+          - 新增 `selected_export_scene_transform_gate_expectations`
+          - DMX 使用 `complex_chr_mesh.dmx`
+          - SMD 使用 `ctm_fbi/ctm_fbi.smd`
+          - 每个样例都配置了：
+            - 多个关键骨骼采样点：`pelvis`、`head_0`、`hand_R`、`ankle_L`
+            - 多个 mesh 的多个顶点 world-space 采样
+            - 三组矩阵输入：
+              - 纯 `rotateZ=90`
+              - 混合 `translate + rotate + non-uniform scale` 组 A
+              - 混合 `translate + rotate + non-uniform scale` 组 B
+        - [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py)
+          - 新增 `validate_selected_export_scene_transform_gate()`
+          - 新 gate 的校验方式不再依赖文本字段，而是：
+            - 导入原始样例并采样关键骨骼的 world-space frame（原点 + XYZ 轴端点）
+            - 采样关键 mesh 顶点的 world-space 位置
+            - 选中导出到原格式（SMD/DMX）并带不同矩阵输入
+            - 回导入导出文件
+            - 将原始 world-space 采样点乘以同一修正矩阵，作为期望结果
+            - 对比回导入后的真实 world-space 骨骼/顶点位置
+      - 评估结论：
+        - 这组更完整的回归已经证明：当前“仅修正 Root 局部量，再把几何数据直接写出”的实现并不可靠。
+        - SMD 失败示例：
+          - `ctm_fbi/ctm_fbi.smd`
+          - 在 `rotateZ=90` 下，`pelvis` 的 `x_axis` 采样点出现约 `1.0` 单位偏移：
+            - actual：`[-42.8248, 0.0, -1.85355]`
+            - expected：`[-43.824833, 0.0, -2.853551]`
+        - DMX 失败示例：
+          - `complex_chr_mesh.dmx`
+          - 在 `rotateZ=90` 下，`Mesh002Shape.vtx[0]` 的 world-space 点位明显错误：
+            - actual：`[-5.791593, -49.158295, 1.211392]`
+            - expected：`[-49.158298, -1.211400, 5.791600]`
+        - 说明：
+          - 当前实现无法保证“骨架世界空间姿态”和“网格世界空间位置”在完整样例下同时满足同一矩阵变换。
+          - 问题已经超出“只决定哪些节点算 top-level”这一层；更像是导出阶段把局部骨架变换、mesh 点位、蒙皮相关数据、动画通道拆开分别修正后，未能在统一文件语义下重新闭合。
+      - 对 DOM 层重算方案的判断：
+        - 值得做，而且方向基本正确。
+        - 更稳妥的方案应改成：
+          - 先生成未校正的 SMD/DMX DOM
+          - 再在 DOM 层按“文件空间语义”统一应用修正矩阵
+          - 最后再序列化写盘
+        - 这样可以在一个阶段内统一处理：
+          - root / joint transform
+          - animation channels / logs
+          - mesh positions / normals / tangents
+          - skin / bind pose / 几何矩阵等依赖项
+        - 相比继续在 Maya DAG 采样期分散修正，DOM 层重算更容易保持“骨架、几何、动画、蒙皮”之间的一致性，也更适合被上面的 world-space gate 稳定验证。
+      - 当前状态：
+        - 新 gate 已接入默认回归流程。
+        - 在 DOM 层导出重算尚未落地前，默认完整回归现在会被这两个复杂 gate 明确打红；这是本轮评估新增暴露出的真实缺陷，而不是回归脚本误报。
+      - 2026-04-21 继续推进（DOM 后处理实现到一半）：
+        - SMD：
+          - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 的 DOM 后处理路径已收口，复杂 gate `ctm_fbi/ctm_fbi.smd` 继续通过。
+        - DMX：
+          - [DmxExportDag.cpp](dcc_plugin/src/exporter_dmx/DmxExportDag.cpp)、[DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp)、[DmxExportMesh.cpp](dcc_plugin/src/exporter_dmx/DmxExportMesh.cpp) 已撤回“采样阶段即时修正”，改为导出原始局部数据。
+          - [DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 已新增 builder graph 后处理，当前会统一修正：
+            - 顶层 `DmeTransform.position/orientation`
+            - 顶层 transform 对应的 position/orientation 动画 log
+            - 非顶层 local position 的 scale-only 修正
+            - mesh/delta positions 的 scale-only 修正
+          - 对 skin 元数据的试验结果：
+            - 保留并重算 `mayaGeomMatrix/mayaBindPreMatrix` 时，`complex_chr_mesh.dmx` 复杂 gate 仍失败，且 mesh world-space 明显错位。
+            - 去掉这两类 metadata 后，错误从“大范围错位”收敛成“稳定的轴置换”，最新 `rotateZ=90` 失败值为：
+              - actual：`[-5.791571, 1.743506, -48.846558]`
+              - expected：`[-49.158298, -1.211400, 5.791600]`
+            - 继续在宿主内省后，已确认：
+              - `rotateZ=90` 下骨架与 skinned mesh 都能对齐；
+              - `trs_mixed_a` / `trs_mixed_b` 下骨架 world-space 已对齐，但 skinned mesh 仍有残余偏差。
+          - 宿主级定位结果：
+            - `Mesh002ShapeOrig` 的 world-space 顶点已经是正确的，偏差发生在 skinCluster 对 visible mesh 的求值阶段。
+            - 这说明问题已经不是 transform 写错，也不是原始 mesh 顶点写错，而是 DMX 校正后的 `bindPreMatrix/geomMatrix` 与缩放后的 bind/current state 组合仍未完全闭合。
+            - 手工矩阵实验表明：
+              - `bindPreMatrix` 不能再沿用旧的右乘/全量替换思路；
+              - 对纯旋转 case，`inverse(correction) * bindPreMatrix` 能把 mesh 拉回正确位置；
+              - 对混合 TRS case，上述公式只能逼近，仍不能完全达到 gate 期望，说明还需要继续细化 `geomMatrix` 与 bind 数据的联动语义。
+          - 当前判断：
+            - 这说明问题已缩小到 DMX 的 document normalizer / 基坐标语义对齐，而不再只是 skin metadata 单独出错。
+            - 下一步应优先对齐 [DmxImportSession.cpp](dcc_plugin/src/importer_dmx/DmxImportSession.cpp) 里的 `NormalizeDocumentForImportCorrection()` 语义，确认导出端 DOM 后处理与 importer 的 top-level transform / mesh / upAxis 约定完全一致。
+        - 当前回归结论：
+          - `ctm_fbi/ctm_fbi.smd` 复杂 gate 通过。
+          - `complex_chr_mesh.dmx` 复杂 gate 当前已从“node + mesh 全错”收敛为“纯旋转通过、混合 TRS 下仅 skinned mesh 仍失败”，默认完整回归暂时仍不能重新宣告全绿。
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。
