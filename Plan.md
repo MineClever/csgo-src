@@ -1346,6 +1346,29 @@
         - 当前判断：
           - 多层导入的主瓶颈已经不再是“逐 key MEL 写 layer”；剩余耗时更多落在 Maya 自身场景导入/打开与少量 layer query 上。
           - 下一优先级若继续优化，可只考虑给 `FindAnimationLayerCurvesForPlug()` / `ClearAnimationLayerCurve()` 增加导入会话级缓存；预期收益应明显小于本轮。
+    - 2026-04-20 Maya UI 导出 SMD 网格缺失/校正矩阵骨骼错误修复：
+      - 已定位两类问题：
+        - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 之前只把“直接挂 renderable mesh shape 的 transform”视为 mesh root，导致 Maya UI `exportSelected` 走到 `simple_skinned_model`、`noIcon_pic_grp1` 这类 mesh 祖先 transform 时，可能只导出骨架/动画而丢失 `triangles`。
+        - SMD 导出骨架应用校正矩阵时，之前的回归只覆盖了“顶层节点要变”，没有覆盖“子骨局部姿态不能被重复校正”；`simple_skinned_mesh` 在 `rotateZ=90` 时会把顶层容器和 `root_joint` 一起旋转，语义不对。
+      - 已完成修复：
+        - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) / [SmdSceneExporter.h](dcc_plugin/src/exporter_smd/SmdSceneExporter.h)
+          - 将 mesh root 判定从“直接 mesh 子节点”扩展为“任意 renderable mesh descendant”，避免 mesh 祖先 transform 被误当作骨架导出节点。
+          - 保留 `shouldExportRoot()` 对 mesh 祖先的导出根资格，用于继续收集 `triangles`；同时 `shouldExportNode()` 不再把这类 transform 写入 `nodes/skeleton`，仅递归进入其 joint/transform 子节点。
+        - [TransformCorrection.cpp](dcc_plugin/src/common/TransformCorrection.cpp) / [TransformCorrection.h](dcc_plugin/src/common/TransformCorrection.h)
+          - 新增导出侧 top-level 专用平移/旋转校正辅助，SMD 骨架导出只在顶层节点应用输入校正矩阵，子骨保持局部姿态不变。
+        - [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json) / [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py)
+          - 新增 `smd_selected_export_gate`，校验 `exportSelected` 的 SMD 同时包含 `triangles`，并验证输入校正矩阵只改变预期的顶层节点。
+        - [BuildPlugin.bat](dcc_plugin/BuildPlugin.bat)
+          - 构建成功后自动把 `bin\Release\maya_dmx.mll` / `maya_smd.mll` 同步到 `maya_module\plug-ins\windows\2022\`，避免 Maya UI 继续加载旧插件、导致“源码已修但 UI 表现未变”的假阴性。
+      - 已验证：
+        - `simple_skinned_mesh` 的 `selected_export_plain.smd` / `selected_export_corrected.smd` 已确认：
+          - `triangles` 正常输出。
+          - 输入 `rotateZ=90` 后仅顶层 `simple_skinned_model` 发生旋转，`root_joint` 保持局部旋转不变。
+        - `Ellis/DMX/RAGDOLL.smd` roundtrip 专项回归通过，未再出现 `noIcon_pic_grp*` 多余节点。
+        - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过，且 `bin\Release` 与 `maya_module\plug-ins\windows\2022` 下的 `maya_dmx.mll` / `maya_smd.mll` 哈希一致。
+        - 完整默认回归再次通过：`28` 个 case、`8` 并发、单 case `300s` 超时，墙钟约 `82.7s`。
+      - 当前残留：
+        - 仍有非阻塞 warning：`VaccineKiller.mod` 权限 warning、部分 `append/update` 材质 rename warning、以及 `complex_chr_mesh` 的 bind pose warning；本轮修复后它们未阻塞完整回归。
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。

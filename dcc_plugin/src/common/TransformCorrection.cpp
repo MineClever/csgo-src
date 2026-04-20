@@ -216,14 +216,29 @@ MVector ApplyToDirection(const ExportTransformPolicy &policy, const MVector &dir
     return dcc_transform::ApplyToNormal(policy.correction, direction);
 }
 
+MVector ApplyToTopLevelTranslation(const ExportTransformPolicy &policy, const MVector &translation)
+{
+    return dcc_transform::ApplyToTopLevelTranslation(policy.correction, translation);
+}
+
 MQuaternion ApplyToQuaternion(const ExportTransformPolicy &policy, const MQuaternion &quaternion)
 {
     return dcc_transform::ApplyToQuaternion(policy.correction, quaternion);
 }
 
+MQuaternion ApplyToTopLevelQuaternion(const ExportTransformPolicy &policy, const MQuaternion &quaternion)
+{
+    return policy.correction.RotationQuaternion() * quaternion;
+}
+
 MEulerRotation ApplyToEulerRotation(const ExportTransformPolicy &policy, const MEulerRotation &rotation)
 {
     return ApplyToQuaternion(policy, rotation.asQuaternion()).asEulerRotation();
+}
+
+MEulerRotation ApplyToTopLevelEulerRotation(const ExportTransformPolicy &policy, const MEulerRotation &rotation)
+{
+    return ApplyToTopLevelQuaternion(policy, rotation.asQuaternion()).asEulerRotation();
 }
 
 } // namespace dcc_export_transform

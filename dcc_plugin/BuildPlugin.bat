@@ -6,6 +6,7 @@ set PLUGIN_ROOT=%PLUGIN_ROOT:~0,-1%
 for %%I in ("%PLUGIN_ROOT%\..") do set REPO_ROOT=%%~fI
 set BUILD_DIR=%PLUGIN_ROOT%\build
 set BUILD_LOG=%BUILD_DIR%\temp_build_log.log
+set MODULE_PLUGIN_DIR=%PLUGIN_ROOT%\maya_module\plug-ins\windows\2022
 set CONFIG=Release
 set PLATFORM=x64
 set BUILD_PDB=OFF
@@ -70,6 +71,32 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
+if not exist "%MODULE_PLUGIN_DIR%" (
+    mkdir "%MODULE_PLUGIN_DIR%"
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo ERROR: failed to create module plugin directory "%MODULE_PLUGIN_DIR%"
+        pause
+        exit /b %ERRORLEVEL%
+    )
+)
+
+copy /Y "%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll" "%MODULE_PLUGIN_DIR%\maya_dmx.mll" >nul
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo ERROR: failed to sync maya_dmx.mll into "%MODULE_PLUGIN_DIR%"
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+copy /Y "%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.mll" "%MODULE_PLUGIN_DIR%\maya_smd.mll" >nul
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo ERROR: failed to sync maya_smd.mll into "%MODULE_PLUGIN_DIR%"
+    pause
+    exit /b %ERRORLEVEL%
+)
+
 echo.
 echo Build succeeded. Outputs:
 if /I "%BUILD_PDB%"=="OFF" (
@@ -78,6 +105,9 @@ del /Q "%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.pdb" >nul 2>nul
 )
 echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll"
 echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.mll"
+echo Synced module plugins:
+echo   "%MODULE_PLUGIN_DIR%\maya_dmx.mll"
+echo   "%MODULE_PLUGIN_DIR%\maya_smd.mll"
 if /I "%BUILD_PDB%"=="ON" (
 echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.pdb"
 echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.pdb"

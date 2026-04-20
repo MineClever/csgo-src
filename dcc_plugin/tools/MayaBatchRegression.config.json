@@ -413,6 +413,15 @@
       "expected_first_triangle_position": [10.024704, 145.244324, -3.181958]
     }
   },
+  "smd_selected_export_gate_expectations": {
+    "simple_skinned_mesh": {
+      "export_options": "translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1",
+      "corrected_export_options": "translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=90;scaleX=1;scaleY=1;scaleZ=1",
+      "expected_changed_bones": [0],
+      "expected_corrected_first_pose_rotation": [0.0, 0.0, 1.570796],
+      "expected_first_triangle_position": [0.0, 0.0, 0.0]
+    }
+  },
   "vta_import_gate_expectations": {
     "humans_sdk/male_sdk/male_06_expressions.vta": {
       "base_case": "humans_sdk/male_sdk/male_06_reference.smd",

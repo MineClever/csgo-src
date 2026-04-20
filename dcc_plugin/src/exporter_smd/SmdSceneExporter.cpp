@@ -144,6 +144,11 @@ bool SmdSceneExporter::shouldExportRoot(const MDagPath &dagPath) const
         return true;
     }
 
+    if (dagPath.hasFn(MFn::kTransform) && hasRenderableMeshDescendant(dagPath))
+    {
+        return true;
+    }
+
     return shouldExportNode(dagPath);
 }
 
@@ -159,7 +164,7 @@ bool SmdSceneExporter::shouldExportNode(const MDagPath &dagPath) const
         return false;
     }
 
-    if (isImportWrapperRoot(dagPath) || hasRenderableMeshChild(dagPath))
+    if (isImportWrapperRoot(dagPath) || hasRenderableMeshDescendant(dagPath))
     {
         return false;
     }
@@ -185,7 +190,7 @@ bool SmdSceneExporter::isImportWrapperRoot(const MDagPath &dagPath) const
     return nodeName.indexW("smd_import_root") == 0;
 }
 
-bool SmdSceneExporter::hasRenderableMeshChild(const MDagPath &dagPath) const
+bool SmdSceneExporter::hasRenderableMeshDescendant(const MDagPath &dagPath) const
 {
     MStatus status;
     MFnDagNode dagNode(dagPath, &status);
@@ -206,6 +211,16 @@ bool SmdSceneExporter::hasRenderableMeshChild(const MDagPath &dagPath) const
         if (status && !childDagNode.isIntermediateObject())
         {
             return true;
+        }
+
+        if (childObject.hasFn(MFn::kTransform) || childObject.hasFn(MFn::kJoint))
+        {
+            MDagPath childPath = dagPath;
+            childPath.push(childObject);
+            if (hasRenderableMeshDescendant(childPath))
+            {
+                return true;
+            }
         }
     }
 
@@ -318,13 +333,9 @@ MStatus SmdSceneExporter::collectExportRoots()
 
 MStatus SmdSceneExporter::collectNodesRecursive(const MDagPath &dagPath, int)
 {
-    if (!shouldExportNode(dagPath))
-    {
-        return MS::kSuccess;
-    }
-
+    const bool exportCurrentNode = shouldExportNode(dagPath);
     const std::string pathKey = smd_export_impl::DagPathKey(dagPath);
-    if (nodeIndexByPath_.find(pathKey) == nodeIndexByPath_.end())
+    if (exportCurrentNode && nodeIndexByPath_.find(pathKey) == nodeIndexByPath_.end())
     {
         nodeIndexByPath_[pathKey] = static_cast<int>(exportNodes_.size());
         exportNodes_.push_back(dagPath);
@@ -347,7 +358,7 @@ MStatus SmdSceneExporter::collectNodesRecursive(const MDagPath &dagPath, int)
 
         MDagPath childPath = dagPath;
         childPath.push(childObject);
-        status = collectNodesRecursive(childPath, nodeIndexByPath_[pathKey]);
+        status = collectNodesRecursive(childPath, exportCurrentNode ? nodeIndexByPath_[pathKey] : -1);
         if (!status)
         {
             return MStatus::kFailure;
@@ -400,12 +411,14 @@ MStatus SmdSceneExporter::buildSkeleton()
                 dcc_animation_export::EvaluateSampleSetValues(transformSamplesByNode[nodeIndex].translation, frameTime, MTime::uiUnit());
             const std::array<double, 3> rotationValues =
                 dcc_animation_export::EvaluateSampleSetValues(transformSamplesByNode[nodeIndex].rotation, frameTime, MTime::uiUnit());
-            const MVector correctedTranslation = dcc_export_transform::ApplyToPoint(
-                transformPolicy_,
-                MVector(translationValues[0], translationValues[1], translationValues[2]));
-            const MEulerRotation correctedRotation = dcc_export_transform::ApplyToEulerRotation(
-                transformPolicy_,
-                MEulerRotation(rotationValues[0], rotationValues[1], rotationValues[2]));
+            const bool isTopLevelNode = document_.nodes[nodeIndex].parentIndex < 0;
+            MVector correctedTranslation(translationValues[0], translationValues[1], translationValues[2]);
+            MEulerRotation correctedRotation(rotationValues[0], rotationValues[1], rotationValues[2]);
+            if (isTopLevelNode)
+            {
+                correctedTranslation = dcc_export_transform::ApplyToTopLevelTranslation(transformPolicy_, correctedTranslation);
+                correctedRotation = dcc_export_transform::ApplyToTopLevelEulerRotation(transformPolicy_, correctedRotation);
+            }
             pose.tx = correctedTranslation.x;
             pose.ty = correctedTranslation.y;
             pose.tz = correctedTranslation.z;

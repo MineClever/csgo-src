@@ -33,7 +33,7 @@ private:
     bool shouldExportRoot(const MDagPath &dagPath) const;
     bool shouldExportNode(const MDagPath &dagPath) const;
     bool isImportWrapperRoot(const MDagPath &dagPath) const;
-    bool hasRenderableMeshChild(const MDagPath &dagPath) const;
+    bool hasRenderableMeshDescendant(const MDagPath &dagPath) const;
     int findOwningNodeIndex(const MDagPath &dagPath) const;
 
     MPxFileTranslator::FileAccessMode mode_;

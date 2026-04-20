@@ -1317,10 +1317,13 @@ class GateValidator:
             lines = exported_file.readlines()
 
         first_pose_translation = None
+        first_pose_rotation = None
         first_triangle_position = None
+        frame_zero_poses = {}
         in_skeleton = False
         in_triangles = False
         pending_material = False
+        current_time = None
 
         for raw_line in lines:
             stripped = raw_line.strip()
@@ -1332,13 +1335,24 @@ class GateValidator:
             if in_skeleton:
                 if stripped == "end":
                     in_skeleton = False
+                    current_time = None
                     continue
                 if stripped.startswith("time "):
+                    current_time = int(stripped.split()[1])
                     continue
                 parts = stripped.split()
                 if len(parts) >= 7:
-                    first_pose_translation = [float(parts[1]), float(parts[2]), float(parts[3])]
-                    break
+                    bone_index = int(parts[0])
+                    translation = [float(parts[1]), float(parts[2]), float(parts[3])]
+                    rotation = [float(parts[4]), float(parts[5]), float(parts[6])]
+                    if current_time == 0:
+                        frame_zero_poses[bone_index] = {
+                            "translation": translation,
+                            "rotation": rotation,
+                        }
+                        if first_pose_translation is None:
+                            first_pose_translation = translation
+                            first_pose_rotation = rotation
 
         for raw_line in lines:
             stripped = raw_line.strip()
@@ -1363,7 +1377,9 @@ class GateValidator:
 
         return {
             "first_pose_translation": first_pose_translation,
+            "first_pose_rotation": first_pose_rotation,
             "first_triangle_position": first_triangle_position,
+            "frame_zero_poses": frame_zero_poses,
         }
 
     def validate_export_transform_gate(self, exported_path, case_name, format_name, export_variant_name, export_options):
@@ -1504,6 +1520,96 @@ class GateValidator:
                         f"Animation layer export gate failed for {normalized_case_name}. "
                         f"value mismatch on {plug_name} at time {time_value}: reference={reference_value} candidate={candidate_value}"
                     )
+
+    def validate_smd_selected_export_gate(self, case_name):
+        expectation = self.ctx.config.get_case_expectation("smd_selected_export_gate_expectations", case_name)
+        if not expectation:
+            return
+
+        normalized_case_name = self.ctx.config.normalize_case_name(case_name)
+        input_path = self.ctx.resolve_input_path(case_name)
+        input_format_name = self.ctx.detect_format(input_path)
+        input_format_config = self.ctx.config.get_format_config(input_format_name)
+        smd_format_config = self.ctx.config.get_format_config("smd")
+        cmds = self.ctx.cmds
+
+        self.ctx.ensure_plugins_loaded([
+            self.ctx.plugin_paths_by_format[input_format_name],
+            self.ctx.plugin_paths_by_format["smd"],
+        ])
+
+        cmds.file(new=True, force=True)
+        before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+        cmds.file(input_path, **self.ctx.build_import_kwargs(input_format_config))
+        imported_roots = self.ctx.collect_imported_roots(before_assemblies)
+        if not imported_roots:
+            raise RuntimeError(
+                f"SMD selected export gate failed for {normalized_case_name}. import produced no DAG roots"
+            )
+
+        cmds.select(imported_roots, replace=True)
+        plain_exported_path = os.path.join(
+            self.ctx.output_dir,
+            f"{self.ctx.make_case_output_name(case_name)}.selected_export_plain.smd",
+        )
+        corrected_exported_path = os.path.join(
+            self.ctx.output_dir,
+            f"{self.ctx.make_case_output_name(case_name)}.selected_export_corrected.smd",
+        )
+
+        cmds.file(rename=plain_exported_path)
+        cmds.file(
+            force=True,
+            exportSelected=True,
+            type=smd_format_config.export_type,
+            options=expectation["export_options"],
+        )
+        plain_parsed = self.parse_exported_smd_transform_gate_data(plain_exported_path)
+
+        cmds.file(rename=corrected_exported_path)
+        cmds.file(
+            force=True,
+            exportSelected=True,
+            type=smd_format_config.export_type,
+            options=expectation["corrected_export_options"],
+        )
+        corrected_parsed = self.parse_exported_smd_transform_gate_data(corrected_exported_path)
+
+        if plain_parsed["first_triangle_position"] is None or corrected_parsed["first_triangle_position"] is None:
+            raise RuntimeError(
+                f"SMD selected export gate failed for {normalized_case_name}. exported file was missing triangles"
+            )
+
+        self.assert_close_triplet(
+            plain_parsed["first_triangle_position"],
+            expectation["expected_first_triangle_position"],
+            f"SMD selected export gate failed for {normalized_case_name} first triangle",
+        )
+
+        changed_bones = []
+        all_bone_indices = sorted(set(plain_parsed["frame_zero_poses"]) | set(corrected_parsed["frame_zero_poses"]))
+        for bone_index in all_bone_indices:
+            if plain_parsed["frame_zero_poses"].get(bone_index) != corrected_parsed["frame_zero_poses"].get(bone_index):
+                changed_bones.append(bone_index)
+
+        if changed_bones != expectation["expected_changed_bones"]:
+            raise RuntimeError(
+                f"SMD selected export gate failed for {normalized_case_name}. "
+                f"expected changed bones {expectation['expected_changed_bones']} got {changed_bones}"
+            )
+
+        corrected_pose = corrected_parsed["frame_zero_poses"].get(expectation["expected_changed_bones"][0])
+        if not corrected_pose:
+            raise RuntimeError(
+                f"SMD selected export gate failed for {normalized_case_name}. "
+                f"missing corrected pose for bone {expectation['expected_changed_bones'][0]}"
+            )
+
+        self.assert_close_triplet(
+            corrected_pose["rotation"],
+            expectation["expected_corrected_first_pose_rotation"],
+            f"SMD selected export gate failed for {normalized_case_name} corrected first pose rotation",
+        )
 
     def validate_vta_import_gate(self, case_name):
         expectation = self.ctx.config.get_case_expectation("vta_import_gate_expectations", case_name)
@@ -1676,6 +1782,7 @@ class RegressionRunner:
         animation_layer_multi_new_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.animation_layer_multi_new_gate.txt")
         animation_layer_export_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.animation_layer_export_gate.txt")
         source_delta_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.source_delta_gate.txt")
+        smd_selected_export_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.smd_selected_export_gate.txt")
 
         import_kwargs = self.ctx.build_import_kwargs(format_config, import_options)
         cmds = self.ctx.cmds
@@ -1774,6 +1881,9 @@ class RegressionRunner:
 
             self.validator.validate_source_delta_import_gate(case_name)
             self.ctx.write_marker(source_delta_gate_marker)
+
+            self.validator.validate_smd_selected_export_gate(case_name)
+            self.ctx.write_marker(smd_selected_export_gate_marker)
 
         if format_name == "dmx" and original_skins and not import_options:
             self.run_case(case_name, import_options="applyAxisCorrection=0")

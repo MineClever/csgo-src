@@ -56,8 +56,11 @@ ExportTransformPolicy BuildExportTransformPolicy(const dcc_transform::TransformC
 
 MVector ApplyToPoint(const ExportTransformPolicy &policy, const MVector &point);
 MVector ApplyToDirection(const ExportTransformPolicy &policy, const MVector &direction);
+MVector ApplyToTopLevelTranslation(const ExportTransformPolicy &policy, const MVector &translation);
 MQuaternion ApplyToQuaternion(const ExportTransformPolicy &policy, const MQuaternion &quaternion);
+MQuaternion ApplyToTopLevelQuaternion(const ExportTransformPolicy &policy, const MQuaternion &quaternion);
 MEulerRotation ApplyToEulerRotation(const ExportTransformPolicy &policy, const MEulerRotation &rotation);
+MEulerRotation ApplyToTopLevelEulerRotation(const ExportTransformPolicy &policy, const MEulerRotation &rotation);
 
 } // namespace dcc_export_transform
 
