@@ -1272,6 +1272,29 @@
     - 当前剩余观察项：
       - `Ellis` 级别的大样例在“多 layer 导出”场景下单独导出耗时仍然显著偏高，因此目前导出 gate 已有覆盖，但仍使用轻量样例维持 5 分钟 SLA。
       - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) 的多层导出路径虽已被回归覆盖，但后续若继续扩大到更重场景，仍建议单独评估导出侧性能。
+    - 2026-04-20 多 layer 导出性能排查补充：
+      - 已对 `Ellis/DMX/mechanic_model.dmx` 做导出对照：
+        - base-only 导出约 `0.389s`
+        - 挂两层 `animationOnly + importAnimationToLayer=1 + animationLayerMode=new` 后导出初始约 `413.984s`
+      - 初始结论：瓶颈不在 MEL UI 或普通文件写出；`cmds.file(... exportSelected ...)` 进入导出器后，多 layer 动画采样路径本身发生了数量级退化。
+      - 已确认的热点：
+        - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) 旧版 `CollectAnimationCurvesRecursive()` 在每个导出 plug 上递归遍历 animation layer 混合链，并对非 animCurve 节点执行 `getConnections()` 全量扫描；这就是 `Ellis` 多 layer 导出退化的主因。
+        - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) `EvaluateCurveOrValue()` 原先对“每个 scalar plug / 每个采样时刻”单独 `MAnimControl::setCurrentTime()`；`Ellis` layered 场景粗略估算约有 `25923` 次这类调用，是次级热点。
+        - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) 与 [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 之前都没有复用曲线查找结果，SMD 还会在按帧写 skeleton 时重复重建 transform sample set。
+      - 当前证据不支持“导出瓶颈主要来自过多 MEL 指令”：
+        - 导出热路径主要位于 [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) 与 [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp)。
+        - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 里的 `MGlobal::executeCommand` / `animLayer` / `setKeyframe` 主要用于 import 与 animation-layer 写入，不在本次导出热点主路径上。
+      - 2026-04-20 修复结果：
+        - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) 已把多 layer 曲线发现从手写递归改成 Maya 原生 `MItDependencyGraph` 上游遍历，并补 `CurveCache` 复用结果。
+        - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) 已把向量通道采样改成“每个 sample set / 每个时刻只切一次时间”，不再对同一时刻的 `tx/ty/tz`、`rx/ry/rz` 分别切时间。
+        - [DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp) 已接入曲线缓存。
+        - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 已改为先构建并缓存每个节点的 `TransformSampleSet`，不再在每一帧循环里重复重建。
+        - 修复后重新实测：
+          - `Ellis` base-only 导出约 `0.399s`
+          - `Ellis` 双 layer 导出约 `2.152s`
+        - 修复后回归：
+          - `Ellis/DMX/animation/c2m1_mechanic_intro.dmx`、`MostComplexSampleSet/vcaanim_VertexAnim(.smd)` 专项回归通过。
+          - 默认完整并发回归再次通过，整批约 `280s` 完成，较本轮修复前的并发完整回归进一步下降。
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。

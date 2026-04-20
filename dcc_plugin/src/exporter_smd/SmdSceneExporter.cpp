@@ -369,6 +369,23 @@ MStatus SmdSceneExporter::buildSkeleton()
     }
     std::sort(frameTimes.begin(), frameTimes.end());
 
+    dcc_animation_export::CurveCache curveCache;
+    std::vector<dcc_animation_export::TransformSampleSet> transformSamplesByNode(exportNodes_.size());
+    for (size_t nodeIndex = 0; nodeIndex < exportNodes_.size(); ++nodeIndex)
+    {
+        MStatus status;
+        MFnDependencyNode nodeFn(exportNodes_[nodeIndex].node(), &status);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
+
+        if (!dcc_animation_export::BuildTransformSampleSet(nodeFn, transformSamplesByNode[nodeIndex], &curveCache))
+        {
+            return MStatus::kFailure;
+        }
+    }
+
     for (double frameTime : frameTimes)
     {
         simple_smd::SkeletonFrame frame;
@@ -377,25 +394,12 @@ MStatus SmdSceneExporter::buildSkeleton()
 
         for (size_t nodeIndex = 0; nodeIndex < exportNodes_.size(); ++nodeIndex)
         {
-            MStatus status;
-            MFnDependencyNode nodeFn(exportNodes_[nodeIndex].node(), &status);
-            if (!status)
-            {
-                return MStatus::kFailure;
-            }
-
-            dcc_animation_export::TransformSampleSet transformSamples;
-            if (!dcc_animation_export::BuildTransformSampleSet(nodeFn, transformSamples))
-            {
-                return MStatus::kFailure;
-            }
-
             simple_smd::SkeletonPose pose;
             pose.boneIndex = static_cast<int>(nodeIndex);
             const std::array<double, 3> translationValues =
-                dcc_animation_export::EvaluateSampleSetValues(transformSamples.translation, frameTime, MTime::uiUnit());
+                dcc_animation_export::EvaluateSampleSetValues(transformSamplesByNode[nodeIndex].translation, frameTime, MTime::uiUnit());
             const std::array<double, 3> rotationValues =
-                dcc_animation_export::EvaluateSampleSetValues(transformSamples.rotation, frameTime, MTime::uiUnit());
+                dcc_animation_export::EvaluateSampleSetValues(transformSamplesByNode[nodeIndex].rotation, frameTime, MTime::uiUnit());
             const MVector correctedTranslation = dcc_export_transform::ApplyToPoint(
                 transformPolicy_,
                 MVector(translationValues[0], translationValues[1], translationValues[2]));
@@ -420,6 +424,7 @@ MStatus SmdSceneExporter::buildSkeleton()
 void SmdSceneExporter::collectAnimationFrameTimes(std::vector<double> &frameTimes) const
 {
     frameTimes.clear();
+    dcc_animation_export::CurveCache curveCache;
 
     for (const MDagPath &dagPath : exportNodes_)
     {
@@ -431,7 +436,7 @@ void SmdSceneExporter::collectAnimationFrameTimes(std::vector<double> &frameTime
         }
 
         dcc_animation_export::TransformSampleSet transformSamples;
-        if (dcc_animation_export::BuildTransformSampleSet(nodeFn, transformSamples))
+        if (dcc_animation_export::BuildTransformSampleSet(nodeFn, transformSamples, &curveCache))
         {
             dcc_animation_export::AppendTransformSampleTimes(transformSamples, frameTimes, MTime::uiUnit());
         }

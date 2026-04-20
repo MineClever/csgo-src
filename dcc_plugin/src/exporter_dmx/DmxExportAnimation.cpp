@@ -176,7 +176,7 @@ void AnimationExporter::appendScalarAnimationChannel(
         return;
     }
 
-    const std::vector<MObject> curveObjects = FindAnimationCurveForPlug(plug);
+    const std::vector<MObject> curveObjects = dcc_animation_export::FindAnimationCurvesForPlug(plug, &curveCache_);
     if (curveObjects.empty())
     {
         return;
@@ -230,7 +230,8 @@ void AnimationExporter::appendCurrentVectorTransformChannel(
     if (!dcc_animation_export::BuildChannelSampleSet(
             nodeFn,
             dcc_animation_export::GetTransformAttributeNames(group),
-            samples))
+            samples,
+            &curveCache_))
     {
         return;
     }
@@ -289,7 +290,8 @@ void AnimationExporter::appendCurrentQuaternionTransformChannel(
     if (!dcc_animation_export::BuildChannelSampleSet(
             nodeFn,
             dcc_animation_export::GetTransformAttributeNames(group),
-            samples))
+            samples,
+            &curveCache_))
     {
         return;
     }
@@ -361,7 +363,7 @@ void AnimationExporter::appendCurrentScaleAnimationChannels()
     std::array<dcc_animation_export::ScalarChannelSample, 3> scaleSamples;
     const std::array<const char *, 3> &scaleAttributeNames =
         dcc_animation_export::GetTransformAttributeNames(dcc_animation_export::TransformChannelGroup::Scale);
-    if (!dcc_animation_export::BuildChannelSampleSet(nodeFn, scaleAttributeNames, scaleSamples))
+    if (!dcc_animation_export::BuildChannelSampleSet(nodeFn, scaleAttributeNames, scaleSamples, &curveCache_))
     {
         return;
     }

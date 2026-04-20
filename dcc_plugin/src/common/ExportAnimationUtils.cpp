@@ -7,6 +7,7 @@
 #include <maya/MAnimControl.h>
 #include <maya/MFnAnimCurve.h>
 #include <maya/MFnDependencyNode.h>
+#include <maya/MItDependencyGraph.h>
 #include <maya/MObjectHandle.h>
 #include <maya/MPlugArray.h>
 
@@ -54,71 +55,66 @@ private:
     MTime previousTime_;
 };
 
-void CollectAnimationCurvesRecursive(
-    const MPlug &plug,
-    std::unordered_set<std::string> &visitedPlugs,
-    std::unordered_set<unsigned int> &curveNodes,
-    std::vector<MObject> &curves)
-{
-    if (plug.isNull())
-    {
-        return;
-    }
-
-    const std::string plugKey = plug.name().asChar();
-    if (!visitedPlugs.insert(plugKey).second)
-    {
-        return;
-    }
-
-    MPlugArray sourcePlugs;
-    plug.connectedTo(sourcePlugs, true, false);
-    for (unsigned int sourceIndex = 0; sourceIndex < sourcePlugs.length(); ++sourceIndex)
-    {
-        MStatus status;
-        const MObject sourceNode = sourcePlugs[sourceIndex].node(&status);
-        if (!status || sourceNode.isNull())
-        {
-            continue;
-        }
-
-        if (sourceNode.hasFn(MFn::kAnimCurve))
-        {
-            const unsigned int curveKey = MObjectHandle(sourceNode).hashCode();
-            if (curveNodes.insert(curveKey).second)
-            {
-                curves.push_back(sourceNode);
-            }
-            continue;
-        }
-
-        MFnDependencyNode sourceNodeFn(sourceNode, &status);
-        if (!status)
-        {
-            continue;
-        }
-
-        MPlugArray nodeConnections;
-        sourceNodeFn.getConnections(nodeConnections);
-        for (unsigned int connectionIndex = 0; connectionIndex < nodeConnections.length(); ++connectionIndex)
-        {
-            const MPlug connectedPlug = nodeConnections[connectionIndex];
-            if (!connectedPlug.isDestination())
-            {
-                continue;
-            }
-            CollectAnimationCurvesRecursive(connectedPlug, visitedPlugs, curveNodes, curves);
-        }
-    }
-}
 }
 
 std::vector<MObject> FindAnimationCurvesForPlug(const MPlug &plug)
 {
     std::vector<MObject> curves;
-    std::unordered_set<std::string> visitedPlugs;
     std::unordered_set<unsigned int> curveNodes;
-    CollectAnimationCurvesRecursive(plug, visitedPlugs, curveNodes, curves);
+    if (plug.isNull())
+    {
+        return curves;
+    }
+
+    MStatus status;
+    MPlug traversalPlug(plug);
+    MItDependencyGraph iterator(
+        traversalPlug,
+        MFn::kAnimCurve,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
+    if (!status)
+    {
+        return curves;
+    }
+
+    for (; !iterator.isDone(); iterator.next())
+    {
+        const MObject curveObject = iterator.currentItem(&status);
+        if (!status || curveObject.isNull() || !curveObject.hasFn(MFn::kAnimCurve))
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        const unsigned int curveKey = MObjectHandle(curveObject).hashCode();
+        if (curveNodes.insert(curveKey).second)
+        {
+            curves.push_back(curveObject);
+        }
+    }
+
+    return curves;
+}
+
+std::vector<MObject> FindAnimationCurvesForPlug(const MPlug &plug, CurveCache *curveCache)
+{
+    if (!curveCache || plug.isNull())
+    {
+        return FindAnimationCurvesForPlug(plug);
+    }
+
+    const std::string plugKey = plug.name().asChar();
+    const auto it = curveCache->find(plugKey);
+    if (it != curveCache->end())
+    {
+        return it->second;
+    }
+
+    std::vector<MObject> curves = FindAnimationCurvesForPlug(plug);
+    curveCache->emplace(plugKey, curves);
     return curves;
 }
 
@@ -186,10 +182,29 @@ double EvaluateCurveOrValue(const std::vector<MObject> &curveObjects, const MPlu
     return value;
 }
 
+std::array<double, 3> EvaluateSampleSetValuesAtCurrentTime(const std::array<ScalarChannelSample, 3> &samples)
+{
+    std::array<double, 3> values{};
+    for (size_t index = 0; index < samples.size(); ++index)
+    {
+        values[index] = samples[index].plug.asDouble();
+    }
+    return values;
+}
+
 bool BuildChannelSampleSet(
     MFnDependencyNode &nodeFn,
     const std::array<const char *, 3> &attributeNames,
     std::array<ScalarChannelSample, 3> &samples)
+{
+    return BuildChannelSampleSet(nodeFn, attributeNames, samples, nullptr);
+}
+
+bool BuildChannelSampleSet(
+    MFnDependencyNode &nodeFn,
+    const std::array<const char *, 3> &attributeNames,
+    std::array<ScalarChannelSample, 3> &samples,
+    CurveCache *curveCache)
 {
     MStatus status;
     for (size_t index = 0; index < attributeNames.size(); ++index)
@@ -200,7 +215,7 @@ bool BuildChannelSampleSet(
             return false;
         }
 
-        samples[index].curves = FindAnimationCurvesForPlug(samples[index].plug);
+        samples[index].curves = FindAnimationCurvesForPlug(samples[index].plug, curveCache);
     }
 
     return true;
@@ -208,8 +223,21 @@ bool BuildChannelSampleSet(
 
 bool BuildTransformSampleSet(MFnDependencyNode &nodeFn, TransformSampleSet &samples)
 {
-    return BuildChannelSampleSet(nodeFn, GetTransformAttributeNames(TransformChannelGroup::Translation), samples.translation) &&
-        BuildChannelSampleSet(nodeFn, GetTransformAttributeNames(TransformChannelGroup::Rotation), samples.rotation);
+    return BuildTransformSampleSet(nodeFn, samples, nullptr);
+}
+
+bool BuildTransformSampleSet(MFnDependencyNode &nodeFn, TransformSampleSet &samples, CurveCache *curveCache)
+{
+    return BuildChannelSampleSet(
+               nodeFn,
+               GetTransformAttributeNames(TransformChannelGroup::Translation),
+               samples.translation,
+               curveCache) &&
+        BuildChannelSampleSet(
+               nodeFn,
+               GetTransformAttributeNames(TransformChannelGroup::Rotation),
+               samples.rotation,
+               curveCache);
 }
 
 void AppendSampleSetTimes(
@@ -237,10 +265,27 @@ std::array<double, 3> EvaluateSampleSetValues(
     double timeValue,
     MTime::Unit timeUnit)
 {
+    bool hasCurves = false;
+    for (const ScalarChannelSample &sample : samples)
+    {
+        if (!sample.curves.empty())
+        {
+            hasCurves = true;
+            break;
+        }
+    }
+
+    if (hasCurves)
+    {
+        CurrentTimeGuard currentTimeGuard;
+        MAnimControl::setCurrentTime(MTime(timeValue, timeUnit));
+        return EvaluateSampleSetValuesAtCurrentTime(samples);
+    }
+
     std::array<double, 3> values{};
     for (size_t index = 0; index < samples.size(); ++index)
     {
-        values[index] = EvaluateCurveOrValue(samples[index].curves, samples[index].plug, timeValue, timeUnit);
+        samples[index].plug.getValue(values[index]);
     }
 
     return values;

@@ -8,6 +8,7 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -83,6 +84,7 @@ private:
     std::shared_ptr<const std::vector<MDagPath>> exportRoots_;
     std::shared_ptr<ExportContext> context_;
     std::unordered_set<std::string> exportedFlexTargets_;
+    dcc_animation_export::CurveCache curveCache_;
     std::vector<simple_dmx::Element *> channels_;
     double clipDurationSeconds_ = 0.0;
     MDagPath currentDagPath_;
