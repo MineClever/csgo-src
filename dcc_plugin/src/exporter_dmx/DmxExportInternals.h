@@ -90,19 +90,19 @@ bool TryRegenerateBlendShapeTarget(
     MString &temporaryTransformName);
 
 // --- Animation curve helpers ---
-inline MObject FindAnimationCurveForPlug(const MPlug &plug)
+inline std::vector<MObject> FindAnimationCurveForPlug(const MPlug &plug)
 {
-    return dcc_animation_export::FindAnimationCurveForPlug(plug);
+    return dcc_animation_export::FindAnimationCurvesForPlug(plug);
 }
 
-inline void AppendCurveTimes(const MObject &curveObject, std::vector<double> &times)
+inline void AppendCurveTimes(const std::vector<MObject> &curveObjects, std::vector<double> &times)
 {
-    dcc_animation_export::AppendCurveTimes(curveObject, times, MTime::kSeconds);
+    dcc_animation_export::AppendCurveTimes(curveObjects, times, MTime::kSeconds);
 }
 
-inline double EvaluateCurveOrValue(const MObject &curveObject, const MPlug &plug, double timeSeconds)
+inline double EvaluateCurveOrValue(const std::vector<MObject> &curveObjects, const MPlug &plug, double timeSeconds)
 {
-    return dcc_animation_export::EvaluateCurveOrValue(curveObject, plug, timeSeconds, MTime::kSeconds);
+    return dcc_animation_export::EvaluateCurveOrValue(curveObjects, plug, timeSeconds, MTime::kSeconds);
 }
 
 } // namespace dmx_export_impl

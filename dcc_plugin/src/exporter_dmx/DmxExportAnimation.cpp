@@ -176,14 +176,14 @@ void AnimationExporter::appendScalarAnimationChannel(
         return;
     }
 
-    const MObject curveObject = FindAnimationCurveForPlug(plug);
-    if (curveObject.isNull())
+    const std::vector<MObject> curveObjects = FindAnimationCurveForPlug(plug);
+    if (curveObjects.empty())
     {
         return;
     }
 
     std::vector<double> times;
-    AppendCurveTimes(curveObject, times);
+    AppendCurveTimes(curveObjects, times);
     if (times.empty())
     {
         return;
@@ -192,7 +192,7 @@ void AnimationExporter::appendScalarAnimationChannel(
     std::vector<double> values;
     for (double timeSeconds : times)
     {
-        values.push_back(EvaluateCurveOrValue(curveObject, plug, timeSeconds));
+        values.push_back(EvaluateCurveOrValue(curveObjects, plug, timeSeconds));
         clipDurationSeconds_ = std::max(clipDurationSeconds_, timeSeconds);
     }
 

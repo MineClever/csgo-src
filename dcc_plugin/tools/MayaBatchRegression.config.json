@@ -1,0 +1,431 @@
+{
+  "format_configs": {
+    "dmx": {
+      "extensions": [".dmx", ".dmxb", ".dmxbin"],
+      "import_type": "Valve DMX Import",
+      "export_type": "Valve DMX Export",
+      "export_variants": [
+        {
+          "name": "text",
+          "extension": ".dmx",
+          "options": "",
+          "mesh_marker_suffix": "roundtrip_text_meshcheck.txt",
+          "type_marker_suffix": "roundtrip_text_typecheck.txt",
+          "skin_marker_suffix": "roundtrip_text_skincheck.txt",
+          "blendshape_marker_suffix": "roundtrip_text_blendshapecheck.txt",
+          "animation_marker_suffix": "roundtrip_text_animcheck.txt"
+        },
+        {
+          "name": "binary",
+          "extension": ".dmxb",
+          "options": "binary=1",
+          "mesh_marker_suffix": "roundtrip_binary_meshcheck.txt",
+          "type_marker_suffix": "roundtrip_binary_typecheck.txt",
+          "skin_marker_suffix": "roundtrip_binary_skincheck.txt",
+          "blendshape_marker_suffix": "roundtrip_binary_blendshapecheck.txt",
+          "animation_marker_suffix": "roundtrip_binary_animcheck.txt"
+        }
+      ]
+    },
+    "smd": {
+      "extensions": [".smd"],
+      "import_type": "Valve SMD Import",
+      "export_type": "Valve SMD Export",
+      "export_variants": [
+        {
+          "name": "text",
+          "extension": ".smd",
+          "options": "",
+          "mesh_marker_suffix": "roundtrip_text_meshcheck.txt",
+          "type_marker_suffix": "roundtrip_text_typecheck.txt",
+          "skin_marker_suffix": "roundtrip_text_skincheck.txt",
+          "blendshape_marker_suffix": "roundtrip_text_blendshapecheck.txt",
+          "animation_marker_suffix": "roundtrip_text_animcheck.txt"
+        }
+      ]
+    }
+  },
+  "default_cases": [
+    "simple_hierarchy",
+    "simple_blendshape",
+    "simple_mesh",
+    "simple_skinned_mesh",
+    "complex_chr_mesh",
+    "MostComplexSampleSet/chr_mesh",
+    "simple_ngon_mesh",
+    "MostComplexSampleSet/vcaanim_VertexAnim",
+    "simple_float_animation",
+    "simple_blendshape_animation",
+    "simple_source_delta_overlay",
+    "simple_source_delta_overlay_scene_reference",
+    "simple_source_delta_overlay.smd",
+    "simple_source_delta_overlay_scene_reference.smd",
+    "MostComplexSampleSet/chr_mesh.smd",
+    "MostComplexSampleSet/vcaanim_VertexAnim.smd",
+    "Ellis/DMX/RAGDOLL.smd",
+    "ctm_fbi/ctm_fbi.smd",
+    "ctm_fbi/ctm_fbi_physics.smd",
+    "ctm_fbi/ctm_fbi_w_ct_base_glove.smd",
+    "ctm_fbi/ctm_fbi_anims/default.smd",
+    "ctm_fbi/ctm_fbi_anims/ragdoll.smd",
+    "ctm_fbi/ctm_fbi_anims/rom_skin.smd",
+    "ctm_fbi/ctm_fbi_anims/shield_deploy.smd",
+    "Ellis/DMX/animation/c1m1_intro_mechanic.dmx",
+    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx",
+    "Ellis/DMX/animation/c5m1_intro_mechanic.dmx",
+    "humans_sdk/male_sdk/male_06_expressions.vta"
+  ],
+  "animation_gate_expectations": {
+    "MostComplexSampleSet/vcaanim_VertexAnim": {
+      "min_animated_plugs": 2,
+      "required_any_suffix_groups": [[".translateX", ".translateY", ".translateZ"], [".rotateX", ".rotateY", ".rotateZ"]]
+    },
+    "simple_float_animation": {
+      "min_animated_plugs": 1,
+      "required_any_suffix_groups": [[".scaleX"]]
+    },
+    "simple_blendshape_animation": {
+      "min_animated_plugs": 2,
+      "required_substrings": ["combinationOperator_controls.smile", "_blendShape.smile"]
+    },
+    "MostComplexSampleSet/vcaanim_VertexAnim.smd": {
+      "min_animated_plugs": 1,
+      "required_any_suffix_groups": [[".translateX", ".translateY", ".translateZ"]]
+    },
+    "ctm_fbi/ctm_fbi_anims/rom_skin.smd": {
+      "min_animated_plugs": 1,
+      "required_any_suffix_groups": [[".translateX", ".translateY", ".translateZ"], [".rotateX", ".rotateY", ".rotateZ"]]
+    },
+    "ctm_fbi/ctm_fbi_anims/shield_deploy.smd": {
+      "min_animated_plugs": 1,
+      "required_any_suffix_groups": [[".translateX", ".translateY", ".translateZ"], [".rotateX", ".rotateY", ".rotateZ"]]
+    },
+    "Ellis/DMX/animation/c1m1_intro_mechanic.dmx": {
+      "min_animated_plugs": 2,
+      "required_any_suffix_groups": [[".translateX", ".translateY", ".translateZ"], [".rotateX", ".rotateY", ".rotateZ"]]
+    },
+    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx": {
+      "min_animated_plugs": 2,
+      "required_any_suffix_groups": [[".translateX", ".translateY", ".translateZ"], [".rotateX", ".rotateY", ".rotateZ"]]
+    },
+    "Ellis/DMX/animation/c5m1_intro_mechanic.dmx": {
+      "min_animated_plugs": 2,
+      "required_any_suffix_groups": [[".translateX", ".translateY", ".translateZ"], [".rotateX", ".rotateY", ".rotateZ"]]
+    }
+  },
+  "append_gate_expectations": {
+    "simple_blendshape_animation": {
+      "import_options": "useSceneRoot=1;importMode=append",
+      "retain_values": [
+        {"plug_suffix": "combinationOperator_controls.smile", "value": 0.75}
+      ],
+      "single_nodes": [
+        {"pattern": "*combinationOperator_controls", "type": "transform"}
+      ],
+      "single_node_types": [
+        {"type": "blendShape", "name_suffix": "blendshapeAnimMeshShape_blendShape"}
+      ]
+    },
+    "MostComplexSampleSet/chr_mesh.smd": {
+      "import_options": "useSceneRoot=1;importMode=append",
+      "single_nodes": [
+        {"pattern": "*pelvis", "type": "joint"},
+        {"pattern": "*tex_d_bmp_grp1", "type": "transform"}
+      ]
+    },
+    "ctm_fbi/ctm_fbi.smd": {
+      "import_options": "useSceneRoot=1;importMode=append",
+      "single_nodes": [
+        {"pattern": "*ctm_fbi_pelvis", "type": "joint"}
+      ]
+    }
+  },
+  "update_gate_expectations": {
+    "simple_blendshape_animation": {
+      "import_options": "useSceneRoot=1;importMode=update",
+      "overwrite_values": [
+        {"plug_suffix": "combinationOperator_controls.smile", "value": 0.75}
+      ],
+      "single_nodes": [
+        {"pattern": "*combinationOperator_controls", "type": "transform"}
+      ],
+      "single_node_types": [
+        {"type": "blendShape", "name_suffix": "blendshapeAnimMeshShape_blendShape"}
+      ]
+    },
+    "MostComplexSampleSet/chr_mesh.smd": {
+      "import_options": "useSceneRoot=1;importMode=update",
+      "overwrite_values": [
+        {"plug_suffix": "pelvis.translateX", "value": 17.0}
+      ],
+      "single_nodes": [
+        {"pattern": "*pelvis", "type": "joint"},
+        {"pattern": "*tex_d_bmp_grp1", "type": "transform"}
+      ]
+    },
+    "ctm_fbi/ctm_fbi.smd": {
+      "import_options": "useSceneRoot=1;importMode=update",
+      "single_nodes": [
+        {"pattern": "*ctm_fbi_pelvis", "type": "joint"}
+      ]
+    }
+  },
+  "topology_update_gate_expectations": {
+    "simple_mesh": {
+      "import_options": "useSceneRoot=1;importMode=update",
+      "warning_substrings": [
+        "update skipped mesh overwrite because existing mesh topology did not match incoming mesh",
+        "mismatch"
+      ]
+    }
+  },
+  "paired_update_gate_expectations": {
+    "Ellis/DMX/animation/c1m1_intro_mechanic.dmx": {
+      "base_case": "Ellis/DMX/mechanic_model.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "update_import_options": "useSceneRoot=1;importMode=update",
+      "required_animated_plugs": ["|ValveBiped_Bip01_Pelvis.translateX", "|ValveBiped_Bip01_Pelvis.rotateX"]
+    },
+    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx": {
+      "base_case": "Ellis/DMX/mechanic_model.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "update_import_options": "useSceneRoot=1;importMode=update",
+      "required_animated_plugs": ["|ValveBiped_Bip01_Pelvis.translateX", "|ValveBiped_Bip01_Pelvis.rotateX"]
+    },
+    "Ellis/DMX/animation/c5m1_intro_mechanic.dmx": {
+      "base_case": "Ellis/DMX/mechanic_model.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "update_import_options": "useSceneRoot=1;importMode=update",
+      "required_animated_plugs": ["|ValveBiped_Bip01_Pelvis.translateX", "|ValveBiped_Bip01_Pelvis.rotateX"]
+    }
+  },
+  "skin_influence_update_gate_expectations": {
+    "complex_chr_mesh": {"import_options": "useSceneRoot=1;importMode=update"},
+    "MostComplexSampleSet/chr_mesh.smd": {"import_options": "useSceneRoot=1;importMode=update"},
+    "ctm_fbi/ctm_fbi.smd": {"import_options": "useSceneRoot=1;importMode=update"}
+  },
+  "skin_cluster_reuse_gate_expectations": {
+    "MostComplexSampleSet/chr_mesh.smd": {"import_options": "useSceneRoot=1;importMode=update"},
+    "ctm_fbi/ctm_fbi.smd": {"import_options": "useSceneRoot=1;importMode=update"}
+  },
+  "animation_layer_import_gate_expectations": {
+    "MostComplexSampleSet/vcaanim_VertexAnim": {
+      "base_case": "MostComplexSampleSet/vcaanim_VertexAnim.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+      "layer_name": "vcaanim_VertexAnim_dmx_layer",
+      "base_plug": "|pelvis.translateX",
+      "min_curve_count": 6
+    },
+    "ctm_fbi/ctm_fbi_anims/rom_skin.smd": {
+      "base_case": "ctm_fbi/ctm_fbi.smd",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+      "layer_name": "rom_skin_smd_layer",
+      "base_plug": "|pelvis.translateX",
+      "min_curve_count": 6
+    },
+    "Ellis/DMX/animation/c1m1_intro_mechanic.dmx": {
+      "base_case": "Ellis/DMX/mechanic_model.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+      "layer_name": "c1m1_intro_mechanic_dmx_layer",
+      "base_plug": "|ValveBiped_Bip01_Pelvis.translateX",
+      "min_curve_count": 6
+    },
+    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx": {
+      "base_case": "Ellis/DMX/mechanic_model.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+      "layer_name": "c2m1_mechanic_intro_dmx_layer",
+      "base_plug": "|ValveBiped_Bip01_Pelvis.translateX",
+      "min_curve_count": 6
+    },
+    "Ellis/DMX/animation/c5m1_intro_mechanic.dmx": {
+      "base_case": "Ellis/DMX/mechanic_model.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+      "layer_name": "c5m1_intro_mechanic_dmx_layer",
+      "base_plug": "|ValveBiped_Bip01_Pelvis.translateX",
+      "min_curve_count": 6
+    },
+    "ctm_fbi/ctm_fbi_anims/shield_deploy.smd": {
+      "base_case": "ctm_fbi/ctm_fbi.smd",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "update_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+      "layer_name": "shield_deploy_smd_layer",
+      "base_plug": "|pelvis.translateX",
+      "min_curve_count": 6
+    }
+  },
+  "animation_layer_replace_reimport_gate_expectations": {
+    "MostComplexSampleSet/vcaanim_VertexAnim": {
+      "base_case": "MostComplexSampleSet/vcaanim_VertexAnim.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "layer_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+      "layer_name": "vcaanim_VertexAnim_dmx_layer",
+      "compare_plugs": ["|pelvis.translateX", "|pelvis.rotateX"],
+      "sample_times": [0.0, 0.5, 1.0]
+    },
+    "ctm_fbi/ctm_fbi_anims/rom_skin.smd": {
+      "base_case": "ctm_fbi/ctm_fbi.smd",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "layer_import_options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=replace",
+      "layer_name": "rom_skin_smd_layer",
+      "compare_plugs": ["|pelvis.translateX", "|pelvis.rotateX"],
+      "sample_times": [0.0, 1.0, 2.0]
+    }
+  },
+  "animation_layer_new_layers_gate_expectations": {
+    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx": {
+      "base_case": "Ellis/DMX/mechanic_model.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "base_plug": "|ValveBiped_Bip01_Pelvis.translateX",
+      "sample_times": [0.0, 0.5, 1.0],
+      "layer_imports": [
+        {
+          "case": "Ellis/DMX/animation/c1m1_intro_mechanic.dmx",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=ellis_layer_a",
+          "layer_name": "ellis_layer_a",
+          "min_curve_count": 6
+        },
+        {
+          "case": "Ellis/DMX/animation/c2m1_mechanic_intro.dmx",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=ellis_layer_b",
+          "layer_name": "ellis_layer_b",
+          "min_curve_count": 6
+        }
+      ]
+    },
+    "ctm_fbi/ctm_fbi_anims/shield_deploy.smd": {
+      "base_case": "ctm_fbi/ctm_fbi.smd",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "base_plug": "|pelvis.translateX",
+      "sample_times": [0.0, 1.0, 2.0],
+      "layer_imports": [
+        {
+          "case": "ctm_fbi/ctm_fbi_anims/rom_skin.smd",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=smd_layer_a",
+          "layer_name": "smd_layer_a",
+          "min_curve_count": 6
+        },
+        {
+          "case": "ctm_fbi/ctm_fbi_anims/shield_deploy.smd",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=smd_layer_b",
+          "layer_name": "smd_layer_b",
+          "min_curve_count": 6
+        }
+      ]
+    }
+  },
+  "animation_layer_export_gate_expectations": {
+    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx": {
+      "base_case": "Ellis/DMX/mechanic_model.dmx",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "reimport_options": "useSceneRoot=1;importMode=create",
+      "compare_plugs": ["|ValveBiped_Bip01_Pelvis.translateX", "|ValveBiped_Bip01_Pelvis.rotateX"],
+      "sample_times": [0.0, 0.5, 1.0],
+      "layer_imports": [
+        {
+          "case": "Ellis/DMX/animation/c1m1_intro_mechanic.dmx",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=ellis_export_layer_a",
+          "layer_name": "ellis_export_layer_a"
+        },
+        {
+          "case": "Ellis/DMX/animation/c2m1_mechanic_intro.dmx",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=ellis_export_layer_b",
+          "layer_name": "ellis_export_layer_b"
+        }
+      ],
+      "export_variant_name": "text"
+    },
+    "ctm_fbi/ctm_fbi_anims/shield_deploy.smd": {
+      "base_case": "ctm_fbi/ctm_fbi.smd",
+      "base_import_options": "useSceneRoot=1;importMode=create",
+      "reimport_options": "useSceneRoot=1;importMode=create",
+      "compare_plugs": ["|pelvis.translateX", "|pelvis.rotateX"],
+      "sample_times": [0.0, 1.0, 2.0],
+      "layer_imports": [
+        {
+          "case": "ctm_fbi/ctm_fbi_anims/rom_skin.smd",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=smd_export_layer_a",
+          "layer_name": "smd_export_layer_a"
+        },
+        {
+          "case": "ctm_fbi/ctm_fbi_anims/shield_deploy.smd",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=smd_export_layer_b",
+          "layer_name": "smd_export_layer_b"
+        }
+      ],
+      "export_variant_name": "text"
+    }
+  },
+  "source_delta_import_gate_expectations": {
+    "simple_source_delta_overlay": {
+      "base_case": "simple_source_delta_base.dmx",
+      "baseline_import_options": "useSceneRoot=1;importMode=create",
+      "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract",
+      "layer_name": "simple_source_delta_overlay_dmx_source_delta",
+      "compare_plugs": ["|source_delta_joint.translateX", "|source_delta_joint.rotateZ"],
+      "sample_times": [0.0, 0.5, 1.0]
+    },
+    "simple_source_delta_overlay_scene_reference": {
+      "base_case": "simple_source_delta_base.dmx",
+      "baseline_import_options": "useSceneRoot=1;importMode=create;importAnimationToLayer=1;animationLayerMode=new",
+      "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract;sourceDeltaUseClip=1;sourceDeltaClip=simple_source_delta_base_dmx_layer;sourceDeltaReferenceFrame=0",
+      "layer_name": "simple_source_delta_overlay_scene_reference_dmx_source_delta",
+      "compare_plugs": ["|source_delta_joint.translateX", "|source_delta_joint.rotateZ"],
+      "sample_times": [0.0, 0.5, 1.0]
+    },
+    "simple_source_delta_overlay.smd": {
+      "base_case": "simple_source_delta_base.smd",
+      "baseline_import_options": "useSceneRoot=1;importMode=create",
+      "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract",
+      "layer_name": "simple_source_delta_overlay_smd_source_delta",
+      "compare_plugs": ["|source_delta_joint.translateX", "|source_delta_joint.rotateZ"],
+      "sample_times": [0.0, 1.0, 2.0]
+    },
+    "simple_source_delta_overlay_scene_reference.smd": {
+      "base_case": "simple_source_delta_base.smd",
+      "baseline_import_options": "useSceneRoot=1;importMode=create;importAnimationToLayer=1;animationLayerMode=new",
+      "delta_import_options": "useSceneRoot=1;importMode=update;animationLayerMode=replace;sourceDeltaMode=subtract;sourceDeltaUseClip=1;sourceDeltaClip=simple_source_delta_base_smd_layer;sourceDeltaReferenceFrame=0",
+      "layer_name": "simple_source_delta_overlay_scene_reference_smd_source_delta",
+      "compare_plugs": ["|source_delta_joint.translateX", "|source_delta_joint.rotateZ"],
+      "sample_times": [0.0, 1.0, 2.0]
+    }
+  },
+  "export_transform_gate_expectations": {
+    "simple_mesh": {
+      "format": "dmx",
+      "export_options": "translateX=1;translateY=2;translateZ=3;rotateX=0;rotateY=0;rotateZ=0;scaleX=2;scaleY=2;scaleZ=2;upAxis=Z",
+      "expected_up_axis": "Z",
+      "expected_transform_position": [1.0, 2.0, 3.0],
+      "expected_bind_positions": [
+        [1.0, 2.0, 3.0],
+        [5.0, 2.0, 3.0],
+        [1.0, 6.0, 3.0]
+      ]
+    },
+    "ctm_fbi/ctm_fbi.smd": {
+      "format": "smd",
+      "export_options": "translateX=1;translateY=2;translateZ=3;rotateX=0;rotateY=0;rotateZ=0;scaleX=2;scaleY=2;scaleZ=2",
+      "expected_first_pose_translation": [1.0, 87.649666, -2.707102],
+      "expected_first_triangle_position": [10.024704, 145.244324, -3.181958]
+    }
+  },
+  "vta_import_gate_expectations": {
+    "humans_sdk/male_sdk/male_06_expressions.vta": {
+      "base_case": "humans_sdk/male_sdk/male_06_reference.smd",
+      "base_import_options": "useSceneRoot=0;importMode=create",
+      "vta_import_options": "useSceneRoot=0;importMode=create",
+      "root_name_substring": "smd_import_root",
+      "expected_blendshape_targets": [
+        {"mesh_suffix": "eyeball_l_tgaShape1", "target_count": 11},
+        {"mesh_suffix": "eyeball_r_tgaShape1", "target_count": 11},
+        {"mesh_suffix": "mouth_tgaShape1", "target_count": 21},
+        {"mesh_suffix": "sandro_facemap_tgaShape1", "target_count": 32}
+      ],
+      "expected_mesh_without_blendshape": ["citizen_sheet_tgaShape1"]
+    }
+  }
+}

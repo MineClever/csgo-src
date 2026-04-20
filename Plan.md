@@ -1247,6 +1247,18 @@
       - 部分 `append/update` case 仍会出现 shading set / `materialInfo` rename warning。
       - `complex_chr_mesh`、`ctm_fbi/ctm_fbi.smd` 的 `skin influence update` 过程中仍会出现 bind pose 缺失 warning。
       - 宿主环境中的 `VaccineKiller.mod` 权限 warning 仍存在，但本轮默认完整回归未被其阻塞。
+  - 2026-04-20 覆盖面复核：
+    - 当前已覆盖的动画层相关回归：
+      - 单次 `animationOnly + importAnimationToLayer=1 + animationLayerMode=replace` 导入是否成功创建目标 layer，且不会改写 base 值。
+      - `sourceDelta + Use Clip` 是否能从现有 scene animation layer 取 reference。
+    - 当前未覆盖、且应继续补 gate 的行为：
+      - 同一 case 连续两次 `animationLayerMode=replace` 导入到同名 layer，确认旧 layer curve 会被清理并被第二次导入稳定覆盖，而不是残留重复 curve。
+      - 同一基线场景连续多次 `animationLayerMode=new` 导入，确认会产生多个可区分 layer，而不是因为默认 layer 名稳定而复用旧 layer。
+      - 场景中已存在多个普通 animation layer / source-delta layer 时，再次导入新 layer 的命中与命名行为。
+      - 场景中存在多个 animation layer 时执行 DMX / SMD 导出，确认 exporter 是否会按预期采样最终求值结果，或明确当前只支持 base/direct animCurve，不支持多层堆叠导出。
+    - 代码层复核结果：
+      - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 当前只有单层 `ANIMATION_LAYER_IMPORT_GATE_EXPECTATIONS`，没有“重复 replace / 多次 new / 多层并存导出”专项 gate。
+      - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) 当前 `FindAnimationCurveForPlug()` 只查目标 plug 的直接上游 `animCurve`，未显式遍历 animation layer 混合链；因此“多动画层并存后的导出”目前既没有回归覆盖，也很可能不属于已稳定承诺范围。
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。

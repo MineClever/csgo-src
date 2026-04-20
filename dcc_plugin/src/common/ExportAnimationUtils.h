@@ -20,7 +20,7 @@ enum class TransformChannelGroup
 struct ScalarChannelSample
 {
     MPlug plug;
-    MObject curve;
+    std::vector<MObject> curves;
 };
 
 struct TransformSampleSet
@@ -29,10 +29,10 @@ struct TransformSampleSet
     std::array<ScalarChannelSample, 3> rotation;
 };
 
-MObject FindAnimationCurveForPlug(const MPlug &plug);
+std::vector<MObject> FindAnimationCurvesForPlug(const MPlug &plug);
 const std::array<const char *, 3> &GetTransformAttributeNames(TransformChannelGroup group);
-void AppendCurveTimes(const MObject &curveObject, std::vector<double> &times, MTime::Unit timeUnit);
-double EvaluateCurveOrValue(const MObject &curveObject, const MPlug &plug, double timeValue, MTime::Unit timeUnit);
+void AppendCurveTimes(const std::vector<MObject> &curveObjects, std::vector<double> &times, MTime::Unit timeUnit);
+double EvaluateCurveOrValue(const std::vector<MObject> &curveObjects, const MPlug &plug, double timeValue, MTime::Unit timeUnit);
 bool BuildChannelSampleSet(
     MFnDependencyNode &nodeFn,
     const std::array<const char *, 3> &attributeNames,

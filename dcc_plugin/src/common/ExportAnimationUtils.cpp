@@ -2,8 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 
+#include <maya/MAnimControl.h>
 #include <maya/MFnAnimCurve.h>
+#include <maya/MFnDependencyNode.h>
+#include <maya/MObjectHandle.h>
 #include <maya/MPlugArray.h>
 
 namespace dcc_animation_export
@@ -32,13 +36,39 @@ void AppendUniqueTime(std::vector<double> &times, double value)
 
     times.insert(it, value);
 }
-}
 
-MObject FindAnimationCurveForPlug(const MPlug &plug)
+class CurrentTimeGuard
+{
+public:
+    CurrentTimeGuard()
+        : previousTime_(MAnimControl::currentTime())
+    {
+    }
+
+    ~CurrentTimeGuard()
+    {
+        MAnimControl::setCurrentTime(previousTime_);
+    }
+
+private:
+    MTime previousTime_;
+};
+
+void CollectAnimationCurvesRecursive(
+    const MPlug &plug,
+    std::unordered_set<std::string> &visitedPlugs,
+    std::unordered_set<unsigned int> &curveNodes,
+    std::vector<MObject> &curves)
 {
     if (plug.isNull())
     {
-        return MObject::kNullObj;
+        return;
+    }
+
+    const std::string plugKey = plug.name().asChar();
+    if (!visitedPlugs.insert(plugKey).second)
+    {
+        return;
     }
 
     MPlugArray sourcePlugs;
@@ -47,13 +77,49 @@ MObject FindAnimationCurveForPlug(const MPlug &plug)
     {
         MStatus status;
         const MObject sourceNode = sourcePlugs[sourceIndex].node(&status);
-        if (status && !sourceNode.isNull() && sourceNode.hasFn(MFn::kAnimCurve))
+        if (!status || sourceNode.isNull())
         {
-            return sourceNode;
+            continue;
+        }
+
+        if (sourceNode.hasFn(MFn::kAnimCurve))
+        {
+            const unsigned int curveKey = MObjectHandle(sourceNode).hashCode();
+            if (curveNodes.insert(curveKey).second)
+            {
+                curves.push_back(sourceNode);
+            }
+            continue;
+        }
+
+        MFnDependencyNode sourceNodeFn(sourceNode, &status);
+        if (!status)
+        {
+            continue;
+        }
+
+        MPlugArray nodeConnections;
+        sourceNodeFn.getConnections(nodeConnections);
+        for (unsigned int connectionIndex = 0; connectionIndex < nodeConnections.length(); ++connectionIndex)
+        {
+            const MPlug connectedPlug = nodeConnections[connectionIndex];
+            if (!connectedPlug.isDestination())
+            {
+                continue;
+            }
+            CollectAnimationCurvesRecursive(connectedPlug, visitedPlugs, curveNodes, curves);
         }
     }
+}
+}
 
-    return MObject::kNullObj;
+std::vector<MObject> FindAnimationCurvesForPlug(const MPlug &plug)
+{
+    std::vector<MObject> curves;
+    std::unordered_set<std::string> visitedPlugs;
+    std::unordered_set<unsigned int> curveNodes;
+    CollectAnimationCurvesRecursive(plug, visitedPlugs, curveNodes, curves);
+    return curves;
 }
 
 const std::array<const char *, 3> &GetTransformAttributeNames(TransformChannelGroup group)
@@ -71,48 +137,48 @@ const std::array<const char *, 3> &GetTransformAttributeNames(TransformChannelGr
     }
 }
 
-void AppendCurveTimes(const MObject &curveObject, std::vector<double> &times, MTime::Unit timeUnit)
+void AppendCurveTimes(const std::vector<MObject> &curveObjects, std::vector<double> &times, MTime::Unit timeUnit)
 {
-    if (curveObject.isNull())
+    for (const MObject &curveObject : curveObjects)
     {
-        return;
-    }
-
-    MStatus status;
-    MFnAnimCurve curveFn(curveObject, &status);
-    if (!status)
-    {
-        return;
-    }
-
-    const unsigned int keyCount = curveFn.numKeys(&status);
-    if (!status)
-    {
-        return;
-    }
-
-    for (unsigned int keyIndex = 0; keyIndex < keyCount; ++keyIndex)
-    {
-        const MTime keyTime = curveFn.time(keyIndex, &status);
-        if (!status)
+        if (curveObject.isNull())
         {
-            break;
+            continue;
         }
 
-        AppendUniqueTime(times, keyTime.as(timeUnit));
+        MStatus status;
+        MFnAnimCurve curveFn(curveObject, &status);
+        if (!status)
+        {
+            continue;
+        }
+
+        const unsigned int keyCount = curveFn.numKeys(&status);
+        if (!status)
+        {
+            continue;
+        }
+
+        for (unsigned int keyIndex = 0; keyIndex < keyCount; ++keyIndex)
+        {
+            const MTime keyTime = curveFn.time(keyIndex, &status);
+            if (!status)
+            {
+                break;
+            }
+
+            AppendUniqueTime(times, keyTime.as(timeUnit));
+        }
     }
 }
 
-double EvaluateCurveOrValue(const MObject &curveObject, const MPlug &plug, double timeValue, MTime::Unit timeUnit)
+double EvaluateCurveOrValue(const std::vector<MObject> &curveObjects, const MPlug &plug, double timeValue, MTime::Unit timeUnit)
 {
-    if (!curveObject.isNull())
+    if (!curveObjects.empty())
     {
-        MStatus status;
-        MFnAnimCurve curveFn(curveObject, &status);
-        if (status)
-        {
-            return curveFn.evaluate(MTime(timeValue, timeUnit), &status);
-        }
+        CurrentTimeGuard currentTimeGuard;
+        MAnimControl::setCurrentTime(MTime(timeValue, timeUnit));
+        return plug.asDouble();
     }
 
     double value = 0.0;
@@ -134,7 +200,7 @@ bool BuildChannelSampleSet(
             return false;
         }
 
-        samples[index].curve = FindAnimationCurveForPlug(samples[index].plug);
+        samples[index].curves = FindAnimationCurvesForPlug(samples[index].plug);
     }
 
     return true;
@@ -153,7 +219,7 @@ void AppendSampleSetTimes(
 {
     for (const ScalarChannelSample &sample : samples)
     {
-        AppendCurveTimes(sample.curve, times, timeUnit);
+        AppendCurveTimes(sample.curves, times, timeUnit);
     }
 }
 
@@ -174,7 +240,7 @@ std::array<double, 3> EvaluateSampleSetValues(
     std::array<double, 3> values{};
     for (size_t index = 0; index < samples.size(); ++index)
     {
-        values[index] = EvaluateCurveOrValue(samples[index].curve, samples[index].plug, timeValue, timeUnit);
+        values[index] = EvaluateCurveOrValue(samples[index].curves, samples[index].plug, timeValue, timeUnit);
     }
 
     return values;
