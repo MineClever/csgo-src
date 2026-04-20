@@ -46,6 +46,17 @@ dcc_export_transform::ExportTransformPolicy BuildSmdExportTransformPolicy(const 
     const std::unordered_map<std::string, std::string> optionMap = ParseOptionMap(options);
     return dcc_export_transform::BuildExportTransformPolicy(dcc_import_transform::ParseTransformCorrection(optionMap));
 }
+
+bool ParseBoolOption(const std::unordered_map<std::string, std::string> &optionMap, const char *key, bool defaultValue)
+{
+    const auto it = optionMap.find(key);
+    if (it == optionMap.end())
+    {
+        return defaultValue;
+    }
+
+    return it->second == "1" || it->second == "true" || it->second == "True";
+}
 } // namespace smd_export_session_detail
 
 using namespace smd_export_session_detail;
@@ -56,7 +67,9 @@ SmdExportSession::SmdExportSession(const MFileObject &fileObject, const MString 
     , mode_(mode)
     , sceneExporter_(
         mode,
-        BuildSmdExportTransformPolicy(options))
+        BuildSmdExportTransformPolicy(options),
+        parseBoolOption("exportmesh", true),
+        parseBoolOption("exportanimation", true))
 {
 }
 
@@ -99,8 +112,19 @@ MStatus SmdExportSession::validateOutputFile() const
     return MS::kSuccess;
 }
 
+bool SmdExportSession::parseBoolOption(const char *key, bool defaultValue) const
+{
+    const std::unordered_map<std::string, std::string> optionMap = ParseOptionMap(options_);
+    return ParseBoolOption(optionMap, key, defaultValue);
+}
+
 MStatus SmdExportSession::buildDocument()
 {
+    if (!parseBoolOption("exportmesh", true) && !parseBoolOption("exportanimation", true))
+    {
+        return maya_smd::ReportError("maya_smd: exportMesh and exportAnimation cannot both be disabled.");
+    }
+
     return sceneExporter_.Build();
 }
 

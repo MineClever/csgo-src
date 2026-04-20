@@ -1606,6 +1606,48 @@
                 - 并发度 `8`
                 - 单 case 超时 `300s`
                 - 整批墙钟约 `110s`
+          - 2026-04-21 SMD MEL 导出 UI 增加导出网格 / 导出动画开关：
+            - 需求：
+              - 在 SMD 的 MEL 导出 UI 中增加：
+                - 是否导出网格
+                - 是否导出动画
+              - 同时给这些选项补充明确的用户提示。
+            - 已修改：
+              - [performSmdExport.mel](dcc_plugin/src/mel/performSmdExport.mel)
+                - 新增 `MayaSmd_exportMesh` / `MayaSmd_exportAnimation` 的 `optionVar`
+                - 默认导出选项字符串新增：
+                  - `exportMesh=1`
+                  - `exportAnimation=1`
+                - UI 选项收集 / 回填逻辑已接通
+              - [mayaSmdTranslatorExport.mel](dcc_plugin/src/mel/mayaSmdTranslatorExport.mel)
+                - 新增 `Export Mesh` / `Export Animation` 两个 checkBox
+                - 新增说明文本和每个控件的 `annotation`
+                - 同时为 Translation / Rotation / Scale 也补了英文提示说明
+              - [PluginMain.cpp](dcc_plugin/src/plugin_smd/PluginMain.cpp)
+                - SMD exporter 注册默认 options 现已包含 `exportMesh=1;exportAnimation=1`
+                - 避免 Maya 把新导出 key 当未知项丢掉
+              - [SmdExportSession.cpp](dcc_plugin/src/exporter_smd/SmdExportSession.cpp)
+                - 已解析 `exportMesh` / `exportAnimation`
+                - 当两者都关闭时会明确报错：
+                  - `maya_smd: exportMesh and exportAnimation cannot both be disabled.`
+              - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)
+                - 已按开关跳过 `buildSkeleton()` 或 `buildTriangles()`
+            - 定向验证：
+              - `exportMesh=1;exportAnimation=0`
+                - 输出包含 triangles
+                - 不写 skeleton frame 数据
+              - `exportMesh=0;exportAnimation=1`
+                - 输出包含 skeleton frame 数据
+                - 不写 triangles
+              - `exportMesh=0;exportAnimation=0`
+                - 明确失败并提示不能同时关闭
+            - 回归验证：
+              - 完整默认回归再次通过：
+                - `mayapy dcc_plugin/tools/MayaBatchRegression.py --plugin dcc_plugin/maya_module/plug-ins/windows/2022/maya_dmx.mll --plugin-smd dcc_plugin/maya_module/plug-ins/windows/2022/maya_smd.mll --samples dcc_plugin/samples --output dcc_plugin/build/maya_batch_regression/final_full_after_smd_export_ui_modes`
+                - `28` 个默认 case 全部通过
+                - 并发度 `8`
+                - 单 case 超时 `300s`
+                - 整批墙钟约 `104s`
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。

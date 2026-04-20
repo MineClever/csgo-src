@@ -14,7 +14,9 @@ class SmdSceneExporter
 public:
     SmdSceneExporter(
         MPxFileTranslator::FileAccessMode mode,
-        const dcc_export_transform::ExportTransformPolicy &transformPolicy);
+        const dcc_export_transform::ExportTransformPolicy &transformPolicy,
+        bool exportMesh,
+        bool exportAnimation);
 
     MStatus Build();
     const simple_smd::Document &document() const;
@@ -39,6 +41,8 @@ private:
 
     MPxFileTranslator::FileAccessMode mode_;
     dcc_export_transform::ExportTransformPolicy transformPolicy_;
+    bool exportMesh_ = true;
+    bool exportAnimation_ = true;
     simple_smd::Document document_;
     std::vector<MDagPath> exportRoots_;
     std::vector<MDagPath> meshRoots_;

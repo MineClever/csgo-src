@@ -3,19 +3,40 @@ global proc string SmdExportOptionsUI(string $parent)
     setParent $parent;
     string $layout = `columnLayout -adjustableColumn true mayaSmdTranslatorExportOptions`;
 
+    text
+        -align "left"
+        -label "Choose whether the export should include mesh triangles, animation skeleton keys, or both."
+        -annotation "These options control which parts of the SMD file are written. Mesh exports write triangles and normals. Animation exports write the skeleton section."
+        smdExportModeHint;
+
+    checkBoxGrp
+        -numberOfCheckBoxes 1
+        -label "Export Mesh"
+        -annotation "When enabled, the exporter writes triangle geometry, normals, UVs and skin weights to the SMD file."
+        smdExportMesh;
+
+    checkBoxGrp
+        -numberOfCheckBoxes 1
+        -label "Export Animation"
+        -annotation "When enabled, the exporter writes skeleton frames and bone transforms to the SMD file."
+        smdExportAnimation;
+
     floatFieldGrp
         -numberOfFields 3
         -label "Translation"
+        -annotation "Applies export-space translation correction. This changes the written coordinate space, not the scene itself."
         smdExportTranslation;
 
     floatFieldGrp
         -numberOfFields 3
         -label "Rotation"
+        -annotation "Applies export-space rotation correction in degrees. Use this to match the target tool or engine axis convention."
         smdExportRotation;
 
     floatFieldGrp
         -numberOfFields 3
         -label "Scale"
+        -annotation "Applies export-space scale correction. This affects written mesh data and skeleton translations."
         smdExportScale;
 
     return $layout;

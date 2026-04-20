@@ -10,7 +10,7 @@ namespace plugin_smd_detail
 constexpr const char *kImportOptionsScriptName = "mayaSmdTranslatorImport";
 constexpr const char *kExportOptionsScriptName = "mayaSmdTranslatorExport";
 constexpr const char *kImportDefaultOptions = "useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
-constexpr const char *kExportDefaultOptions = "translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
+constexpr const char *kExportDefaultOptions = "exportMesh=1;exportAnimation=1;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
 
 MStatus RegisterTranslator(
     MFnPlugin &plugin,

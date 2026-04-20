@@ -21,6 +21,7 @@ private:
     MStatus buildDocument();
     MStatus serialize();
     MStatus writeOutput() const;
+    bool parseBoolOption(const char *key, bool defaultValue) const;
 
     MFileObject fileObject_;
     MString options_;

@@ -41,9 +41,13 @@ std::string DagPathKey(const MDagPath &dagPath)
 
 SmdSceneExporter::SmdSceneExporter(
     MPxFileTranslator::FileAccessMode mode,
-    const dcc_export_transform::ExportTransformPolicy &transformPolicy)
+    const dcc_export_transform::ExportTransformPolicy &transformPolicy,
+    bool exportMesh,
+    bool exportAnimation)
     : mode_(mode)
     , transformPolicy_(transformPolicy)
+    , exportMesh_(exportMesh)
+    , exportAnimation_(exportAnimation)
 {
 }
 
@@ -82,16 +86,22 @@ MStatus SmdSceneExporter::Build()
         return MStatus::kFailure;
     }
 
-    status = buildSkeleton();
-    if (!status)
+    if (exportAnimation_)
     {
-        return MStatus::kFailure;
+        status = buildSkeleton();
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
     }
 
-    status = buildTriangles();
-    if (!status)
+    if (exportMesh_)
     {
-        return MStatus::kFailure;
+        status = buildTriangles();
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
     }
 
     return applyDocumentTransformCorrection();
