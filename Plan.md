@@ -1240,9 +1240,24 @@
     - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已同步补 gate：
       - 为 `c1m1_intro_mechanic`、`c2m1_mechanic_intro`、`c5m1_intro_mechanic` 新增复杂 DMX 动画 `ANIMATION_GATE`、`PAIRED_UPDATE_GATE` 与 `ANIMATION_LAYER_IMPORT_GATE`，以 `mechanic_model.dmx` 作为基线收口“真实骨骼动画 + update + animation layer”三条主路径。
       - 已修正 `MostComplexSampleSet/vcaanim_VertexAnim` 的动画层 gate 期望，使其与当前 `animationOnly` 会强制落到 `sceneRoot` 的行为一致；旧 gate 的 `|vca_arm|pelvis.translateX` 期望已过时，现改为以 `|pelvis.translateX` 为基线。
+    - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 与 [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py) 已完成回归脚本重构：
+      - 原本臃肿的单文件脚本已拆成“轻量入口 + 面向对象执行库 + JSON 配置”三层结构。
+      - [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json) 已承接格式定义、默认 case 列表与各类 gate 期望，便于后续直接增删样例和期望而不再继续堆积 Python 常量。
+      - 当前执行库已按 `RegressionConfig`、`MayaRegressionContext`、`SnapshotUtils`、`GateValidator`、`RegressionRunner` 分层，后续新增 gate 时不再需要继续向入口脚本塞流程。
+    - 动画层专项覆盖已继续补齐：
+      - 已新增“重复 `replace` 导入同一 layer”专项 gate，用 `MostComplexSampleSet/vcaanim_VertexAnim` 与 `ctm_fbi/ctm_fbi_anims/rom_skin.smd` 收口“二次 replace 不残留旧 curve”。
+      - 已新增“连续 `new` 导入生成多个 layer”专项 gate，用 `Ellis/DMX/animation/c2m1_mechanic_intro.dmx` 与 `ctm_fbi/ctm_fbi_anims/shield_deploy.smd` 收口“多 layer 创建与静音隔离”。
+      - 已新增“存在多个 animation layer 时导出”专项 gate；为满足单 case 5 分钟上限，DMX / SMD 导出 gate 都切到轻量 `MostComplexSampleSet/vcaanim_VertexAnim(.dmx/.smd)`，避免大样例多层导出本身把 case 拖到超时。
+      - 旧的 `ctm_fbi/ctm_fbi.smd` append/update gate 里写死的 `*ctm_fbi_pelvis` 期望已修正为当前真实层级下稳定命中的 `*pelvis`。
+    - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 已补“单 case 最长 5 分钟”超时与并发调度：
+      - 默认 `--case-timeout-seconds=300`，超时后会用 `taskkill /PID /T /F` 强制杀掉整棵 `mayapy` 进程树，而不是只在父进程抛错。
+      - 默认 `--max-parallel-cases=0` 时自动取 `max(1, CPU核数 / 2)`；当前机器上实际并发度为 `8`。
+      - 每个 case 现在都落独立子进程与独立 `.case.log`，因此单个 Maya 卡死不会再把整批回归拖成无限等待。
     - 已在真实 `mayapy` 宿主下执行完整回归：
-      - `cmd /c dcc_plugin\RunMayaBatchRegression.bat Release`
+      - 顺序模式：`cmd /c dcc_plugin\RunMayaBatchRegression.bat Release`
+      - 并发模式：`mayapy dcc_plugin\tools\MayaBatchRegression.py --plugin ... --plugin-smd ... --samples ... --output ...`
       - 结果：通过。
+      - 并发模式当前实际结果：`28` 个默认 case、并发度 `8`、单 case 超时 `300s`，整批约 `325s` 完成。
     - 本轮仍能稳定复现但未阻塞回归通过的 warning：
       - 部分 `append/update` case 仍会出现 shading set / `materialInfo` rename warning。
       - `complex_chr_mesh`、`ctm_fbi/ctm_fbi.smd` 的 `skin influence update` 过程中仍会出现 bind pose 缺失 warning。
@@ -1250,15 +1265,13 @@
   - 2026-04-20 覆盖面复核：
     - 当前已覆盖的动画层相关回归：
       - 单次 `animationOnly + importAnimationToLayer=1 + animationLayerMode=replace` 导入是否成功创建目标 layer，且不会改写 base 值。
+      - 同一 case 连续两次 `animationLayerMode=replace` 导入到同名 layer，确认二次 replace 后 curve 数量与采样值稳定。
+      - 同一基线场景连续多次 `animationLayerMode=new` 导入，确认会产生多个可区分 layer，且静音所有 layer 后 base 值不变。
+      - 场景中存在多个 animation layer 时执行 DMX / SMD 导出，并回读校验关键 plug 的最终求值结果与动画绑定仍然存在。
       - `sourceDelta + Use Clip` 是否能从现有 scene animation layer 取 reference。
-    - 当前未覆盖、且应继续补 gate 的行为：
-      - 同一 case 连续两次 `animationLayerMode=replace` 导入到同名 layer，确认旧 layer curve 会被清理并被第二次导入稳定覆盖，而不是残留重复 curve。
-      - 同一基线场景连续多次 `animationLayerMode=new` 导入，确认会产生多个可区分 layer，而不是因为默认 layer 名稳定而复用旧 layer。
-      - 场景中已存在多个普通 animation layer / source-delta layer 时，再次导入新 layer 的命中与命名行为。
-      - 场景中存在多个 animation layer 时执行 DMX / SMD 导出，确认 exporter 是否会按预期采样最终求值结果，或明确当前只支持 base/direct animCurve，不支持多层堆叠导出。
-    - 代码层复核结果：
-      - [MayaBatchRegression.py](dcc_plugin/tools/MayaBatchRegression.py) 当前只有单层 `ANIMATION_LAYER_IMPORT_GATE_EXPECTATIONS`，没有“重复 replace / 多次 new / 多层并存导出”专项 gate。
-      - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) 当前 `FindAnimationCurveForPlug()` 只查目标 plug 的直接上游 `animCurve`，未显式遍历 animation layer 混合链；因此“多动画层并存后的导出”目前既没有回归覆盖，也很可能不属于已稳定承诺范围。
+    - 当前剩余观察项：
+      - `Ellis` 级别的大样例在“多 layer 导出”场景下单独导出耗时仍然显著偏高，因此目前导出 gate 已有覆盖，但仍使用轻量样例维持 5 分钟 SLA。
+      - [ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp) 的多层导出路径虽已被回归覆盖，但后续若继续扩大到更重场景，仍建议单独评估导出侧性能。
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。

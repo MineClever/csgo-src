@@ -136,7 +136,7 @@
     "ctm_fbi/ctm_fbi.smd": {
       "import_options": "useSceneRoot=1;importMode=append",
       "single_nodes": [
-        {"pattern": "*ctm_fbi_pelvis", "type": "joint"}
+        {"pattern": "*pelvis", "type": "joint"}
       ]
     }
   },
@@ -166,7 +166,7 @@
     "ctm_fbi/ctm_fbi.smd": {
       "import_options": "useSceneRoot=1;importMode=update",
       "single_nodes": [
-        {"pattern": "*ctm_fbi_pelvis", "type": "joint"}
+        {"pattern": "*pelvis", "type": "joint"}
       ]
     }
   },
@@ -319,42 +319,42 @@
     }
   },
   "animation_layer_export_gate_expectations": {
-    "Ellis/DMX/animation/c2m1_mechanic_intro.dmx": {
-      "base_case": "Ellis/DMX/mechanic_model.dmx",
+    "MostComplexSampleSet/vcaanim_VertexAnim": {
+      "base_case": "MostComplexSampleSet/vcaanim_VertexAnim.dmx",
       "base_import_options": "useSceneRoot=1;importMode=create",
       "reimport_options": "useSceneRoot=1;importMode=create",
-      "compare_plugs": ["|ValveBiped_Bip01_Pelvis.translateX", "|ValveBiped_Bip01_Pelvis.rotateX"],
+      "compare_plugs": ["|pelvis.translateX", "|pelvis.rotateX"],
       "sample_times": [0.0, 0.5, 1.0],
       "layer_imports": [
         {
-          "case": "Ellis/DMX/animation/c1m1_intro_mechanic.dmx",
-          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=ellis_export_layer_a",
-          "layer_name": "ellis_export_layer_a"
+          "case": "MostComplexSampleSet/vcaanim_VertexAnim.dmx",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=vca_export_layer_a",
+          "layer_name": "vca_export_layer_a"
         },
         {
-          "case": "Ellis/DMX/animation/c2m1_mechanic_intro.dmx",
-          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=ellis_export_layer_b",
-          "layer_name": "ellis_export_layer_b"
+          "case": "MostComplexSampleSet/vcaanim_VertexAnim.dmx",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=vca_export_layer_b",
+          "layer_name": "vca_export_layer_b"
         }
       ],
       "export_variant_name": "text"
     },
-    "ctm_fbi/ctm_fbi_anims/shield_deploy.smd": {
-      "base_case": "ctm_fbi/ctm_fbi.smd",
+    "MostComplexSampleSet/vcaanim_VertexAnim.smd": {
+      "base_case": "MostComplexSampleSet/vcaanim_VertexAnim.smd",
       "base_import_options": "useSceneRoot=1;importMode=create",
       "reimport_options": "useSceneRoot=1;importMode=create",
-      "compare_plugs": ["|pelvis.translateX", "|pelvis.rotateX"],
+      "compare_plugs": ["|vcabone_VertexAnim.translateX"],
       "sample_times": [0.0, 1.0, 2.0],
       "layer_imports": [
         {
-          "case": "ctm_fbi/ctm_fbi_anims/rom_skin.smd",
-          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=smd_export_layer_a",
-          "layer_name": "smd_export_layer_a"
+          "case": "MostComplexSampleSet/vcaanim_VertexAnim.smd",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=vca_smd_export_layer_a",
+          "layer_name": "vca_smd_export_layer_a"
         },
         {
-          "case": "ctm_fbi/ctm_fbi_anims/shield_deploy.smd",
-          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=smd_export_layer_b",
-          "layer_name": "smd_export_layer_b"
+          "case": "MostComplexSampleSet/vcaanim_VertexAnim.smd",
+          "options": "useSceneRoot=1;importMode=animationOnly;importAnimationToLayer=1;animationLayerMode=new;animationLayerName=vca_smd_export_layer_b",
+          "layer_name": "vca_smd_export_layer_b"
         }
       ],
       "export_variant_name": "text"

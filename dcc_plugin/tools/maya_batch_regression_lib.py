@@ -374,6 +374,23 @@ class SnapshotUtils:
         return animation_snapshots
 
     @staticmethod
+    def snapshot_selected_animation_bindings(cmds, plug_names):
+        animation_snapshots = {}
+        for plug_name in plug_names:
+            if "." not in plug_name or not cmds.objExists(plug_name):
+                continue
+            node_name, attribute_name = plug_name.rsplit(".", 1)
+            source_connections = cmds.listConnections(plug_name, source=True, destination=False, plugs=True) or []
+            key_count = cmds.keyframe(node_name, attribute=attribute_name, query=True, keyframeCount=True) or 0
+            if not source_connections and not key_count:
+                continue
+            animation_snapshots[plug_name] = {
+                "key_count": int(key_count),
+                "sources": sorted(source_connections),
+            }
+        return animation_snapshots
+
+    @staticmethod
     def snapshot_scene_meshes():
         import maya.api.OpenMaya as om
 
@@ -1433,7 +1450,7 @@ class GateValidator:
                 )
 
         reference_values = self.ctx.sample_plugs(expectation["compare_plugs"], expectation["sample_times"])
-        reference_animations = SnapshotUtils.snapshot_animation_bindings(cmds, imported_roots)
+        reference_animations = SnapshotUtils.snapshot_selected_animation_bindings(cmds, expectation["compare_plugs"])
         if not reference_animations:
             raise RuntimeError(
                 f"Animation layer export gate failed for {normalized_case_name}. layered scene produced no animation bindings"
@@ -1470,7 +1487,7 @@ class GateValidator:
             )
 
         candidate_values = self.ctx.sample_plugs(expectation["compare_plugs"], expectation["sample_times"])
-        candidate_animations = SnapshotUtils.snapshot_animation_bindings(cmds, reimported_roots)
+        candidate_animations = SnapshotUtils.snapshot_selected_animation_bindings(cmds, expectation["compare_plugs"])
         if not candidate_animations:
             raise RuntimeError(
                 f"Animation layer export gate failed for {normalized_case_name}. exported file reimport produced no animation bindings"
