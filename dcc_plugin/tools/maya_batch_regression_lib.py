@@ -1357,12 +1357,36 @@ class GateValidator:
             )
         return sampled_positions
 
+    @staticmethod
+    def sample_mesh_vertex_normals(cmds, mesh_path, vertex_indices):
+        import maya.api.OpenMaya as om
+
+        selection = om.MSelectionList()
+        selection.add(mesh_path)
+        mesh_dag_path = selection.getDagPath(0)
+        mesh_fn = om.MFnMesh(mesh_dag_path)
+
+        sampled_normals = {}
+        for vertex_index in vertex_indices:
+            normal = mesh_fn.getVertexNormal(vertex_index, True, om.MSpace.kWorld)
+            sampled_normals[vertex_index] = [normal.x, normal.y, normal.z]
+        return sampled_normals
+
     @classmethod
     def apply_matrix_to_triplet(cls, matrix, triplet):
         import maya.api.OpenMaya as om
 
         transformed_point = om.MPoint(triplet[0], triplet[1], triplet[2]) * matrix
         return [transformed_point.x, transformed_point.y, transformed_point.z]
+
+    @classmethod
+    def apply_matrix_to_direction_triplet(cls, matrix, triplet):
+        import maya.api.OpenMaya as om
+
+        transformed_direction = om.MVector(triplet[0], triplet[1], triplet[2]) * matrix.inverse().transpose()
+        if transformed_direction.length() > 1.0e-8:
+            transformed_direction.normalize()
+        return [transformed_direction.x, transformed_direction.y, transformed_direction.z]
 
     def parse_exported_dmx_transform_gate_data(self, exported_path):
         with open(exported_path, "r", encoding="utf-8") as exported_file:
@@ -1888,14 +1912,23 @@ class GateValidator:
             )
 
         baseline_node_frames = {}
-        for node_suffix in expectation["sample_nodes"]:
+        for node_suffix in expectation.get("sample_nodes", []):
             node_path = self.resolve_unique_node_by_suffix(cmds, node_suffix)
             baseline_node_frames[node_suffix] = self.sample_node_world_frame(cmds, node_path)
 
         baseline_mesh_positions = {}
-        for mesh_spec in expectation["sample_mesh_vertices"]:
+        for mesh_spec in expectation.get("sample_mesh_vertices", []):
             mesh_path = self.resolve_unique_mesh_by_suffix(cmds, mesh_spec["mesh_suffix"])
             baseline_mesh_positions[mesh_spec["mesh_suffix"]] = self.sample_mesh_vertex_positions(
+                cmds,
+                mesh_path,
+                mesh_spec["indices"],
+            )
+
+        baseline_mesh_normals = {}
+        for mesh_spec in expectation.get("sample_mesh_normals", []):
+            mesh_path = self.resolve_unique_mesh_by_suffix(cmds, mesh_spec["mesh_suffix"])
+            baseline_mesh_normals[mesh_spec["mesh_suffix"]] = self.sample_mesh_vertex_normals(
                 cmds,
                 mesh_path,
                 mesh_spec["indices"],
@@ -1968,6 +2001,24 @@ class GateValidator:
                         (
                             f"Selected export scene transform gate failed for {normalized_case_name} "
                             f"mesh={mesh_suffix} vertex={vertex_index} matrix={matrix_variant['name']}"
+                        ),
+                        tolerance=2.0e-3,
+                    )
+
+            for mesh_suffix, baseline_normals in baseline_mesh_normals.items():
+                candidate_normals = self.sample_mesh_vertex_normals(
+                    cmds,
+                    self.resolve_unique_mesh_by_suffix(cmds, mesh_suffix),
+                    sorted(baseline_normals.keys()),
+                )
+                for vertex_index, baseline_triplet in baseline_normals.items():
+                    expected_triplet = self.apply_matrix_to_direction_triplet(correction_matrix, baseline_triplet)
+                    self.assert_close_triplet(
+                        candidate_normals[vertex_index],
+                        expected_triplet,
+                        (
+                            f"Selected export scene transform gate failed for {normalized_case_name} "
+                            f"mesh={mesh_suffix} normalVertex={vertex_index} matrix={matrix_variant['name']}"
                         ),
                         tolerance=2.0e-3,
                     )

@@ -106,6 +106,44 @@ bool ParseVector4String(const std::string &value, MVector &parsed, double &w)
     return true;
 }
 
+constexpr double kCorrectionEpsilon = 1.0e-8;
+
+dcc_transform::TransformCorrection BuildScaleOnlyCorrection(const dcc_transform::TransformCorrection &correction)
+{
+    dcc_transform::TransformCorrection scaleOnlyCorrection;
+    scaleOnlyCorrection.scale[0] = correction.scale[0];
+    scaleOnlyCorrection.scale[1] = correction.scale[1];
+    scaleOnlyCorrection.scale[2] = correction.scale[2];
+    return scaleOnlyCorrection;
+}
+
+MVector ApplyScaleOnlyNormalCorrection(
+    const dcc_export_transform::ExportTransformPolicy &policy,
+    const MVector &normal)
+{
+    return dcc_transform::ApplyToNormal(BuildScaleOnlyCorrection(policy.correction), normal);
+}
+
+MVector ApplyScaleOnlyTangentCorrection(
+    const dcc_export_transform::ExportTransformPolicy &policy,
+    const MVector &tangent)
+{
+    MVector corrected(
+        tangent.x * policy.correction.scale[0],
+        tangent.y * policy.correction.scale[1],
+        tangent.z * policy.correction.scale[2]);
+    return corrected.length() > kCorrectionEpsilon ? corrected.normal() : tangent;
+}
+
+double ApplyScaleOnlyTangentHandedness(
+    const dcc_export_transform::ExportTransformPolicy &policy,
+    double tangentHandedness)
+{
+    const double determinantSign =
+        policy.correction.scale[0] * policy.correction.scale[1] * policy.correction.scale[2];
+    return determinantSign < 0.0 ? -tangentHandedness : tangentHandedness;
+}
+
 bool ParseMatrixStringLocal(const std::string &value, MMatrix &parsed)
 {
     const std::vector<double> values = ParseNumberList(value);
@@ -159,7 +197,7 @@ void CorrectVector3Array(
         MVector corrected = parsed;
         if (useDirectionTransform)
         {
-            corrected = dcc_export_transform::ApplyToDirection(policy, parsed);
+            corrected = ApplyScaleOnlyNormalCorrection(policy, parsed);
         }
         else if (useScaleOnly)
         {
@@ -226,8 +264,9 @@ void CorrectVector4Array(
             continue;
         }
 
-        const MVector corrected = dcc_export_transform::ApplyToDirection(policy, parsed);
-        correctedValues.push_back(FormatVector4(corrected.x, corrected.y, corrected.z, w));
+        const MVector corrected = ApplyScaleOnlyTangentCorrection(policy, parsed);
+        correctedValues.push_back(
+            FormatVector4(corrected.x, corrected.y, corrected.z, ApplyScaleOnlyTangentHandedness(policy, w)));
     }
 
     SetAttr(*element, attributeName, ScalarArrayAttr(attribute->declaredType, std::move(correctedValues)));

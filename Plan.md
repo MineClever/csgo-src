@@ -1505,6 +1505,35 @@
                 - `VaccineKiller.mod` 权限 warning
                 - 部分 `append/update` case 的材质 rename warning
                 - 个别 skin/bind pose warning
+          - 2026-04-21 补充修复（DMX 导出校正后的法线方向错误）：
+            - 现象：
+              - DMX 导出带 transform correction 后，mesh world-space 位置是对的，但法线方向错误。
+              - 最小复现是 `simple_mesh.dmx`：
+                - 基线 world normal：`[0, 0, 1]`
+                - 导出时加 `rotateX=90`
+                - 修复前回导入后的 world normal 会落到 `[-Z]`，说明法线被重复旋转。
+            - 原因：
+              - [DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 的 DOM 后处理之前把 `bindState/baseStates/currentState` 里的 `normals/tangents` 当成需要吃完整导出修正矩阵的方向量。
+              - 但当前 DMX 语义已经改成：
+                - 顶层 transform 负责旋转/平移
+                - mesh local 顶点数据只做 scale 语义修正
+              - 在这个语义下，再对 mesh local normal 额外施加旋转，就会在回导入后和根层级旋转叠加，造成“双重旋转”。
+            - 修复：
+              - `normals` 改为只做 local scale 的 inverse-transpose 修正，不再吃 root rotation。
+              - `tangents` 改为只做 local scale 方向修正，并在负行列式缩放下同步翻转 handedness (`w`)。
+            - 回归补充：
+              - [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py) 已新增 mesh world normal 采样与 inverse-transpose 期望计算。
+              - [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json) 已给 `simple_mesh` 新增 DMX normal gate：
+                - `rotate_x_90`
+                - `trs_mixed_normals`
+            - 验证：
+              - `simple_mesh` 定向回归通过
+              - 完整默认回归再次通过：
+                - `mayapy dcc_plugin/tools/MayaBatchRegression.py --plugin dcc_plugin/maya_module/plug-ins/windows/2022/maya_dmx.mll --plugin-smd dcc_plugin/maya_module/plug-ins/windows/2022/maya_smd.mll --samples dcc_plugin/samples --output dcc_plugin/build/maya_batch_regression/final_full_after_dmx_normal_fix`
+                - `28` 个默认 case 全部通过
+                - 并发度 `8`
+                - 单 case 超时 `300s`
+                - 整批墙钟约 `96s`
   - 完成判据：
     - 复杂样例下明确哪些通道写 base、哪些通道写 layer。
     - `Use Clip`、scene animation layer reference、source delta 参考帧行为都有稳定 gate。
