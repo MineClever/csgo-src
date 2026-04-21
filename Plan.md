@@ -1656,9 +1656,26 @@
   - 主要代码入口：
     - [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp)
     - [AnimationCurveUtils.cpp](dcc_plugin/src/common/AnimationCurveUtils.cpp)
+  - 2026-04-21：已对照 `Autodesk/maya-usd` 仓库继续评估。当前在仓库内未找到使用 `MFnAnimLayer` 或等价 C++ API 直接创建、挂接、查询 Maya animation layer 的实现；动画相关主路径主要依赖 `MAnimUtil` 做动画性检测，依赖 `MFnAnimCurve` 处理普通 animCurve 读写，例如：
+    - `lib/mayaUsd/utils/util.cpp` 中的 `UsdMayaUtil::isAnimated()` / `isPlugAnimated()`
+    - `lib/mayaUsd/fileio/primUpdater.cpp` 中的 `UsdMayaPrimUpdater::isAnimated()`
+    - `plugin/al/usdmayautils/AL/usdmaya/utils/AnimationTranslator.cpp` 中的 upstream DG 遍历与 `MAnimUtil::isAnimated()`
+  - 2026-04-21：结合官方 `animLayer` 命令文档，`findCurveForPlug`、`layeredPlug`、`writeBlendnodeDestinations` 等关键能力仍主要暴露在命令层，而不是 `maya-usd` 可复用的现成 C++ 封装中。结论是：
+    - 当前 Maya 2022.5 baseline 下，不能指望通过参考 `maya-usd` 直接移除本项目的 `animLayer` MEL 桥接。
+    - 可以继续保留现有“命令层建 layer / 找 layer curve，C++ 层用 `MFnAnimCurve` 批量写 key”的混合方案。
+    - 若后续要进一步减少 MEL，建议只评估把 `findCurveForPlug` 的一部分查询逻辑改成 DG 遍历和缓存，而不是尝试完全照搬 `maya-usd`。
   - 完成判据：
     - 若保持 Maya 2022.5 baseline，则明确哪些桥接调用属于“保留项”。
     - 若未来升级 API baseline，则单独建项评估哪些桥接可迁回 C++ API。
+  - 2026-04-21：已为 SMD 导出 MEL UI 补齐 `Flip UV V (1 - V)` 选项，并与 SMD 导入侧语义对齐：
+    - [mayaSmdTranslatorExport.mel](dcc_plugin/src/mel/mayaSmdTranslatorExport.mel) 已新增英文 UI 与 annotation。
+    - [performSmdExport.mel](dcc_plugin/src/mel/performSmdExport.mel) 已新增 `flipUvV` 的默认值、UI 回填与 option 串收集。
+    - [PluginMain.cpp](dcc_plugin/src/plugin_smd/PluginMain.cpp) 的默认导出 option 已追加 `flipUvV=1`。
+    - [SmdExportSession.cpp](dcc_plugin/src/exporter_smd/SmdExportSession.cpp) / [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 已支持导出时按选项决定写出原始 `v` 还是 `1 - v`。
+  - 2026-04-21：定向验证已完成：
+    - `cmd /c dcc_plugin\\BuildPlugin.bat Release` 通过。
+    - 使用 `simple_mesh.dmx` 执行 `Valve SMD Export` 定向导出时，`flipUvV=1` 的首个写出 UV 为 `(0.0, 1.0)`，`flipUvV=0` 为 `(0.0, 0.0)`，与预期一致。
+  - 2026-04-21：复核 SMD VTA 子域后，当前未新增 blocker；剩余主线仍集中在 `.vta` exporter、独立 create 模式下的 mesh 重建，以及 normal/flex controller 等更高层语义恢复。
 ## 环境与工具链说明
 
 ### A. 批处理构建包装脚本已做兼容性修复

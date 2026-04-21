@@ -21,6 +21,13 @@ global proc string SmdExportOptionsUI(string $parent)
         -annotation "When enabled, the exporter writes skeleton frames and bone transforms to the SMD file."
         smdExportAnimation;
 
+    checkBoxGrp
+        -numberOfCheckBoxes 1
+        -label "UV"
+        -label1 "Flip UV V (1 - V)"
+        -annotation "Matches the legacy SMD import/export convention by flipping the V coordinate before writing UVs."
+        smdExportFlipUvV;
+
     floatFieldGrp
         -numberOfFields 3
         -label "Translation"

@@ -69,7 +69,8 @@ SmdExportSession::SmdExportSession(const MFileObject &fileObject, const MString 
         mode,
         BuildSmdExportTransformPolicy(options),
         parseBoolOption("exportmesh", true),
-        parseBoolOption("exportanimation", true))
+        parseBoolOption("exportanimation", true),
+        parseBoolOption("flipuvv", true))
 {
 }
 

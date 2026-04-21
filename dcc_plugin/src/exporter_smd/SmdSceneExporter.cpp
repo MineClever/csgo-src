@@ -43,11 +43,13 @@ SmdSceneExporter::SmdSceneExporter(
     MPxFileTranslator::FileAccessMode mode,
     const dcc_export_transform::ExportTransformPolicy &transformPolicy,
     bool exportMesh,
-    bool exportAnimation)
+    bool exportAnimation,
+    bool flipUvV)
     : mode_(mode)
     , transformPolicy_(transformPolicy)
     , exportMesh_(exportMesh)
     , exportAnimation_(exportAnimation)
+    , flipUvV_(flipUvV)
 {
 }
 
@@ -597,7 +599,7 @@ MStatus SmdSceneExporter::buildTriangles()
                         if (polygonIt.hasUVs() && polygonIt.getUV(static_cast<int>(vertexInTriangle), uv) == MS::kSuccess)
                         {
                             vertex.u = uv[0];
-                            vertex.v = 1.0 - uv[1];
+                            vertex.v = flipUvV_ ? (1.0 - uv[1]) : uv[1];
                         }
 
                         auto weightIt = skinWeightsByVertex.find(vertexIndex);
