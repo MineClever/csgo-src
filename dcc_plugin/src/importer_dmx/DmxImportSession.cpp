@@ -464,6 +464,7 @@ MStatus DmxImportSession::Run()
     context->importSkin = importOptions_.importSkin;
     context->importMaterials = importOptions_.importMaterials;
     context->importDeltaStates = importOptions_.importDeltaStates;
+    context->recordExportName = importOptions_.recordExportName;
     if (context->modelRoot)
     {
         CollectJointInfo(document_, context->modelRoot, *context);

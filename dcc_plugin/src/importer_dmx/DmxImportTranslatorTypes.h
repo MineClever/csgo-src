@@ -45,6 +45,7 @@ struct ImportContext
     bool importSkin = true;
     bool importMaterials = true;
     bool importDeltaStates = true;
+    bool recordExportName = false;
     dcc_import_transform::TransformCorrection transformCorrection;
 };
 
@@ -53,6 +54,7 @@ struct ImportOptions
     bool importSkin = true;
     bool importMaterials = true;
     bool importDeltaStates = true;
+    bool recordExportName = false;
     bool applyLegacyAxisCorrection = false;
     dcc_import_transform::TransformCorrection transformCorrection;
     dcc_import_policy::SceneImportPolicy scenePolicy;

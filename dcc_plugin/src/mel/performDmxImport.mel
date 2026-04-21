@@ -20,11 +20,12 @@ global proc MayaDmxImport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaUseClip`) { optionVar -intValue MayaDmx_sourceDeltaUseClip 0; }
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaClip`) { optionVar -stringValue MayaDmx_sourceDeltaClip ""; }
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_sourceDeltaReferenceFrame`) { optionVar -intValue MayaDmx_sourceDeltaReferenceFrame 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_recordExportName`) { optionVar -intValue MayaDmx_recordExportName 0; }
 }
 
 global proc string MayaDmxImport_defaultOptionsString()
 {
-    return "importMaterials=1;importSkin=1;importDeltaStates=1;useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1;importAnimationToLayer=0;animationLayerMode=new;sourceDeltaMode=none;sourceDeltaUseClip=0;sourceDeltaReferenceFrame=0";
+    return "importMaterials=1;importSkin=1;importDeltaStates=1;useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1;importAnimationToLayer=0;animationLayerMode=new;sourceDeltaMode=none;sourceDeltaUseClip=0;sourceDeltaReferenceFrame=0;recordExportName=0";
 }
 
 global proc string MayaDmxImport_collectOptionVarString()
@@ -48,7 +49,8 @@ global proc string MayaDmxImport_collectOptionVarString()
         + ";animationLayerMode=" + `optionVar -q MayaDmx_animationLayerMode`
         + ";sourceDeltaMode=" + `optionVar -q MayaDmx_sourceDeltaMode`
         + ";sourceDeltaUseClip=" + `optionVar -q MayaDmx_sourceDeltaUseClip`
-        + ";sourceDeltaReferenceFrame=" + `optionVar -q MayaDmx_sourceDeltaReferenceFrame`);
+        + ";sourceDeltaReferenceFrame=" + `optionVar -q MayaDmx_sourceDeltaReferenceFrame`
+        + ";recordExportName=" + `optionVar -q MayaDmx_recordExportName`);
     string $sceneClip = `optionVar -q MayaDmx_sourceDeltaClip`;
     if (size($sceneClip) > 0) { $options += (";sourceDeltaClip=" + $sceneClip); }
     return $options;
@@ -143,6 +145,7 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     int $sourceDeltaUseClip = 0;
     string $sourceDeltaClip = "";
     int $sourceDeltaReferenceFrame = 0;
+    int $recordExportName = 0;
 
     string $optionList[]; tokenize($effectiveOptions, ";", $optionList);
     for ($option in $optionList) {
@@ -168,6 +171,7 @@ global proc MayaDmxImport_applyOptionsString(string $options)
         else if ($parts[0] == "sourceDeltaUseClip") { $sourceDeltaUseClip = $parts[1]; }
         else if ($parts[0] == "sourceDeltaClip") { $sourceDeltaClip = $parts[1]; }
         else if ($parts[0] == "sourceDeltaReferenceFrame") { $sourceDeltaReferenceFrame = $parts[1]; }
+        else if ($parts[0] == "recordExportName") { $recordExportName = $parts[1]; }
     }
 
     if (`checkBoxGrp -exists dmxImportMaterials`) { checkBoxGrp -e -value1 $importMaterials dmxImportMaterials; }
@@ -208,6 +212,9 @@ global proc MayaDmxImport_applyOptionsString(string $options)
     }
     if (`intFieldGrp -exists dmxImportSourceDeltaReferenceFrame`) {
         intFieldGrp -e -value1 $sourceDeltaReferenceFrame dmxImportSourceDeltaReferenceFrame;
+    }
+    if (`checkBoxGrp -exists dmxImportRecordExportName`) {
+        checkBoxGrp -e -value1 $recordExportName dmxImportRecordExportName;
     }
     MayaDmxImport_updateAnimationLayerUI();
 }
@@ -276,6 +283,10 @@ global proc string MayaDmxImport_collectOptionsString()
     if (`intFieldGrp -exists dmxImportSourceDeltaReferenceFrame`) {
         $sourceDeltaReferenceFrame = `intFieldGrp -q -value1 dmxImportSourceDeltaReferenceFrame`;
     }
+    int $recordExportName = 0;
+    if (`checkBoxGrp -exists dmxImportRecordExportName`) {
+        $recordExportName = `checkBoxGrp -q -value1 dmxImportRecordExportName`;
+    }
 
     string $options = ("importMaterials=" + $importMaterials
         + ";importSkin=" + $importSkin
@@ -295,7 +306,8 @@ global proc string MayaDmxImport_collectOptionsString()
         + ";animationLayerMode=" + $animationLayerMode
         + ";sourceDeltaMode=" + $sourceDeltaMode
         + ";sourceDeltaUseClip=" + $sourceDeltaUseClip
-        + ";sourceDeltaReferenceFrame=" + $sourceDeltaReferenceFrame);
+        + ";sourceDeltaReferenceFrame=" + $sourceDeltaReferenceFrame
+        + ";recordExportName=" + $recordExportName);
     if (size($sourceDeltaClip) > 0) { $options += (";sourceDeltaClip=" + $sourceDeltaClip); }
     return $options;
 }
@@ -336,6 +348,7 @@ global proc MayaDmx_importCallback(string $parent, int $doIt)
         else if ($parts[0] == "sourceDeltaUseClip") { optionVar -intValue MayaDmx_sourceDeltaUseClip $parts[1]; }
         else if ($parts[0] == "sourceDeltaClip") { optionVar -stringValue MayaDmx_sourceDeltaClip $parts[1]; }
         else if ($parts[0] == "sourceDeltaReferenceFrame") { optionVar -intValue MayaDmx_sourceDeltaReferenceFrame $parts[1]; }
+        else if ($parts[0] == "recordExportName") { optionVar -intValue MayaDmx_recordExportName $parts[1]; }
     }
     if ($doIt) { performDmxImport 0; }
 }
@@ -442,6 +455,9 @@ global proc string DmxImportOptionsUI(string $parent)
                 dmxImportSourceDeltaClip;
                 menuItem -label "None";
             intFieldGrp -numberOfFields 1 -label "Reference Frame" -annotation "Reference frame index used when sampling an imported reference clip." dmxImportSourceDeltaReferenceFrame;
+            separator -style "in";
+            text -align "left" -label "Naming";
+            checkBoxGrp -numberOfCheckBoxes 1 -label "Names" -label1 "Record Source Export Names" -annotation "When enabled, imported nodes receive a sourceExportName string attribute containing the original file node name for later export override." dmxImportRecordExportName;
             separator -style "in";
             text -align "left" -label "Transform Correction";
             text -align "left" -label "Applied directly during import as translation, rotation and scale correction.\n Namespace options use Maya's native Import file panel.";

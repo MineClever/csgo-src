@@ -2,6 +2,8 @@
 
 #include "DmxExportMesh.h"
 
+#include <common/NodeNameUtils.h>
+
 #include <string>
 #include <vector>
 
@@ -224,7 +226,10 @@ Element *BuildDagElement(DocumentBuilder &builder, const MDagPath &dagPath, Expo
     Element *dagElement = dagElementIt->second;
     dagElement->type = elementType;
     ClearAttrs(*dagElement);
-    dagElement->name = dagNode.name().asChar();
+    dagElement->name = dcc_node_name::ResolveExportNodeName(
+        dagPath.node(),
+        dagNode.name().asChar(),
+        context.useExportNameOverride);
 
     if (Element *transformElement = BuildTransformElement(
             builder,

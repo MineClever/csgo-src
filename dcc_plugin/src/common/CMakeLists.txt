@@ -13,6 +13,8 @@ add_library(maya_common STATIC
     MaterialUtils.h
     MayaCommandUtils.cpp
     MayaCommandUtils.h
+    NodeNameUtils.cpp
+    NodeNameUtils.h
     SkinClusterUtils.cpp
     SkinClusterUtils.h
 )

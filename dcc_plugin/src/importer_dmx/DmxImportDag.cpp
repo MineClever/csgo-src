@@ -2,6 +2,7 @@
 
 #include "DmxImportMesh.h"
 
+#include <common/NodeNameUtils.h>
 #include <common/TransformCorrection.h>
 #include <common/SceneMergeStrategy.h>
 
@@ -141,6 +142,15 @@ MStatus ImportDagHierarchyRecursive(
     if (!reusedExistingNode)
     {
         AppendImportDebugLog((std::string("dag: created node name=") + nodeName).c_str());
+    }
+
+    if (context.recordExportName)
+    {
+        status = dcc_node_name::EnsureExportNameOverride(nodeObject, rawNodeName);
+        if (!status)
+        {
+            return MStatus::kFailure;
+        }
     }
 
     MDagPath nodePath;

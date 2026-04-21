@@ -19,6 +19,9 @@ global proc MayaDmxExport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportMetadata`) {
         optionVar -intValue MayaDmx_exportMetadata 1;
     }
+    if ($forceFactorySettings || !`optionVar -exists MayaDmx_useExportNameOverride`) {
+        optionVar -intValue MayaDmx_useExportNameOverride 0;
+    }
 
     if ($forceFactorySettings || !`optionVar -exists MayaDmx_exportMaterialRoot`) {
         optionVar -stringValue MayaDmx_exportMaterialRoot "";
@@ -37,7 +40,7 @@ global proc MayaDmxExport_setOptionVars(int $forceFactorySettings)
 
 global proc string MayaDmxExport_defaultOptionsString()
 {
-    return "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;exportMetadata=1;materialRoot=;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
+    return "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;exportMetadata=1;useExportNameOverride=0;materialRoot=;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
 }
 
 global proc string MayaDmxExport_collectOptionVarString()
@@ -48,6 +51,7 @@ global proc string MayaDmxExport_collectOptionVarString()
     int $exportSkin = `optionVar -q MayaDmx_exportSkin`;
     int $exportDeltaStates = `optionVar -q MayaDmx_exportDeltaStates`;
     int $exportMetadata = `optionVar -q MayaDmx_exportMetadata`;
+    int $useExportNameOverride = `optionVar -q MayaDmx_useExportNameOverride`;
     string $materialRoot = `optionVar -q MayaDmx_exportMaterialRoot`;
     float $translateX = `optionVar -q MayaDmx_exportTranslateX`;
     float $translateY = `optionVar -q MayaDmx_exportTranslateY`;
@@ -64,6 +68,7 @@ global proc string MayaDmxExport_collectOptionVarString()
         + ";exportSkin=" + $exportSkin
         + ";exportDeltaStates=" + $exportDeltaStates
         + ";exportMetadata=" + $exportMetadata
+        + ";useExportNameOverride=" + $useExportNameOverride
         + ";materialRoot=" + $materialRoot
         + ";translateX=" + $translateX
         + ";translateY=" + $translateY
@@ -88,6 +93,7 @@ global proc MayaDmxExport_applyOptionsString(string $options)
     int $exportSkin = 1;
     int $exportDeltaStates = 1;
     int $exportMetadata = 1;
+    int $useExportNameOverride = 0;
     string $materialRoot = "";
     float $translateX = 0; float $translateY = 0; float $translateZ = 0;
     float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
@@ -114,6 +120,8 @@ global proc MayaDmxExport_applyOptionsString(string $options)
             $exportDeltaStates = $value;
         } else if ($key == "exportMetadata") {
             $exportMetadata = $value;
+        } else if ($key == "useExportNameOverride") {
+            $useExportNameOverride = $value;
         } else if ($key == "materialRoot") {
             $materialRoot = $value;
         } else if ($key == "translateX") {
@@ -152,6 +160,9 @@ global proc MayaDmxExport_applyOptionsString(string $options)
     if (`checkBoxGrp -exists dmxExportMetadata`) {
         checkBoxGrp -e -value1 $exportMetadata dmxExportMetadata;
     }
+    if (`checkBoxGrp -exists dmxExportUseExportNameOverride`) {
+        checkBoxGrp -e -value1 $useExportNameOverride dmxExportUseExportNameOverride;
+    }
     if (`textFieldGrp -exists dmxExportMaterialRoot`) {
         textFieldGrp -e -text $materialRoot dmxExportMaterialRoot;
     }
@@ -186,6 +197,10 @@ global proc string MayaDmxExport_collectOptionsString()
     if (`checkBoxGrp -exists dmxExportMetadata`) {
         $exportMetadata = `checkBoxGrp -q -value1 dmxExportMetadata`;
     }
+    int $useExportNameOverride = 0;
+    if (`checkBoxGrp -exists dmxExportUseExportNameOverride`) {
+        $useExportNameOverride = `checkBoxGrp -q -value1 dmxExportUseExportNameOverride`;
+    }
 
     string $materialRoot = "";
     if (`textFieldGrp -exists dmxExportMaterialRoot`) {
@@ -215,6 +230,7 @@ global proc string MayaDmxExport_collectOptionsString()
         + ";exportSkin=" + $exportSkin
         + ";exportDeltaStates=" + $exportDeltaStates
         + ";exportMetadata=" + $exportMetadata
+        + ";useExportNameOverride=" + $useExportNameOverride
         + ";materialRoot=" + $materialRoot
         + ";translateX=" + $translateX
         + ";translateY=" + $translateY
@@ -260,6 +276,8 @@ global proc MayaDmx_exportCallback(string $parent, int $exportAll, int $doIt)
             optionVar -intValue MayaDmx_exportDeltaStates $parts[1];
         } else if ($parts[0] == "exportMetadata") {
             optionVar -intValue MayaDmx_exportMetadata $parts[1];
+        } else if ($parts[0] == "useExportNameOverride") {
+            optionVar -intValue MayaDmx_useExportNameOverride $parts[1];
         } else if ($parts[0] == "materialRoot") {
             optionVar -stringValue MayaDmx_exportMaterialRoot $parts[1];
         } else if ($parts[0] == "translateX") {
@@ -325,6 +343,13 @@ global proc string DmxExportOptionsUI(string $parent)
                 -label "Metadata"
                 -label1 "Export Maya Metadata"
                 dmxExportMetadata;
+
+            checkBoxGrp
+                -numberOfCheckBoxes 1
+                -label "Names"
+                -label1 "Use sourceExportName Attribute"
+                -annotation "When enabled, the exporter uses each node's sourceExportName string attribute as the written node name when present."
+                dmxExportUseExportNameOverride;
 
             textFieldGrp
                 -label "Material Root"

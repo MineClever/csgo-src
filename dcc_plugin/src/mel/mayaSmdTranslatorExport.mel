@@ -28,6 +28,13 @@ global proc string SmdExportOptionsUI(string $parent)
         -annotation "Matches the legacy SMD import/export convention by flipping the V coordinate before writing UVs."
         smdExportFlipUvV;
 
+    checkBoxGrp
+        -numberOfCheckBoxes 1
+        -label "Names"
+        -label1 "Use sourceExportName Attribute"
+        -annotation "When enabled, the exporter uses each node's sourceExportName string attribute as the written node name when present."
+        smdExportUseExportNameOverride;
+
     floatFieldGrp
         -numberOfFields 3
         -label "Translation"

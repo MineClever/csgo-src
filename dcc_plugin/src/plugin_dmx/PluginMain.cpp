@@ -10,8 +10,8 @@ namespace plugin_dmx_detail
 constexpr const char *kWorkflowCommandName = "mayaDmxWorkflow";
 constexpr const char *kImportOptionsScriptName = "mayaDmxTranslatorImport";
 constexpr const char *kExportOptionsScriptName = "mayaDmxTranslatorExport";
-constexpr const char *kImportDefaultOptions = "importMaterials=1;importSkin=1;importDeltaStates=1;useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
-constexpr const char *kExportDefaultOptions = "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;exportMetadata=1;materialRoot=;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
+constexpr const char *kImportDefaultOptions = "importMaterials=1;importSkin=1;importDeltaStates=1;useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1;recordExportName=0";
+constexpr const char *kExportDefaultOptions = "encoding=text;upAxis=Y;exportSkin=1;exportDeltaStates=1;exportMetadata=1;useExportNameOverride=0;materialRoot=;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
 
 MStatus RegisterTranslator(
     MFnPlugin &plugin,

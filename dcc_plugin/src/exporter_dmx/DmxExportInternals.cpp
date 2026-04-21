@@ -172,6 +172,7 @@ ExportOptions ParseExportOptions(const MFileObject &fileObject, const MString &o
     exportOptions.exportSkin = ParseBoolOption(optionMap, "exportskin", true);
     exportOptions.exportDeltaStates = ParseBoolOption(optionMap, "exportdeltastates", true);
     exportOptions.exportMetadata = ParseBoolOption(optionMap, "exportmetadata", true);
+    exportOptions.useExportNameOverride = ParseBoolOption(optionMap, "useexportnameoverride", false);
 
     auto upAxisIt = optionMap.find("upaxis");
     if (upAxisIt != optionMap.end() && !upAxisIt->second.empty())

@@ -3,6 +3,7 @@ global proc MayaSmdExport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportMesh`) { optionVar -intValue MayaSmd_exportMesh 1; }
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportAnimation`) { optionVar -intValue MayaSmd_exportAnimation 1; }
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_flipUvV`) { optionVar -intValue MayaSmd_flipUvV 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_useExportNameOverride`) { optionVar -intValue MayaSmd_useExportNameOverride 0; }
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportTranslateX`) { optionVar -floatValue MayaSmd_exportTranslateX 0; }
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportTranslateY`) { optionVar -floatValue MayaSmd_exportTranslateY 0; }
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_exportTranslateZ`) { optionVar -floatValue MayaSmd_exportTranslateZ 0; }
@@ -16,7 +17,7 @@ global proc MayaSmdExport_setOptionVars(int $forceFactorySettings)
 
 global proc string MayaSmdExport_defaultOptionsString()
 {
-    return "exportMesh=1;exportAnimation=1;flipUvV=1;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
+    return "exportMesh=1;exportAnimation=1;flipUvV=1;useExportNameOverride=0;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1";
 }
 
 global proc MayaSmdExport_applyOptionsString(string $options)
@@ -29,6 +30,7 @@ global proc MayaSmdExport_applyOptionsString(string $options)
     int $exportMesh = 1;
     int $exportAnimation = 1;
     int $flipUvV = 1;
+    int $useExportNameOverride = 0;
     float $translateX = 0; float $translateY = 0; float $translateZ = 0;
     float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
     float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
@@ -45,6 +47,7 @@ global proc MayaSmdExport_applyOptionsString(string $options)
         if ($parts[0] == "exportMesh") { $exportMesh = $parts[1]; }
         else if ($parts[0] == "exportAnimation") { $exportAnimation = $parts[1]; }
         else if ($parts[0] == "flipUvV") { $flipUvV = $parts[1]; }
+        else if ($parts[0] == "useExportNameOverride") { $useExportNameOverride = $parts[1]; }
         else if ($parts[0] == "translateX") { $translateX = $parts[1]; }
         else if ($parts[0] == "translateY") { $translateY = $parts[1]; }
         else if ($parts[0] == "translateZ") { $translateZ = $parts[1]; }
@@ -59,6 +62,7 @@ global proc MayaSmdExport_applyOptionsString(string $options)
     if (`checkBoxGrp -exists smdExportMesh`) { checkBoxGrp -e -value1 $exportMesh smdExportMesh; }
     if (`checkBoxGrp -exists smdExportAnimation`) { checkBoxGrp -e -value1 $exportAnimation smdExportAnimation; }
     if (`checkBoxGrp -exists smdExportFlipUvV`) { checkBoxGrp -e -value1 $flipUvV smdExportFlipUvV; }
+    if (`checkBoxGrp -exists smdExportUseExportNameOverride`) { checkBoxGrp -e -value1 $useExportNameOverride smdExportUseExportNameOverride; }
     if (`floatFieldGrp -exists smdExportTranslation`) { floatFieldGrp -e -value1 $translateX -value2 $translateY -value3 $translateZ smdExportTranslation; }
     if (`floatFieldGrp -exists smdExportRotation`) { floatFieldGrp -e -value1 $rotateX -value2 $rotateY -value3 $rotateZ smdExportRotation; }
     if (`floatFieldGrp -exists smdExportScale`) { floatFieldGrp -e -value1 $scaleX -value2 $scaleY -value3 $scaleZ smdExportScale; }
@@ -69,6 +73,7 @@ global proc string MayaSmdExport_collectOptionsString()
     int $exportMesh = 1;
     int $exportAnimation = 1;
     int $flipUvV = 1;
+    int $useExportNameOverride = 0;
     float $translateX = 0; float $translateY = 0; float $translateZ = 0;
     float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
     float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
@@ -81,6 +86,9 @@ global proc string MayaSmdExport_collectOptionsString()
     }
     if (`checkBoxGrp -exists smdExportFlipUvV`) {
         $flipUvV = `checkBoxGrp -q -value1 smdExportFlipUvV`;
+    }
+    if (`checkBoxGrp -exists smdExportUseExportNameOverride`) {
+        $useExportNameOverride = `checkBoxGrp -q -value1 smdExportUseExportNameOverride`;
     }
     if (`floatFieldGrp -exists smdExportTranslation`) {
         $translateX = `floatFieldGrp -q -value1 smdExportTranslation`;
@@ -101,6 +109,7 @@ global proc string MayaSmdExport_collectOptionsString()
     return ("exportMesh=" + $exportMesh
         + ";exportAnimation=" + $exportAnimation
         + ";flipUvV=" + $flipUvV
+        + ";useExportNameOverride=" + $useExportNameOverride
         + ";translateX=" + $translateX
         + ";translateY=" + $translateY
         + ";translateZ=" + $translateZ

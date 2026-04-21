@@ -21,6 +21,7 @@ struct ExportContext
     bool exportSkin = true;
     bool exportDeltaStates = true;
     bool exportMetadata = true;
+    bool useExportNameOverride = false;
     std::string materialRoot;
     dcc_export_transform::ExportTransformPolicy transformPolicy;
 };
@@ -31,6 +32,7 @@ struct ExportOptions
     bool exportSkin = true;
     bool exportDeltaStates = true;
     bool exportMetadata = true;
+    bool useExportNameOverride = false;
     std::string upAxis = "Y";
     std::string materialRoot;
     dcc_import_transform::TransformCorrection transformCorrection;

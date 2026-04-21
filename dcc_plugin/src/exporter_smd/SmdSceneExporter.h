@@ -17,7 +17,8 @@ public:
         const dcc_export_transform::ExportTransformPolicy &transformPolicy,
         bool exportMesh,
         bool exportAnimation,
-        bool flipUvV);
+        bool flipUvV,
+        bool useExportNameOverride);
 
     MStatus Build();
     const simple_smd::Document &document() const;
@@ -45,6 +46,7 @@ private:
     bool exportMesh_ = true;
     bool exportAnimation_ = true;
     bool flipUvV_ = true;
+    bool useExportNameOverride_ = false;
     simple_smd::Document document_;
     std::vector<MDagPath> exportRoots_;
     std::vector<MDagPath> meshRoots_;

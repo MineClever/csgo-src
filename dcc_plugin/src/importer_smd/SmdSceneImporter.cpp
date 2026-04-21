@@ -3,6 +3,7 @@
 #include "SmdImportUtils.h"
 #include "SmdMeshImporter.h"
 
+#include <common/NodeNameUtils.h>
 #include <common/TransformCorrection.h>
 #include <common_smd/MayaSmdCommon.h>
 
@@ -151,6 +152,15 @@ MStatus SmdSceneImporter::createJoint(const simple_smd::Node &node)
     else
     {
         reusedBoneIndices_.insert(node.index);
+    }
+
+    if (importOptions_.recordExportName)
+    {
+        status = dcc_node_name::EnsureExportNameOverride(jointObject, node.name);
+        if (!status)
+        {
+            return maya_smd::ReportError(MString("maya_smd: failed to record export name for node ") + node.name.c_str(), status);
+        }
     }
 
     MDagPath jointPath;

@@ -13,6 +13,7 @@ struct SmdImportOptions
     dcc_import_policy::SceneImportPolicy scenePolicy;
     double animationFps = 0.0;
     bool flipUvV = true;
+    bool recordExportName = false;
 };
 
 class SmdImportSession

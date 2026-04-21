@@ -991,11 +991,15 @@
   - `M-SHARED-3`：评估动画层 MEL 桥接的替代空间。
     - 当前 Maya 2022.5 仍需要依赖 MEL 过桥处理 `animLayer / setKeyframe -animLayer`。
     - 只有在更高 Maya API baseline 下，才适合继续评估完全改成 C++ API 的可行性。
+  - `M-SHARED-4`：引入可选的“导出真实名称”节点属性与导出开关。
+    - 导入 DMX/SMD 时，可选在导入得到的 Maya 节点上写入一个英文字符串属性，用于记录该节点最终导出时应使用的真实名称。
+    - 该属性也允许用户后续手工添加或修改；导出时在启用特定选项后优先使用该属性值，否则继续使用当前 Maya 节点名。
+    - 目标案例：例如 Maya 节点名为 `ValveBiped_Bip01_Pelvis`，但属性值为 `ValveBiped.Bip01.Pelvis`；启用选项后导出为 `ValveBiped.Bip01.Pelvis`，关闭选项后仍导出 `ValveBiped_Bip01_Pelvis`。
 
 - 当前建议优先级：
   - 第一优先级：`M-DMX-1`、`M-DMX-2`、`M-SMD-1`
   - 第二优先级：`M-DMX-5`、`M-DMX-3`、`M-SMD-2`
-  - 第三优先级：`M-DMX-4`、`M-DMX-6`、`M-SMD-4`、`M-SHARED-1~3`
+  - 第三优先级：`M-DMX-4`、`M-DMX-6`、`M-SMD-4`、`M-SHARED-1~4`
 
 ### 12. DMX / SMD 剩余里程碑执行拆解（2026-04-19）
 - 状态：进行中
@@ -1667,6 +1671,67 @@
   - 完成判据：
     - 若保持 Maya 2022.5 baseline，则明确哪些桥接调用属于“保留项”。
     - 若未来升级 API baseline，则单独建项评估哪些桥接可迁回 C++ API。
+
+- `M-SHARED-4` 可选“导出真实名称”节点属性：
+  - 目标：
+    - 给 DMX/SMD 导入节点增加一个可选字符串属性，用于记录“最终导出时的真实名称”。
+    - 同时允许用户自行在相关节点上补加或修改该属性。
+    - 导出侧增加显式开关；开启时优先使用该属性值，关闭时继续使用当前 Maya 节点名。
+  - 建议边界：
+    - 属性名保持英文，避免引入中文代码或属性定义；建议统一放到 common 层，例如 `sourceExportName` 一类的共享命名。
+    - 导入侧默认只在启用“写入导出真实名称属性”选项时创建该属性，并把源文件中的原始名称写入该属性。
+    - 若导出开关开启但属性不存在、为空或非法，则回退到当前 Maya 节点名，避免导出硬失败。
+    - 第一阶段优先覆盖 joint / transform 主路径；mesh、blendShape 控制器、辅助节点是否也跟进，后续再按格式能力细化。
+  - 主要代码入口：
+    - 导入侧：
+      - [DmxImportDag.cpp](dcc_plugin/src/importer_dmx/DmxImportDag.cpp)
+      - [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp)
+      - [ImportPolicy.h](dcc_plugin/src/common/ImportPolicy.h)
+    - 导出侧：
+      - [DmxExportDag.cpp](dcc_plugin/src/exporter_dmx/DmxExportDag.cpp)
+      - [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp)
+      - `dcc_plugin/src/common` 下的共享节点命名 helper
+    - UI / options：
+      - DMX / SMD Import MEL
+      - DMX / SMD Export MEL
+      - 对应 `PluginMain.cpp` 默认 options 串
+  - 回归样例建议：
+    - 最小 DMX：
+      - 导入后把 `ValveBiped_Bip01_Pelvis` 的属性设为 `ValveBiped.Bip01.Pelvis`
+      - 导出时开启选项，校验 text DMX 中对应 transform/joint 名称改为属性值
+      - 再关闭选项，校验仍导出 Maya 当前节点名
+    - 最小 SMD：
+      - 导入骨架样例后对关键 joint 写同类属性
+      - 导出时分别验证 `nodes` 段使用属性值或节点名
+    - 手工添加场景：
+      - 不依赖导入写属性，直接由测试脚本手工 `addAttr/setAttr`
+      - 验证导出端只依赖属性存在与导出开关，而不依赖“必须由 importer 创建”
+  - 完成判据：
+    - DMX/SMD 都支持通过统一英文属性名覆盖导出名称。
+    - 导入侧与导出侧都有独立开关，且默认行为保持兼容，不破坏现有名称导出。
+    - 用户手工补加属性与 importer 自动写入属性两条路径都可用。
+  - 2026-04-21：第一版实现已落地：
+    - common 层已新增 [NodeNameUtils.h](dcc_plugin/src/common/NodeNameUtils.h) / [NodeNameUtils.cpp](dcc_plugin/src/common/NodeNameUtils.cpp)，统一维护：
+      - 共享属性名 `sourceExportName`
+      - 导入侧确保字符串属性存在并写值
+      - 导出侧按开关解析属性值并回退到 Maya 当前节点名
+    - 导入侧：
+      - [DmxImportDag.cpp](dcc_plugin/src/importer_dmx/DmxImportDag.cpp) 与 [SmdSceneImporter.cpp](dcc_plugin/src/importer_smd/SmdSceneImporter.cpp) 已支持在 `recordExportName=1` 时，把源文件原始节点名写到 `sourceExportName`
+      - DMX / SMD import options、`PluginMain.cpp` 默认 options 与 MEL import UI 已新增 `recordExportName`
+    - 导出侧：
+      - [DmxExportDag.cpp](dcc_plugin/src/exporter_dmx/DmxExportDag.cpp) 与 [SmdSceneExporter.cpp](dcc_plugin/src/exporter_smd/SmdSceneExporter.cpp) 已支持在 `useExportNameOverride=1` 时优先使用 `sourceExportName`
+      - DMX / SMD export options、`PluginMain.cpp` 默认 options 与 MEL export UI 已新增 `useExportNameOverride`
+    - 当前实现边界：
+      - 第一版先覆盖 joint / transform 主路径，不扩到材质节点、control 节点或其他辅助节点
+      - 若属性不存在、为空或无效，则自动回退到当前 Maya 节点名，不让导出失败
+    - 已验证：
+      - `cmake --build dcc_plugin\\build --config Release` 通过
+      - SMD：`male_06_reference.smd` 导入后，开启 `recordExportName=1` 可在 `ValveBiped_Bip01_Pelvis` 上写入 `sourceExportName=ValveBiped.Bip01_Pelvis`
+      - SMD：手工把 `sourceExportName` 改成 `ValveBiped.Bip01.Pelvis` 后，`useExportNameOverride=1` 导出可稳定写出该名称
+      - DMX：`mechanic_model_merged.dmx` 导入后，手工把 `|ValveBiped_mechanic_exportData|ValveBiped_Bip01_Pelvis.sourceExportName` 设为 `ValveBiped.Bip01.Pelvis`，`useExportNameOverride=1` 导出 text DMX 可稳定写出该名称
+    - 当前仍未补齐：
+      - 尚未把这条能力纳入 `MayaBatchRegression.config.json` 的独立 gate
+      - 尚未覆盖 mesh / control / 其他非 joint transform 之外的更宽节点域
   - 2026-04-21：已为 SMD 导出 MEL UI 补齐 `Flip UV V (1 - V)` 选项，并与 SMD 导入侧语义对齐：
     - [mayaSmdTranslatorExport.mel](dcc_plugin/src/mel/mayaSmdTranslatorExport.mel) 已新增英文 UI 与 annotation。
     - [performSmdExport.mel](dcc_plugin/src/mel/performSmdExport.mel) 已新增 `flipUvV` 的默认值、UI 回填与 option 串收集。

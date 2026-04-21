@@ -19,6 +19,7 @@ global proc MayaSmdImport_setOptionVars(int $forceFactorySettings)
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_sourceDeltaReferenceFrame`) { optionVar -intValue MayaSmd_sourceDeltaReferenceFrame 0; }
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_animationFps`) { optionVar -floatValue MayaSmd_animationFps `MayaSmdImport_currentFramesPerSecond`; }
     if ($forceFactorySettings || !`optionVar -exists MayaSmd_flipUvV`) { optionVar -intValue MayaSmd_flipUvV 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaSmd_recordExportName`) { optionVar -intValue MayaSmd_recordExportName 0; }
 }
 
 global proc float MayaSmdImport_currentFramesPerSecond()
@@ -41,7 +42,7 @@ global proc float MayaSmdImport_currentFramesPerSecond()
 
 global proc string MayaSmdImport_defaultOptionsString()
 {
-    return ("useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1;importAnimationToLayer=0;animationLayerMode=new;sourceDeltaMode=none;sourceDeltaUseClip=0;sourceDeltaReferenceFrame=0;animationFps=" + `MayaSmdImport_currentFramesPerSecond` + ";flipUvV=1");
+    return ("useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1;importAnimationToLayer=0;animationLayerMode=new;sourceDeltaMode=none;sourceDeltaUseClip=0;sourceDeltaReferenceFrame=0;animationFps=" + `MayaSmdImport_currentFramesPerSecond` + ";flipUvV=1;recordExportName=0");
 }
 
 global proc string MayaSmdImport_collectOptionVarString()
@@ -64,7 +65,8 @@ global proc string MayaSmdImport_collectOptionVarString()
         + ";sourceDeltaUseClip=" + `optionVar -q MayaSmd_sourceDeltaUseClip`
         + ";sourceDeltaReferenceFrame=" + `optionVar -q MayaSmd_sourceDeltaReferenceFrame`
         + ";animationFps=" + `optionVar -q MayaSmd_animationFps`
-        + ";flipUvV=" + `optionVar -q MayaSmd_flipUvV`);
+        + ";flipUvV=" + `optionVar -q MayaSmd_flipUvV`
+        + ";recordExportName=" + `optionVar -q MayaSmd_recordExportName`);
     string $sourceDeltaClip = `optionVar -q MayaSmd_sourceDeltaClip`;
     if (size($sourceDeltaClip) > 0) {
         $options += (";sourceDeltaClip=" + $sourceDeltaClip);
@@ -145,6 +147,7 @@ global proc MayaSmdImport_applyOptionsString(string $options)
     int $sourceDeltaReferenceFrame = 0;
     float $animationFps = `MayaSmdImport_currentFramesPerSecond`;
     int $flipUvV = 1;
+    int $recordExportName = 0;
 
     string $optionList[]; tokenize($effectiveOptions, ";", $optionList);
     for ($option in $optionList) {
@@ -169,6 +172,7 @@ global proc MayaSmdImport_applyOptionsString(string $options)
         else if ($parts[0] == "sourceDeltaReferenceFrame") { $sourceDeltaReferenceFrame = $parts[1]; }
         else if ($parts[0] == "animationFps") { $animationFps = $parts[1]; }
         else if ($parts[0] == "flipUvV") { $flipUvV = $parts[1]; }
+        else if ($parts[0] == "recordExportName") { $recordExportName = $parts[1]; }
     }
 
     if (`checkBoxGrp -exists smdImportUseSceneRoot`) { checkBoxGrp -e -value1 $useSceneRoot smdImportUseSceneRoot; }
@@ -212,6 +216,9 @@ global proc MayaSmdImport_applyOptionsString(string $options)
     }
     if (`checkBoxGrp -exists smdImportFlipUvV`) {
         checkBoxGrp -e -value1 $flipUvV smdImportFlipUvV;
+    }
+    if (`checkBoxGrp -exists smdImportRecordExportName`) {
+        checkBoxGrp -e -value1 $recordExportName smdImportRecordExportName;
     }
     MayaSmdImport_updateAnimationLayerUI();
 }
@@ -284,6 +291,10 @@ global proc string MayaSmdImport_collectOptionsString()
     if (`checkBoxGrp -exists smdImportFlipUvV`) {
         $flipUvV = `checkBoxGrp -q -value1 smdImportFlipUvV`;
     }
+    int $recordExportName = 0;
+    if (`checkBoxGrp -exists smdImportRecordExportName`) {
+        $recordExportName = `checkBoxGrp -q -value1 smdImportRecordExportName`;
+    }
 
     string $options = ("useSceneRoot=" + $useSceneRoot
         + ";importMode=" + $importMode
@@ -302,7 +313,8 @@ global proc string MayaSmdImport_collectOptionsString()
         + ";sourceDeltaUseClip=" + $sourceDeltaUseClip
         + ";sourceDeltaReferenceFrame=" + $sourceDeltaReferenceFrame
         + ";animationFps=" + $animationFps
-        + ";flipUvV=" + $flipUvV);
+        + ";flipUvV=" + $flipUvV
+        + ";recordExportName=" + $recordExportName);
     if (size($sourceDeltaClip) > 0) { $options += (";sourceDeltaClip=" + $sourceDeltaClip); }
     return $options;
 }
@@ -402,6 +414,7 @@ global proc string SmdImportOptionsUI(string $parent)
             separator -style "in";
             text -align "left" -label "Geometry";
             checkBoxGrp -numberOfCheckBoxes 1 -label "UV" -label1 "Flip UV V (1 - V)" -annotation "Keeps the legacy SMD import behavior by flipping the V coordinate during UV import." smdImportFlipUvV;
+            checkBoxGrp -numberOfCheckBoxes 1 -label "Names" -label1 "Record Source Export Names" -annotation "When enabled, imported nodes receive a sourceExportName string attribute containing the original file node name for later export override." smdImportRecordExportName;
             separator -style "in";
             text -align "left" -label "Transform Correction";
             text -align "left" -label "Applied directly during import as translation, rotation and scale correction.\n Namespace options use Maya's native Import file panel.";
@@ -445,5 +458,6 @@ global proc MayaSmd_importFileOptionsUICommit(string $parent)
         else if ($parts[0] == "sourceDeltaReferenceFrame") { optionVar -intValue MayaSmd_sourceDeltaReferenceFrame $parts[1]; }
         else if ($parts[0] == "animationFps") { optionVar -floatValue MayaSmd_animationFps $parts[1]; }
         else if ($parts[0] == "flipUvV") { optionVar -intValue MayaSmd_flipUvV $parts[1]; }
+        else if ($parts[0] == "recordExportName") { optionVar -intValue MayaSmd_recordExportName $parts[1]; }
     }
 }

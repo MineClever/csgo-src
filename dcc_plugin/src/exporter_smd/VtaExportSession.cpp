@@ -496,7 +496,8 @@ MStatus VtaExportSession::buildDocument()
         dcc_export_transform::ExportTransformPolicy(),
         false,
         true,
-        true);
+        true,
+        false);
     MStatus status = skeletonExporter.Build();
     if (!status)
     {

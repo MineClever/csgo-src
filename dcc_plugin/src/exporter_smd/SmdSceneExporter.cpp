@@ -2,6 +2,7 @@
 
 #include <common/ExportAnimationUtils.h>
 #include <common/MaterialExportUtils.h>
+#include <common/NodeNameUtils.h>
 #include <common_smd/MayaSmdCommon.h>
 
 #include <algorithm>
@@ -44,12 +45,14 @@ SmdSceneExporter::SmdSceneExporter(
     const dcc_export_transform::ExportTransformPolicy &transformPolicy,
     bool exportMesh,
     bool exportAnimation,
-    bool flipUvV)
+    bool flipUvV,
+    bool useExportNameOverride)
     : mode_(mode)
     , transformPolicy_(transformPolicy)
     , exportMesh_(exportMesh)
     , exportAnimation_(exportAnimation)
     , flipUvV_(flipUvV)
+    , useExportNameOverride_(useExportNameOverride)
 {
 }
 
@@ -129,7 +132,10 @@ MStatus SmdSceneExporter::buildNodes()
 
         simple_smd::Node node;
         node.index = static_cast<int>(nodeIndex);
-        node.name = dagNode.name().asChar();
+        node.name = dcc_node_name::ResolveExportNodeName(
+            exportNodes_[nodeIndex].node(),
+            dagNode.name().asChar(),
+            useExportNameOverride_);
 
         MDagPath parentPath = exportNodes_[nodeIndex];
         if (parentPath.length() > 0)

@@ -245,5 +245,6 @@ SmdImportOptions SmdImportSession::parseOptions() const
     {
         parsedOptions.flipUvV = dcc_import_policy::ParseBoolOption(optionMap, "flipuvv", true);
     }
+    parsedOptions.recordExportName = dcc_import_policy::ParseBoolOption(optionMap, "recordexportname", false);
     return parsedOptions;
 }

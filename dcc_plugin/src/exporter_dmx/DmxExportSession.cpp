@@ -551,6 +551,7 @@ MStatus DmxExportSession::BuildDocument()
     context.exportSkin = exportOptions_.exportSkin;
     context.exportDeltaStates = exportOptions_.exportDeltaStates;
     context.exportMetadata = exportOptions_.exportMetadata;
+    context.useExportNameOverride = exportOptions_.useExportNameOverride;
     context.materialRoot = exportOptions_.materialRoot;
     context.transformPolicy = dcc_export_transform::BuildExportTransformPolicy(exportOptions_.transformCorrection);
     for (const MDagPath &rootPath : exportRoots_)

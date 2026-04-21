@@ -162,6 +162,7 @@ ImportOptions ParseImportOptions(const MString &options)
     importOptions.importSkin = dcc_import_policy::ParseBoolOption(optionMap, "importskin", true);
     importOptions.importMaterials = dcc_import_policy::ParseBoolOption(optionMap, "importmaterials", true);
     importOptions.importDeltaStates = dcc_import_policy::ParseBoolOption(optionMap, "importdeltastates", true);
+    importOptions.recordExportName = dcc_import_policy::ParseBoolOption(optionMap, "recordexportname", false);
     importOptions.applyLegacyAxisCorrection = dcc_import_policy::ParseBoolOption(optionMap, "applyaxiscorrection", false);
     importOptions.scenePolicy = dcc_import_policy::ParseSceneImportPolicy(optionMap);
     importOptions.transformCorrection = dcc_import_transform::ParseTransformCorrection(optionMap);
