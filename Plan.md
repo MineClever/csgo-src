@@ -1735,6 +1735,15 @@
     - 已验证：
       - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过。
       - 真实 `mayapy` 下，先导入 `MostComplexSampleSet/chr_mesh.smd`，再只选 `|smd_import_root1|chr_mesh` 导入 `MostComplexSampleSet/flex.vta`，当前已可稳定生成 `mayaVtaBlendShape1` 与 `vta_frame_2/3` target。
+  - 2026-04-21：已继续收口用户给出的 `useSceneRoot=1;importMode=update` 无选择 VTA 场景：
+    - [VtaSceneImporter.cpp](dcc_plugin/src/importer_smd/VtaSceneImporter.cpp) 现在在“当前无选择集”且导入策略使用 `sceneRoot` / `update` / `append` 时，会自动扫描当前场景里带 `mayaSmdRawVertexMap` 的 mesh，作为 VTA 的 base mesh 集合。
+    - 这使得以下 Source 风格工作流现在可直接成立：
+      - 先 `Source SMD Import` 一个 reference SMD 到 scene root
+      - 再不做任何选择，直接执行 `Source VTA Import`
+    - 已按用户给出的 `male_06_reference.smd` / `male_06_expressions.vta` 组合验证：强制重载最新插件后二次导入不再报 “requires selecting the target mesh” ，而是会在场景中生成 `4` 个 `blendShape` 节点并完成多 mesh VTA target 分发。
+    - 说明：
+      - 这条自动匹配只在 `sceneRoot` / 现有对象合并语义下作为 fallback 生效，不改变默认“显式选择目标 mesh / hierarchy”的主行为。
+      - 若在同一个 Maya 会话里覆盖过 `.mll`，验证前需重载插件或重启 Maya，避免继续跑旧二进制。
   - 2026-04-21：已统一将导入导出 file translator 名称从 `Valve * Import/Export` 改为 `Source * Import/Export`：
     - DMX：
       - `Source DMX Import`

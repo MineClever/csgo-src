@@ -14,6 +14,7 @@
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnMesh.h>
 #include <maya/MGlobal.h>
+#include <maya/MItDag.h>
 #include <maya/MItDependencyGraph.h>
 #include <maya/MObjectArray.h>
 #include <maya/MPlug.h>
@@ -278,6 +279,43 @@ bool ResolveBindingsFromSelectionPathOrAncestors(const MDagPath &selectionPath, 
 
     return false;
 }
+
+void CollectSceneMeshBindingsWithRawVertexMap(std::vector<VtaMeshBinding> &bindings)
+{
+    bindings.clear();
+
+    MItDag dagIterator(MItDag::kDepthFirst, MFn::kMesh);
+    for (; !dagIterator.isDone(); dagIterator.next())
+    {
+        MDagPath meshPath;
+        if (dagIterator.getPath(meshPath) != MS::kSuccess || !meshPath.isValid())
+        {
+            continue;
+        }
+
+        MStatus status;
+        MFnDagNode meshDagNode(meshPath.node(), &status);
+        if (!status || meshDagNode.isIntermediateObject())
+        {
+            continue;
+        }
+
+        VtaMeshBinding binding;
+        binding.meshPath = meshPath;
+        binding.transformPath = meshPath;
+        if (binding.transformPath.length() > 0)
+        {
+            binding.transformPath.pop();
+        }
+
+        if (!LoadRawVertexMap(binding.meshPath.node(), binding.rawToLocalVertexIndex))
+        {
+            continue;
+        }
+
+        bindings.push_back(binding);
+    }
+}
 } // namespace vta_scene_importer_detail
 
 using namespace vta_scene_importer_detail;
@@ -420,6 +458,16 @@ MStatus VtaSceneImporter::resolveTargetMeshes(std::vector<VtaMeshBinding> &bindi
     MStatus status = MGlobal::getActiveSelectionList(selection);
     if (!status || selection.length() == 0)
     {
+        if (dcc_import_policy::UsesSceneRoot(importOptions_.scenePolicy) ||
+            dcc_import_policy::UsesExistingObjectMerge(importOptions_.scenePolicy))
+        {
+            CollectSceneMeshBindingsWithRawVertexMap(bindings);
+            if (!bindings.empty())
+            {
+                return MS::kSuccess;
+            }
+        }
+
         return maya_smd::ReportError(
             "maya_smd: VTA import follows Source behavior and requires selecting the existing target mesh, "
             "meshes, or imported hierarchy from the base SMD.");
