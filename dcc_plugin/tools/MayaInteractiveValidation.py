@@ -31,7 +31,7 @@ def _build_status_lines(plugin_path, script_dir):
         "plugin: {0}".format(_normalize(plugin_path)),
         "scripts: {0}".format(_normalize(script_dir)),
         "checks:",
-        "  1. Use 'Valve DMX Import/Export' in Maya file dialogs.",
+        "  1. Use 'Source DMX Import/Export' in Maya file dialogs.",
         "  2. Run MayaDmxShowImportOptions() and verify import option box layout/commit.",
         "  3. Run MayaDmxShowExportSelectionOptions() and MayaDmxShowExportAllOptions().",
         "  4. Confirm file type specific options match option box state.",

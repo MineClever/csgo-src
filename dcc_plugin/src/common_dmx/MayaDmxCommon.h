@@ -8,8 +8,8 @@ namespace maya_dmx
 {
 inline constexpr const char *kPluginVendor = "MineClever";
 inline constexpr const char *kPluginVersion = "0.1.0";
-inline constexpr const char *kImporterTranslatorName = "Valve DMX Import";
-inline constexpr const char *kExporterTranslatorName = "Valve DMX Export";
+inline constexpr const char *kImporterTranslatorName = "Source DMX Import";
+inline constexpr const char *kExporterTranslatorName = "Source DMX Export";
 
 bool HasDmxExtension(const MFileObject &fileObject);
 MStatus ReportInfo(const MString &message);

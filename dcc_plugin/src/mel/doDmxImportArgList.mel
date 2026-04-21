@@ -40,11 +40,11 @@ global proc doDmxImportArgList(string $version, string $args[])
         $startingDir = $workspaceRoot;
     }
 
-    string $filter = "Valve DMX (*.dmx *.dmxb *.dmxbin);;All Files (*.*)";
+    string $filter = "Source DMX (*.dmx *.dmxb *.dmxbin);;All Files (*.*)";
     string $result[] = `fileDialog2
         -returnFilter 1
         -fileFilter $filter
-        -caption "Import Valve DMX"
+        -caption "Import Source DMX"
         -startingDirectory $startingDir
         -fileMode 1
         -okCaption "Import"
@@ -85,7 +85,7 @@ global proc doDmxImportArgList(string $version, string $args[])
 
     file
         -import
-        -type "Valve DMX Import"
+        -type "Source DMX Import"
         -ignoreVersion
         -ra true
         -options $options

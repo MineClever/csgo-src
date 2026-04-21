@@ -1725,6 +1725,25 @@
       - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过
       - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases MostComplexSampleSet/flex.vta ...` 定向通过
     - 当前仍未把该 gate 放入默认完整回归，等后续多 mesh exporter 一并收口后再决定是否升级到默认集。
+  - 2026-04-21：已统一将导入导出 file translator 名称从 `Valve * Import/Export` 改为 `Source * Import/Export`：
+    - DMX：
+      - `Source DMX Import`
+      - `Source DMX Export`
+    - SMD / VTA：
+      - `Source SMD Import`
+      - `Source SMD Export`
+      - `Source VTA Import`
+      - `Source VTA Export`
+    - 已同步更新范围：
+      - [MayaDmxCommon.h](dcc_plugin/src/common_dmx/MayaDmxCommon.h)
+      - [MayaSmdCommon.h](dcc_plugin/src/common_smd/MayaSmdCommon.h)
+      - DMX MEL 对话框标题、过滤器与 `type=...` 调用
+      - [WorkflowExecutor.cpp](dcc_plugin/src/workflow/WorkflowExecutor.cpp) 的导出调用
+      - [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json) 与 [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py)
+      - [MayaInteractiveValidation.py](dcc_plugin/tools/MayaInteractiveValidation.py) 与 [README.md](dcc_plugin/README.md)
+    - 已验证：
+      - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过
+      - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases simple_mesh ...` 定向通过，说明回归脚本已能正常使用新的 `Source *` translator 名称
 ## 环境与工具链说明
 
 ### A. 批处理构建包装脚本已做兼容性修复

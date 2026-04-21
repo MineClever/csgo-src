@@ -37,13 +37,13 @@ global proc doDmxExportArgList(string $version, string $args[])
         $startingDir = $workspaceRoot;
     }
 
-    string $filter = "Valve DMX (*.dmx *.dmxb *.dmxbin);;All Files (*.*)";
+    string $filter = "Source DMX (*.dmx *.dmxb *.dmxbin);;All Files (*.*)";
     string $result[];
     if ($exportAll) {
         $result = `fileDialog2
             -returnFilter 1
             -fileFilter $filter
-            -caption "Export Valve DMX"
+            -caption "Export Source DMX"
             -startingDirectory $startingDir
             -fileMode 0
             -okCaption "Export All"
@@ -55,7 +55,7 @@ global proc doDmxExportArgList(string $version, string $args[])
         $result = `fileDialog2
             -returnFilter 1
             -fileFilter $filter
-            -caption "Export Valve DMX"
+            -caption "Export Source DMX"
             -startingDirectory $startingDir
             -fileMode 0
             -okCaption "Export Selection"

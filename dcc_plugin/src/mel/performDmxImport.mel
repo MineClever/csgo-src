@@ -468,7 +468,7 @@ global proc DmxImportOptions()
     button -e -label "Import" -command ($callback + " " + $parent + " 1") $importBtn;
     button -e -command ($callback + " " + $parent + " 0; hideOptionBox") $saveBtn;
     button -e -command ($setup + " " + $parent + " 1") $resetBtn;
-    setOptionBoxTitle("Valve DMX Import");
+    setOptionBoxTitle("Source DMX Import");
     setOptionBoxHelpTag("DmxImport");
     eval($setup + " " + $parent + " 0");
     showOptionBox();

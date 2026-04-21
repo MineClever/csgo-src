@@ -93,8 +93,8 @@ MStatus WorkflowExecutor::ExecuteExport(const ExportPreset &preset, const MStrin
 
     MGlobal::setOptionVarValue("FileTranslatorOptions", BuildTranslatorOptions(preset));
     status = exportSelection ?
-        MFileIO::exportSelected(normalizedOutputPath, "Valve DMX Export", false) :
-        MFileIO::exportAll(normalizedOutputPath, "Valve DMX Export", false);
+        MFileIO::exportSelected(normalizedOutputPath, "Source DMX Export", false) :
+        MFileIO::exportAll(normalizedOutputPath, "Source DMX Export", false);
 
     if (hadPreviousOptions)
     {

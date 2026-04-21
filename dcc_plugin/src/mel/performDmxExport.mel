@@ -365,7 +365,7 @@ global proc DmxExportOptions(int $exportAll)
     string $resetBtn = getOptionBoxResetBtn();
     button -e -command ($setup + " " + $parent + " 1") $resetBtn;
 
-    setOptionBoxTitle("Valve DMX Export");
+    setOptionBoxTitle("Source DMX Export");
     setOptionBoxHelpTag($commandName);
     eval($setup + " " + $parent + " 0");
     showOptionBox();

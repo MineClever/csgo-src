@@ -2061,7 +2061,7 @@ class GateValidator:
         base_input_path = self.ctx.resolve_input_path(expectation["base_case"])
         base_import_kwargs = dict(
             i=True,
-            type="Valve SMD Import",
+            type="Source SMD Import",
             ignoreVersion=True,
             mergeNamespacesOnClash=False,
             options=expectation["base_import_options"],
@@ -2082,7 +2082,7 @@ class GateValidator:
         cmds.file(
             vta_input_path,
             i=True,
-            type="Valve VTA Import",
+            type="Source VTA Import",
             ignoreVersion=True,
             mergeNamespacesOnClash=False,
             options=expectation["vta_import_options"],
@@ -2152,7 +2152,7 @@ class GateValidator:
         base_input_path = self.ctx.resolve_input_path(expectation["base_case"])
         base_import_kwargs = dict(
             i=True,
-            type="Valve SMD Import",
+            type="Source SMD Import",
             ignoreVersion=True,
             mergeNamespacesOnClash=False,
             options=expectation["base_import_options"],
@@ -2173,7 +2173,7 @@ class GateValidator:
         cmds.file(
             vta_input_path,
             i=True,
-            type="Valve VTA Import",
+            type="Source VTA Import",
             ignoreVersion=True,
             mergeNamespacesOnClash=False,
             options=expectation["vta_import_options"],
@@ -2184,7 +2184,7 @@ class GateValidator:
             f"{self.ctx.make_case_output_name(case_name)}.vta_export_gate.vta",
         )
         cmds.select(selectable_root, replace=True)
-        cmds.file(exported_vta_path, force=True, type="Valve VTA Export", exportSelected=True)
+        cmds.file(exported_vta_path, force=True, type="Source VTA Export", exportSelected=True)
 
         with open(exported_vta_path, "r", encoding="utf-8") as exported_file:
             exported_text = exported_file.read()
@@ -2227,7 +2227,7 @@ class GateValidator:
         cmds.file(
             exported_vta_path,
             i=True,
-            type="Valve VTA Import",
+            type="Source VTA Import",
             ignoreVersion=True,
             mergeNamespacesOnClash=False,
             options=expectation["vta_import_options"],

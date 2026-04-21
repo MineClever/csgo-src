@@ -2,8 +2,8 @@
   "format_configs": {
     "dmx": {
       "extensions": [".dmx", ".dmxb", ".dmxbin"],
-      "import_type": "Valve DMX Import",
-      "export_type": "Valve DMX Export",
+      "import_type": "Source DMX Import",
+      "export_type": "Source DMX Export",
       "export_variants": [
         {
           "name": "text",
@@ -29,8 +29,8 @@
     },
     "smd": {
       "extensions": [".smd"],
-      "import_type": "Valve SMD Import",
-      "export_type": "Valve SMD Export",
+      "import_type": "Source SMD Import",
+      "export_type": "Source SMD Export",
       "export_variants": [
         {
           "name": "text",

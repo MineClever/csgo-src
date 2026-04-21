@@ -131,7 +131,7 @@ The module also now ships a minimal Alembic-style MEL export UI layer. Source fi
 
 `InstallPluginModuleToMaya.bat` copies them into `maya_module/scripts/` during deployment.
 
-`Valve DMX Export` now registers `mayaDmxTranslatorExport` as its translator options script, so the export settings also appear in Maya's file type specific options area. `Valve DMX Import` also registers `mayaDmxTranslatorImport` there, with working `importMaterials / importSkin / importDeltaStates` toggles that are consumed by the importer.
+`Source DMX Export` now registers `mayaDmxTranslatorExport` as its translator options script, so the export settings also appear in Maya's file type specific options area. `Source DMX Import` also registers `mayaDmxTranslatorImport` there, with working `importMaterials / importSkin / importDeltaStates` toggles that are consumed by the importer.
 
 ## Current Import Scope
 
