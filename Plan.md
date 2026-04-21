@@ -1676,6 +1676,55 @@
     - `cmd /c dcc_plugin\\BuildPlugin.bat Release` 通过。
     - 使用 `simple_mesh.dmx` 执行 `Valve SMD Export` 定向导出时，`flipUvV=1` 的首个写出 UV 为 `(0.0, 1.0)`，`flipUvV=0` 为 `(0.0, 0.0)`，与预期一致。
   - 2026-04-21：复核 SMD VTA 子域后，当前未新增 blocker；剩余主线仍集中在 `.vta` exporter、独立 create 模式下的 mesh 重建，以及 normal/flex controller 等更高层语义恢复。
+  - 2026-04-21：已进一步拆分 VTA 剩余实施顺序，建议按以下顺序推进：
+    - 第一步：实现 `.vta` exporter MVP
+      - 仅覆盖“已有 base mesh + blendShape targets -> 写出 `vertexanimation` 段”的最小闭环。
+      - 先不恢复 flex controller、normal controller、QC 级命名语义。
+      - exporter 首版优先从单 mesh 开始，再扩到当前 importer 已支持的多 mesh raw-vertex map 聚合。
+    - 第二步：补 VTA exporter gate
+      - 先用 `MostComplexSampleSet/flex.vta` 或等价最小样例建立“导入 base SMD -> 导入 VTA -> 再导出 VTA”闭环。
+      - gate 首版只验证 `time 1..N` 的 target 数量、关键顶点位移和 sample 数，不先卡 normal/flex 控制器语义。
+    - 第三步：扩到多 mesh VTA exporter
+      - 复用现有 importer 已落地的 `mayaSmdRawVertexMap` 元数据，把多个 mesh 的局部顶点重新汇总回 VTA 的全局 vertex index。
+      - 以 `humans_sdk/male_sdk/male_06_expressions.vta` 作为主 gate。
+    - 第四步：评估 `.vta` 独立 create 模式
+      - 明确是“仅支持在已有 base SMD 场景上工作”还是要额外引入最小 base mesh 重建路径。
+      - 若做 create 模式，优先复用 `.smd` importer 写下的 metadata，而不是单独维护第二套拓扑恢复逻辑。
+    - 第五步：最后再评估 higher-level 语义
+      - normal/flex controller
+      - target alias 命名和 studiomdl/QC 兼容
+      - 与 facial rig / blendShape 控制通道的映射
+  - 2026-04-21：VTA exporter MVP 已开始落地，当前状态如下：
+    - 已新增独立 `Valve VTA Export` translator：
+      - [VtaExportTranslator.h](dcc_plugin/src/exporter_smd/VtaExportTranslator.h)
+      - [VtaExportTranslator.cpp](dcc_plugin/src/exporter_smd/VtaExportTranslator.cpp)
+      - [VtaExportSession.h](dcc_plugin/src/exporter_smd/VtaExportSession.h)
+      - [VtaExportSession.cpp](dcc_plugin/src/exporter_smd/VtaExportSession.cpp)
+    - [PluginMain.cpp](dcc_plugin/src/plugin_smd/PluginMain.cpp) 已注册 `Valve VTA Export`。
+    - 当前 exporter 语义：
+      - 需要先选中带 `mayaSmdRawVertexMap` metadata 的 mesh、meshes 或 import root。
+      - 仅导出 alias 形如 `vta_frame_<time>` 的 `blendShape` target，优先收口 importer 产物的反向闭环。
+      - 会写出 `version=1`、当前场景下的 `nodes/skeleton`，以及 `vertexanimation`。
+      - `time 0` 当前写为 base frame 全量 sample；`time 1..N` 仅写相对 base 有变化的 sample。
+      - 目标几何当前通过 [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 里的 `sculptTarget -regenerate` 包装临时还原，再读取点位与法线。
+    - 当前明确边界：
+      - 已验证单 mesh importer 产物可 roundtrip 回 `.vta`。
+      - 尚未把多 mesh VTA exporter 纳入回归门槛，`humans_sdk/male_06_expressions.vta` 这类样例仍留在下一步。
+      - 仍未覆盖 flex controller / normal controller / QC 更高层语义。
+  - 2026-04-21：VTA exporter 最小 gate 已补齐：
+    - [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json) 已新增 `vta_export_gate_expectations`。
+    - [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py) 已新增 `validate_vta_export_gate()`。
+    - 当前 gate case：
+      - `MostComplexSampleSet/flex.vta`
+      - 流程：导入 `chr_mesh.smd` -> 导入 `flex.vta` -> `Valve VTA Export` -> fresh scene 重新导入导出的 `.vta`
+      - 当前 gate 验证：
+        - 导出文件存在 `vertexanimation` 段
+        - `vertexanimation` frame times 为 `[0, 2, 3]`
+        - re-import 后 `tex_d_bmpShape1` 上恢复出 `2` 个 target
+    - 已验证：
+      - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过
+      - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases MostComplexSampleSet/flex.vta ...` 定向通过
+    - 当前仍未把该 gate 放入默认完整回归，等后续多 mesh exporter 一并收口后再决定是否升级到默认集。
 ## 环境与工具链说明
 
 ### A. 批处理构建包装脚本已做兼容性修复

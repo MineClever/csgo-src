@@ -2135,6 +2135,138 @@ class GateValidator:
         )
         return True
 
+    def validate_vta_export_gate(self, case_name):
+        expectation = self.ctx.config.get_case_expectation("vta_export_gate_expectations", case_name)
+        if not expectation:
+            return False
+
+        normalized_case_name = self.ctx.config.normalize_case_name(case_name)
+        plugin_path = self.ctx.plugin_paths_by_format.get("smd")
+        if not plugin_path:
+            raise RuntimeError(f"Missing SMD plugin while running VTA export case '{case_name}'")
+
+        cmds = self.ctx.cmds
+        cmds.file(new=True, force=True)
+        self.ctx.ensure_plugins_loaded([plugin_path])
+
+        base_input_path = self.ctx.resolve_input_path(expectation["base_case"])
+        base_import_kwargs = dict(
+            i=True,
+            type="Valve SMD Import",
+            ignoreVersion=True,
+            mergeNamespacesOnClash=False,
+            options=expectation["base_import_options"],
+        )
+        before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+        cmds.file(base_input_path, **base_import_kwargs)
+        imported_roots = self.ctx.collect_imported_roots(before_assemblies)
+        selectable_root = None
+        for root_path in imported_roots:
+            if expectation["root_name_substring"] in root_path:
+                selectable_root = root_path
+                break
+        if not selectable_root:
+            raise RuntimeError(f"VTA export gate failed for {normalized_case_name}: could not resolve imported root")
+
+        vta_input_path = self.ctx.resolve_input_path(case_name)
+        cmds.select(selectable_root, replace=True)
+        cmds.file(
+            vta_input_path,
+            i=True,
+            type="Valve VTA Import",
+            ignoreVersion=True,
+            mergeNamespacesOnClash=False,
+            options=expectation["vta_import_options"],
+        )
+
+        exported_vta_path = os.path.join(
+            self.ctx.output_dir,
+            f"{self.ctx.make_case_output_name(case_name)}.vta_export_gate.vta",
+        )
+        cmds.select(selectable_root, replace=True)
+        cmds.file(exported_vta_path, force=True, type="Valve VTA Export", exportSelected=True)
+
+        with open(exported_vta_path, "r", encoding="utf-8") as exported_file:
+            exported_text = exported_file.read()
+        if "vertexanimation" not in exported_text:
+            raise RuntimeError(f"VTA export gate failed for {normalized_case_name}: exported file missed vertexanimation block")
+
+        exported_frame_times = []
+        in_vertexanimation = False
+        for line in exported_text.splitlines():
+            stripped = line.strip()
+            if stripped == "vertexanimation":
+                in_vertexanimation = True
+                continue
+            if in_vertexanimation and stripped == "end":
+                break
+            if in_vertexanimation and stripped.startswith("time "):
+                exported_frame_times.append(int(stripped.split()[1]))
+        if exported_frame_times != expectation["expected_frame_times"]:
+            raise RuntimeError(
+                f"VTA export gate failed for {normalized_case_name}: expected frame times "
+                f"{expectation['expected_frame_times']} got {exported_frame_times}"
+            )
+
+        cmds.file(new=True, force=True)
+        self.ctx.ensure_plugins_loaded([plugin_path])
+        before_assemblies = set(cmds.ls(assemblies=True, long=True) or [])
+        cmds.file(base_input_path, **base_import_kwargs)
+        imported_roots = self.ctx.collect_imported_roots(before_assemblies)
+        selectable_root = None
+        for root_path in imported_roots:
+            if expectation["root_name_substring"] in root_path:
+                selectable_root = root_path
+                break
+        if not selectable_root:
+            raise RuntimeError(
+                f"VTA export gate failed for {normalized_case_name}: could not resolve imported root during reimport"
+            )
+
+        cmds.select(selectable_root, replace=True)
+        cmds.file(
+            exported_vta_path,
+            i=True,
+            type="Valve VTA Import",
+            ignoreVersion=True,
+            mergeNamespacesOnClash=False,
+            options=expectation["vta_import_options"],
+        )
+
+        visible_meshes = [
+            mesh for mesh in (cmds.ls(type="mesh", long=True) or [])
+            if not cmds.getAttr(mesh + ".intermediateObject")
+        ]
+        mesh_to_target_count = {}
+        for mesh_path in visible_meshes:
+            history = cmds.listHistory(mesh_path, pruneDagObjects=True) or []
+            blendshapes = [node for node in history if cmds.nodeType(node) == "blendShape"]
+            if not blendshapes:
+                continue
+            mesh_to_target_count[mesh_path] = len(cmds.listAttr(blendshapes[0] + ".w", multi=True) or [])
+
+        for requirement in expectation["expected_blendshape_targets"]:
+            matching_meshes = [
+                mesh_path for mesh_path in mesh_to_target_count
+                if mesh_path.endswith(requirement["mesh_suffix"])
+            ]
+            if len(matching_meshes) != 1:
+                raise RuntimeError(
+                    f"VTA export gate failed for {normalized_case_name}: expected one mesh ending with "
+                    f"{requirement['mesh_suffix']} got {matching_meshes}"
+                )
+            actual_target_count = mesh_to_target_count[matching_meshes[0]]
+            if actual_target_count != requirement["target_count"]:
+                raise RuntimeError(
+                    f"VTA export gate failed for {normalized_case_name}: mesh {matching_meshes[0]} "
+                    f"expected {requirement['target_count']} targets got {actual_target_count}"
+                )
+
+        self.ctx.write_marker(
+            os.path.join(self.ctx.output_dir, f"{self.ctx.make_case_output_name(case_name)}.vta_export_gate.txt")
+        )
+        return True
+
 
 class RegressionRunner:
     def __init__(self, cmds, config, plugin_paths_by_format, sample_dir, output_dir):
@@ -2189,6 +2321,9 @@ class RegressionRunner:
         label = case_name if not import_options else f"{case_name} [{import_options}]"
         sys.stdout.write(f"[maya_dmx_case] {label}\n")
         sys.stdout.flush()
+
+        if not import_options and self.validator.validate_vta_export_gate(case_name):
+            return
 
         if not import_options and self.validator.validate_vta_import_gate(case_name):
             return

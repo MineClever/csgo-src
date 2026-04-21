@@ -5,6 +5,10 @@ add_library(maya_export_smd STATIC
     SmdExportSession.h
     SmdExportTranslator.cpp
     SmdExportTranslator.h
+    VtaExportSession.cpp
+    VtaExportSession.h
+    VtaExportTranslator.cpp
+    VtaExportTranslator.h
 )
 
 target_link_libraries(maya_export_smd PUBLIC maya_common_smd)
