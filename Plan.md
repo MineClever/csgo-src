@@ -1732,6 +1732,38 @@
     - 当前仍未补齐：
       - 尚未把这条能力纳入 `MayaBatchRegression.config.json` 的独立 gate
       - 尚未覆盖 mesh / control / 其他非 joint transform 之外的更宽节点域
+  - 2026-04-21：已补充评估 `mayaSmdRawVertexMap` 的可见性边界：
+    - 结论：不建议把 `mayaSmdRawVertexMap` 直接降成“仅会话内临时数据”。
+    - 原因：
+      - [VtaSceneImporter.cpp](dcc_plugin/src/importer_smd/VtaSceneImporter.cpp) 当前依赖该映射把 VTA 全局 raw vertex index 分发回当前 Maya 场景里的多个 mesh。
+      - [VtaExportSession.cpp](dcc_plugin/src/exporter_smd/VtaExportSession.cpp) 当前同样依赖该映射，把多个 mesh 的局部顶点重新汇总回 VTA 的全局 vertex index。
+      - 这意味着它不仅服务于“单次导入过程中的临时 dedup”，而是服务于“base SMD 导入完成后，后续独立执行 VTA import/export”的跨步骤数据桥接。
+      - 如果改成纯临时内存数据，则以下主路径会直接失效：
+        - 先导入 reference SMD，保存场景，稍后重新打开再导入 VTA
+        - 先导入 reference SMD + VTA，再在另一轮操作里执行 `Source VTA Export`
+        - `useSceneRoot=1` 或无选择 fallback 下，VTA 通过扫描 scene mesh 自动匹配 base mesh
+    - 当前更合理的方向：
+      - 保留该映射为持久内部数据，但不将其作为普通用户可见属性暴露。
+      - 第一阶段建议至少把它改成 hidden/internal-use 属性，避免在常规 Attribute Editor / Channel Box 里打扰用户。
+      - 若后续还要继续收口，再评估是否迁移到更内聚的内部载体，例如：
+        - 隐藏 message + data holder 节点
+        - Maya blind data / component tag / 更底层的 mesh 附加数据
+        - 仅对 VTA 工作流可见的专用 metadata 节点
+      - 但这些替代方案都要先证明：
+        - 可跨保存/重开稳定持久化
+        - 可在多 mesh VTA import/export 中稳定恢复
+        - 不会增加比当前字符串属性更高的维护成本与宿主兼容风险
+    - 当前建议：
+      - 短期不要删除 `mayaSmdRawVertexMap`
+      - 先把它收敛成“隐藏但持久”的内部属性，再决定是否继续迁移底层存储形态
+  - 2026-04-21：已按上述结论落第一步收口：
+    - [SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 现在在创建 `mayaSmdRawVertexMap` 时会显式把该属性标成 hidden，且保持 non-keyable。
+    - 这样当前行为变为：
+      - `mayaSmdRawVertexMap` 仍持久保存在 mesh 上，保证 VTA import/export、多 mesh 汇总、scene reopen 之后的后续操作都不退化
+      - 但它不再作为普通用户可见属性暴露在常规使用面上
+    - 已验证：
+      - `cmake --build dcc_plugin\\build --config Release` 通过
+      - 重新导入 `male_06_reference.smd` 后，mesh 上的 `mayaSmdRawVertexMap` 仍存在，但 `attributeQuery -hidden` 为 `true`，`keyable` 为 `false`
   - 2026-04-21：已为 SMD 导出 MEL UI 补齐 `Flip UV V (1 - V)` 选项，并与 SMD 导入侧语义对齐：
     - [mayaSmdTranslatorExport.mel](dcc_plugin/src/mel/mayaSmdTranslatorExport.mel) 已新增英文 UI 与 annotation。
     - [performSmdExport.mel](dcc_plugin/src/mel/performSmdExport.mel) 已新增 `flipUvV` 的默认值、UI 回填与 option 串收集。

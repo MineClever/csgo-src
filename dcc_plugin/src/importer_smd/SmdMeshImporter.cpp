@@ -19,6 +19,7 @@
 #include <maya/MDagPathArray.h>
 #include <maya/MDGModifier.h>
 #include <maya/MFloatArray.h>
+#include <maya/MFnAttribute.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnMatrixData.h>
@@ -293,7 +294,7 @@ std::string SanitizeMeshName(std::string value)
     return value.empty() ? std::string("smd_mesh") : value;
 }
 
-MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const std::string &value)
+MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const std::string &value, bool hidden = false)
 {
     MStatus status;
     MFnDependencyNode nodeFn(nodeObject, &status);
@@ -322,6 +323,7 @@ MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const 
         attributeFn.setStorable(true);
         attributeFn.setReadable(true);
         attributeFn.setKeyable(false);
+        attributeFn.setHidden(hidden);
 
         status = nodeFn.addAttribute(attributeObject);
         if (!status)
@@ -329,6 +331,14 @@ MStatus SetStringAttribute(MObject nodeObject, const char *attributeName, const 
             return MS::kFailure;
         }
     }
+
+    MFnAttribute attributeFn(attributeObject, &status);
+    if (status)
+    {
+        attributeFn.setKeyable(false);
+        attributeFn.setHidden(hidden);
+    }
+    status = MS::kSuccess;
 
     MPlug attributePlug = nodeFn.findPlug(attributeName, true, &status);
     if (!status)
@@ -773,7 +783,8 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
     status = smd_mesh_import_impl::SetStringAttribute(
         meshObject,
         smd_mesh_import_impl::kSmdRawVertexMapAttribute,
-        SerializeRawVertexMap(rawToSharedVertexIndex));
+        SerializeRawVertexMap(rawToSharedVertexIndex),
+        true);
     if (!status)
     {
         return maya_smd::ReportError(
