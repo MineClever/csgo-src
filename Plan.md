@@ -1728,6 +1728,22 @@
       - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过
       - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases MostComplexSampleSet/flex.vta ...` 定向通过
     - 当前仍未把该 gate 放入默认完整回归，等后续多 mesh exporter 一并收口后再决定是否升级到默认集。
+  - 2026-04-21：已补多 mesh VTA exporter gate：
+    - [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json) 的 `vta_export_gate_expectations` 已新增：
+      - `humans_sdk/male_sdk/male_06_expressions.vta`
+    - [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py) 的 `validate_vta_export_gate()` 已补齐：
+      - `expected_mesh_without_blendshape` 校验
+      - 因此现在不仅会验证多 mesh roundtrip 后的 target 数量，也会验证本不应收到 VTA target 的 mesh 不会被误挂 `blendShape`
+    - 当前 `male_06` 多 mesh exporter gate 验证内容：
+      - `Source SMD Import` 导入 `male_06_reference.smd`
+      - `Source VTA Import` 导入 `male_06_expressions.vta`
+      - `Source VTA Export` 导出新 `.vta`
+      - fresh scene 重新导入导出的 `.vta`
+      - 校验导出 `vertexanimation` frame times 为 `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 30, 31, 32, 33, 34]`
+      - 校验 `eyeball_l/r`、`mouth`、`sandro_facemap` 的 target 数量分别为 `11 / 11 / 21 / 32`
+      - 校验 `citizen_sheet_tgaShape1` 不会错误收到 `blendShape`
+    - 已验证：
+      - `mayapy dcc_plugin\tools\MayaBatchRegression.py --plugin ...maya_dmx.mll --plugin-smd ...maya_smd.mll --cases humans_sdk/male_sdk/male_06_expressions.vta` 定向通过
   - 2026-04-21：已补 VTA importer 的 import-root 匹配收口：
     - [VtaSceneImporter.cpp](dcc_plugin/src/importer_smd/VtaSceneImporter.cpp) 现在在解析用户选择时，会优先把 `chr_mesh` / `pelvis` 这类 joint 根上跳到最近的非 joint 祖先，再去搜索带 `mayaSmdRawVertexMap` 的 mesh。
     - 同时保留祖先回溯与去重逻辑，因此用户现在不必强制只选 `smd_import_root#`；选中 import hierarchy 下的文件根 joint 或骨骼根节点也能命中对应 base mesh。
@@ -1741,6 +1757,9 @@
       - 先 `Source SMD Import` 一个 reference SMD 到 scene root
       - 再不做任何选择，直接执行 `Source VTA Import`
     - 已按用户给出的 `male_06_reference.smd` / `male_06_expressions.vta` 组合验证：强制重载最新插件后二次导入不再报 “requires selecting the target mesh” ，而是会在场景中生成 `4` 个 `blendShape` 节点并完成多 mesh VTA target 分发。
+    - 已进一步做数值核对：
+      - 在强制卸载并重载最新 `maya_smd.mll` 后，`|sandro_facemap_tga_grp1|sandro_facemap_tgaShape1` 上 `vta_frame_1` 的 object-space 顶点会与 [male_06_expressions.vta](dcc_plugin/samples/humans_sdk/male_sdk/male_06_expressions.vta) 原始 `vertexanimation` sample 逐点对齐。
+      - 当前抽样最大误差约为 `4e-06`，属于浮点读写误差，说明这条 case 下 importer 读取到的 VTA frame 数据本身是正确的。
     - 说明：
       - 这条自动匹配只在 `sceneRoot` / 现有对象合并语义下作为 fallback 生效，不改变默认“显式选择目标 mesh / hierarchy”的主行为。
       - 若在同一个 Maya 会话里覆盖过 `.mll`，验证前需重载插件或重启 Maya，避免继续跑旧二进制。

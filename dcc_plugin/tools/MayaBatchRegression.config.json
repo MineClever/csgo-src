@@ -545,6 +545,20 @@
       "expected_blendshape_targets": [
         {"mesh_suffix": "tex_d_bmpShape1", "target_count": 2}
       ]
+    },
+    "humans_sdk/male_sdk/male_06_expressions.vta": {
+      "base_case": "humans_sdk/male_sdk/male_06_reference.smd",
+      "base_import_options": "useSceneRoot=0;importMode=create",
+      "vta_import_options": "useSceneRoot=0;importMode=create",
+      "root_name_substring": "smd_import_root",
+      "expected_frame_times": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 30, 31, 32, 33, 34],
+      "expected_blendshape_targets": [
+        {"mesh_suffix": "eyeball_l_tgaShape1", "target_count": 11},
+        {"mesh_suffix": "eyeball_r_tgaShape1", "target_count": 11},
+        {"mesh_suffix": "mouth_tgaShape1", "target_count": 21},
+        {"mesh_suffix": "sandro_facemap_tgaShape1", "target_count": 32}
+      ],
+      "expected_mesh_without_blendshape": ["citizen_sheet_tgaShape1"]
     }
   }
 }

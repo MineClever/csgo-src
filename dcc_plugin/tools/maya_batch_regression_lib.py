@@ -2268,6 +2268,19 @@ class GateValidator:
                     f"expected {requirement['target_count']} targets got {actual_target_count}"
                 )
 
+        for mesh_suffix in expectation.get("expected_mesh_without_blendshape", []):
+            matching_meshes = [mesh_path for mesh_path in visible_meshes if mesh_path.endswith(mesh_suffix)]
+            if len(matching_meshes) != 1:
+                raise RuntimeError(
+                    f"VTA export gate failed for {normalized_case_name}: expected one mesh ending with "
+                    f"{mesh_suffix} got {matching_meshes}"
+                )
+            if matching_meshes[0] in mesh_to_target_count:
+                raise RuntimeError(
+                    f"VTA export gate failed for {normalized_case_name}: mesh {matching_meshes[0]} "
+                    f"should not receive a blendShape target set"
+                )
+
         self.ctx.write_marker(
             os.path.join(self.ctx.output_dir, f"{self.ctx.make_case_output_name(case_name)}.vta_export_gate.txt")
         )
