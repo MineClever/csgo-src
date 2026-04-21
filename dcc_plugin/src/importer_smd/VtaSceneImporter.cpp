@@ -142,6 +142,21 @@ bool LoadRawVertexMap(const MObject &meshObject, std::vector<int> &rawToLocalVer
     return ParseRawVertexMap(mappingPlug.asString(), rawToLocalVertexIndex);
 }
 
+void FilterBindingsWithRawVertexMap(
+    const std::vector<VtaMeshBinding> &candidateBindings,
+    std::vector<VtaMeshBinding> &filteredBindings)
+{
+    filteredBindings.clear();
+    filteredBindings.reserve(candidateBindings.size());
+    for (VtaMeshBinding binding : candidateBindings)
+    {
+        if (LoadRawVertexMap(binding.meshPath.node(), binding.rawToLocalVertexIndex))
+        {
+            filteredBindings.push_back(binding);
+        }
+    }
+}
+
 void CollectSelectedMeshBindingsRecursive(const MDagPath &candidatePath, std::vector<VtaMeshBinding> &bindings)
 {
     MStatus status;
@@ -215,6 +230,53 @@ void CollectSelectedMeshBindingsRecursive(const MDagPath &candidatePath, std::ve
         binding.transformPath = candidatePath;
         bindings.push_back(binding);
     }
+}
+
+bool ResolveBindingsFromCandidatePath(const MDagPath &candidatePath, std::vector<VtaMeshBinding> &bindings)
+{
+    std::vector<VtaMeshBinding> candidateBindings;
+    CollectSelectedMeshBindingsRecursive(candidatePath, candidateBindings);
+    FilterBindingsWithRawVertexMap(candidateBindings, bindings);
+    return !bindings.empty();
+}
+
+bool ResolveBindingsFromSelectionPathOrAncestors(const MDagPath &selectionPath, std::vector<VtaMeshBinding> &bindings)
+{
+    bindings.clear();
+
+    MDagPath candidatePath = selectionPath;
+    while (candidatePath.isValid() && candidatePath.node().hasFn(MFn::kJoint))
+    {
+        if (candidatePath.pop() != MS::kSuccess)
+        {
+            break;
+        }
+    }
+
+    if (!candidatePath.isValid())
+    {
+        candidatePath = selectionPath;
+    }
+
+    while (candidatePath.isValid())
+    {
+        if (ResolveBindingsFromCandidatePath(candidatePath, bindings))
+        {
+            return true;
+        }
+
+        if (candidatePath.length() == 0)
+        {
+            break;
+        }
+
+        if (candidatePath.pop() != MS::kSuccess)
+        {
+            break;
+        }
+    }
+
+    return false;
 }
 } // namespace vta_scene_importer_detail
 
@@ -358,7 +420,9 @@ MStatus VtaSceneImporter::resolveTargetMeshes(std::vector<VtaMeshBinding> &bindi
     MStatus status = MGlobal::getActiveSelectionList(selection);
     if (!status || selection.length() == 0)
     {
-        return maya_smd::ReportError("maya_smd: VTA import requires selecting the target mesh, meshes, or import root.");
+        return maya_smd::ReportError(
+            "maya_smd: VTA import follows Source behavior and requires selecting the existing target mesh, "
+            "meshes, or imported hierarchy from the base SMD.");
     }
 
     for (unsigned int index = 0; index < selection.length(); ++index)
@@ -371,25 +435,34 @@ MStatus VtaSceneImporter::resolveTargetMeshes(std::vector<VtaMeshBinding> &bindi
             continue;
         }
 
-        CollectSelectedMeshBindingsRecursive(candidatePath, bindings);
-    }
-
-    std::vector<VtaMeshBinding> filteredBindings;
-    filteredBindings.reserve(bindings.size());
-    for (VtaMeshBinding &binding : bindings)
-    {
-        if (LoadRawVertexMap(binding.meshPath.node(), binding.rawToLocalVertexIndex))
+        std::vector<VtaMeshBinding> resolvedBindings;
+        if (ResolveBindingsFromSelectionPathOrAncestors(candidatePath, resolvedBindings))
         {
-            filteredBindings.push_back(binding);
+            bindings.insert(bindings.end(), resolvedBindings.begin(), resolvedBindings.end());
         }
     }
 
-    bindings.swap(filteredBindings);
+    std::sort(
+        bindings.begin(),
+        bindings.end(),
+        [](const VtaMeshBinding &lhs, const VtaMeshBinding &rhs) {
+            return std::string(lhs.meshPath.fullPathName().asChar()) <
+                std::string(rhs.meshPath.fullPathName().asChar());
+        });
+    bindings.erase(
+        std::unique(
+            bindings.begin(),
+            bindings.end(),
+            [](const VtaMeshBinding &lhs, const VtaMeshBinding &rhs) {
+                return lhs.meshPath.fullPathName() == rhs.meshPath.fullPathName();
+            }),
+        bindings.end());
+
     if (bindings.empty())
     {
         return maya_smd::ReportError(
             "maya_smd: VTA import could not find selected meshes with SMD raw-vertex metadata. "
-            "Re-import the base SMD with the current plugin first.");
+            "Select the imported SMD mesh, a mesh group, or any node under the matching imported hierarchy.");
     }
 
     return MS::kSuccess;

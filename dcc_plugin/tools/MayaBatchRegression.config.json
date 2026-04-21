@@ -511,6 +511,16 @@
     }
   },
   "vta_import_gate_expectations": {
+    "MostComplexSampleSet/flex.vta": {
+      "base_case": "MostComplexSampleSet/chr_mesh.smd",
+      "base_import_options": "useSceneRoot=0;importMode=create",
+      "vta_import_options": "useSceneRoot=0;importMode=create",
+      "root_name_substring": "smd_import_root",
+      "selection_node_suffix": "|chr_mesh",
+      "expected_blendshape_targets": [
+        {"mesh_suffix": "tex_d_bmpShape1", "target_count": 2}
+      ]
+    },
     "humans_sdk/male_sdk/male_06_expressions.vta": {
       "base_case": "humans_sdk/male_sdk/male_06_reference.smd",
       "base_import_options": "useSceneRoot=0;importMode=create",

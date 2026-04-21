@@ -1675,7 +1675,10 @@
   - 2026-04-21：定向验证已完成：
     - `cmd /c dcc_plugin\\BuildPlugin.bat Release` 通过。
     - 使用 `simple_mesh.dmx` 执行 `Valve SMD Export` 定向导出时，`flipUvV=1` 的首个写出 UV 为 `(0.0, 1.0)`，`flipUvV=0` 为 `(0.0, 0.0)`，与预期一致。
-  - 2026-04-21：复核 SMD VTA 子域后，当前未新增 blocker；剩余主线仍集中在 `.vta` exporter、独立 create 模式下的 mesh 重建，以及 normal/flex controller 等更高层语义恢复。
+  - 2026-04-21：复核后取消 `.vta` 独立 `create` 模式下的 mesh 重建计划。原因：
+    - 现有外部 VTA 样例普遍不带 `triangles`，无法像 SMD 一样独立恢复完整 mesh 拓扑。
+    - Source 语义里 VTA 本就依附已有 base mesh / reference SMD，而不是独立建模格式。
+    - 后续边界改为：VTA importer 继续只面向“已存在且拓扑匹配的 base SMD 场景”，不再承诺单文件独立重建 mesh。
   - 2026-04-21：已进一步拆分 VTA 剩余实施顺序，建议按以下顺序推进：
     - 第一步：实现 `.vta` exporter MVP
       - 仅覆盖“已有 base mesh + blendShape targets -> 写出 `vertexanimation` 段”的最小闭环。
@@ -1687,9 +1690,9 @@
     - 第三步：扩到多 mesh VTA exporter
       - 复用现有 importer 已落地的 `mayaSmdRawVertexMap` 元数据，把多个 mesh 的局部顶点重新汇总回 VTA 的全局 vertex index。
       - 以 `humans_sdk/male_sdk/male_06_expressions.vta` 作为主 gate。
-    - 第四步：评估 `.vta` 独立 create 模式
-      - 明确是“仅支持在已有 base SMD 场景上工作”还是要额外引入最小 base mesh 重建路径。
-      - 若做 create 模式，优先复用 `.smd` importer 写下的 metadata，而不是单独维护第二套拓扑恢复逻辑。
+    - 第四步：继续收口 base-scene 匹配
+      - 优先处理“用户选中 import root 下的骨骼根、模型根或其他层级节点时，VTA 仍能回溯命中对应 SMD mesh”的匹配问题。
+      - 不再推进 `.vta` 独立 create 模式。
     - 第五步：最后再评估 higher-level 语义
       - normal/flex controller
       - target alias 命名和 studiomdl/QC 兼容
@@ -1725,6 +1728,13 @@
       - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过
       - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases MostComplexSampleSet/flex.vta ...` 定向通过
     - 当前仍未把该 gate 放入默认完整回归，等后续多 mesh exporter 一并收口后再决定是否升级到默认集。
+  - 2026-04-21：已补 VTA importer 的 import-root 匹配收口：
+    - [VtaSceneImporter.cpp](dcc_plugin/src/importer_smd/VtaSceneImporter.cpp) 现在在解析用户选择时，会优先把 `chr_mesh` / `pelvis` 这类 joint 根上跳到最近的非 joint 祖先，再去搜索带 `mayaSmdRawVertexMap` 的 mesh。
+    - 同时保留祖先回溯与去重逻辑，因此用户现在不必强制只选 `smd_import_root#`；选中 import hierarchy 下的文件根 joint 或骨骼根节点也能命中对应 base mesh。
+    - 错误提示也已改为显式强调 Source 语义：VTA 需要依附现有 base SMD 场景，而不是独立 create。
+    - 已验证：
+      - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过。
+      - 真实 `mayapy` 下，先导入 `MostComplexSampleSet/chr_mesh.smd`，再只选 `|smd_import_root1|chr_mesh` 导入 `MostComplexSampleSet/flex.vta`，当前已可稳定生成 `mayaVtaBlendShape1` 与 `vta_frame_2/3` target。
   - 2026-04-21：已统一将导入导出 file translator 名称从 `Valve * Import/Export` 改为 `Source * Import/Export`：
     - DMX：
       - `Source DMX Import`

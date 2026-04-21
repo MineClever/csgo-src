@@ -2070,10 +2070,16 @@ class GateValidator:
         cmds.file(base_input_path, **base_import_kwargs)
         imported_roots = self.ctx.collect_imported_roots(before_assemblies)
         selectable_root = None
-        for root_path in imported_roots:
-            if expectation["root_name_substring"] in root_path:
-                selectable_root = root_path
-                break
+        selection_node_suffix = expectation.get("selection_node_suffix")
+        if selection_node_suffix:
+            candidate_nodes = cmds.ls("*" + selection_node_suffix, long=True) or []
+            if len(candidate_nodes) == 1:
+                selectable_root = candidate_nodes[0]
+        if not selectable_root:
+            for root_path in imported_roots:
+                if expectation["root_name_substring"] in root_path:
+                    selectable_root = root_path
+                    break
         if not selectable_root:
             raise RuntimeError(f"VTA import gate failed for {normalized_case_name}: could not resolve imported root")
 
