@@ -13,7 +13,7 @@
 
 namespace dmx_export_impl
 {
-namespace
+namespace dmx_export_document_correction_detail
 {
 
 using simple_dmx::Attribute;
@@ -450,12 +450,14 @@ void CorrectAnimationChannels(
     }
 }
 
-} // namespace
+} // namespace dmx_export_document_correction_detail
 
 MStatus ApplyDocumentTransformCorrection(
     simple_dmx::Element *modelElement,
     const dcc_export_transform::ExportTransformPolicy &policy)
 {
+    using namespace dmx_export_document_correction_detail;
+
     if (!modelElement || policy.IsIdentity())
     {
         return modelElement ? MStatus::kSuccess : MStatus::kFailure;
