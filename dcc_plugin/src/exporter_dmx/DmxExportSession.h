@@ -20,7 +20,6 @@ public:
 private:
     MStatus Initialize();
     MStatus BuildDocument();
-    MStatus ApplyDocumentTransformCorrection(simple_dmx::Element *modelElement) const;
     MStatus Serialize();
     MStatus WriteOutput() const;
 

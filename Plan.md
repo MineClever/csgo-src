@@ -289,6 +289,363 @@
     - clip / sequence 结构 gate：
       - 短期：继续校验“单 animationList / 单 channelsClip / 单 timeFrame”结构稳定。
       - 中期：若引入多 clip 样例，再新增独立 gate；在此之前不把多 clip 失败记到骨骼/标量/facial 域里。
+  - 2026-04-21：已补充评估 `DmeAnimationList / DmeChannelsClip / DmeTimeFrame` 在 Maya 中的等效语义边界：
+    - Source datamodel 原始语义：
+      - `DmeAnimationList` 本质上只是 `animations` 数组容器，本身不负责求值；真正的时间映射和通道求值发生在每个 `DmeChannelsClip` 上。
+      - `DmeChannelsClip` 是“带 `timeFrame` 视图的一组 channel”，其 `ToChildMediaTime()` 会把上层 clip time 映射到 channel/log 的 child media time，再驱动内部 `DmeChannel`。
+      - `DmeTimeFrame` 是完整时间变换：`start + duration + offset + scale` 一起定义 parent time 与 child media time 的映射，不只是 duration/fps 元数据。
+    - 当前 Maya importer 的等效语义：
+      - `DmeAnimationList` 只被当成 `animationList.animations[]` 的遍历入口；不会在 Maya 中建立独立 animation container、shot、track 或 clip-switching 宿主对象。
+      - `DmeChannelsClip` 当前等价于“一段直接写入 Maya 时间轴或 animation layer 的 bake 片段”；插件会顺序遍历 clip 内 channel，把 `position/orientation/flexWeight/float` 日志直接写成 animCurve。
+      - `DmeTimeFrame` 当前只等效实现了 `duration -> Maya 播放区间` 这一子集；导入后时间轴固定从 `0` 到 `duration`，未消费 `start`、`offset`、`scale` 的完整 retime 语义。
+    - 当前 Maya exporter 的等效语义：
+      - 固定输出单个 `DmeAnimationList`，它只承担“把本次导出的单个 clip 包起来”的结构职责。
+      - 固定输出单个 `DmeChannelsClip`，语义是“从 Maya DAG / blendShape / control plug 采样得到的一段 bake 动画”，不是 Maya Trax clip、Time Editor clip 或 shot。
+      - 固定输出单个 `DmeTimeFrame`，目前只写 `duration`；`frameRate` 还被写在 `timeFrame` 上，而样例和 Valve 侧常见语义更接近 clip 级属性。`start/offset/scale` 仍未导出。
+    - 结论：
+      - 若只看当前插件，三者在 Maya 中最接近的等效关系应理解为：
+        - `DmeAnimationList` ≈ 导入/导出文件里的 clip 列表壳
+        - `DmeChannelsClip` ≈ 一段 bake 后的动画片段
+        - `DmeTimeFrame` ≈ 该片段的最小时长信息，而非完整 retime/clip-placement 模型
+      - 因此当前实现并不等价于 Maya 的 Trax / Time Editor / shot 体系，只等价于“把一个 Source animation clip 展平后写入 Maya animCurve”。
+    - 后续建议：
+      - 若后续要宣称更完整等效语义，至少还需要补齐 `DmeTimeFrame.start/offset/scale` 的导入导出与求值边界。
+      - 多 `DmeChannelsClip` 的选择、切换、命名约定和 sequence/take/shot 映射，仍应继续留在未承诺范围，不要误表述成 Maya 已有直接等价宿主。
+  - 2026-04-21：已评估把当前 SMD/DMX `AnimationLayer` 主线迁移到 Maya clip / Trax / Time Editor 的可行性：
+    - 当前实现事实：
+      - SMD / DMX importer 的动画写入主线是“逐 plug 直接写 animCurve，必要时写到 `animLayer`”，并深度依赖：
+        - update / append / animationOnly 对现有场景对象的复用
+        - source delta 参考采样
+        - override / additive layer 行为
+        - 现有 exporter 直接从场景 DAG / plug / animCurve 采样回 DMX
+      - 公共层当前明确使用 `animLayer -e -attribute`、`animLayer -q -findCurveForPlug`、`setKeyframe -animLayer` 作为 Maya 2022.5 下的稳定写入路径。
+    - 对 Trax 的评估：
+      - Trax 的 clip 语义更接近“为 character set 打包一组 animation curves 后做非线性编排”。
+      - 这与当前 importer 的“把骨骼、blendShape、control scalar 直接覆盖/追加到现有场景节点”并不等价。
+      - 若迁移到 Trax，需要额外维护 character set、clip/source clip、对象集成员和 update 映射；复杂度明显高于当前 layer 模型。
+      - 对 SMD 尤其不合适：SMD 本身只是线性 skeleton frame 序列，没有天然多 clip / reuse / remix 语义，强行包进 Trax 收益很低。
+    - 对 Time Editor 的评估：
+      - 官方文档明确指出 Time Editor 不支持传统 Animation Layers；被 Time Editor clip 驱动的对象不能按当前常规场景 keying 方式直接打 key，而需要 clip layers / animation source 工作流。
+      - 这与当前 importer 的逐 plug 覆写、source delta additive layer、场景层参考采样模型直接冲突。
+      - 若改成 Time Editor 主线，source delta、replace/update、append 以及现有回归脚本都要重做，不是局部替换。
+      - 现有 exporter 仍按场景 plug 上游 animCurve 采样；若动画主要转移到 Time Editor source/clip 容器，导出路径也需要单独适配。
+    - 结论：
+      - 不建议把当前 SMD/DMX 的 `AnimationLayer` 主实现迁移为 Trax 或 Time Editor。
+      - `animLayer` 继续作为当前 Maya 2022.5 baseline 下最贴近“对现有场景对象做增量写入 / delta 覆盖”的稳定宿主。
+      - 若后续要支持 clip 宿主，更合理的方向是“新增可选发布层”，而不是替换当前 importer 主线：
+        - 先维持现有 animCurve / animLayer 导入
+        - 再把已落地动画可选封装成 Trax clip 或 Time Editor clip，作为浏览、复用或非线性编辑附加能力
+      - 优先级上，应先补齐 DMX 自身 `clip/timeFrame` 完整语义，再决定是否做 Maya 高层 clip 宿主对接。
+  - 2026-04-21：已补充评估 Maya Clip 与 `DmeChannelsClip` 的差别：
+    - `DmeChannelsClip` 的中心语义是“带 `timeFrame` 的 channel 集合”：
+      - 它持有 `channels[]`，每个 channel 直接绑定 `toElement.toAttribute + log`。
+      - 求值时依赖 `timeFrame` 把 clip time 映射到 child media time，再驱动内部 channel/log。
+      - 它本质更接近“可被求值的数据片段 + 时间映射壳”，不是高层非线性编辑宿主。
+    - Maya Clip 的中心语义是“非线性动画实例”：
+      - Trax clip 是一组角色动画曲线的 bundle，可移动、裁剪、循环、混合、time warp，并区分 source clip 与 regular clip。
+      - Time Editor clip 是 animation source 在轨道上的实例，重点是编排、复用、重排和 clip layer 编辑。
+      - 它们强调的是“实例化与非线性编辑行为”，而不是“每条曲线如何绑定到目标属性”的底层数据模型。
+    - 两者的关键差别：
+      - 数据绑定层级不同：
+        - `DmeChannelsClip` 显式持有每条通道到目标属性的绑定。
+        - Maya Clip 更像把现有场景动画打包成可复用片段，底层绑定被宿主系统吸收。
+      - 时间语义不同：
+        - `DmeChannelsClip` 的 `DmeTimeFrame` 直接定义 `start/duration/offset/scale` 映射。
+        - Maya Clip 更强调 clip 的 source in/out、trim、loop、blend、warp、track placement。
+      - 编辑模型不同：
+        - `DmeChannelsClip` 主要面向求值和导入导出。
+        - Maya Clip 主要面向非线性编辑、片段复用和时间编排。
+      - 实例复用不同：
+        - `DmeChannelsClip` 本身不是“source + instance”二层模型。
+        - Trax / Time Editor clip 天然区分 source 和实例，可一源多用。
+      - 场景约束不同：
+        - `DmeChannelsClip` 可以天然覆盖 transform、float、flexWeight 等异构 channel。
+        - Maya Clip 往往要求先把场景动画纳入各自宿主规则；Trax 偏 character set，Time Editor 偏 animation source/track。
+    - 结论：
+      - `DmeChannelsClip` 不应直接被理解成 Maya Clip；它更接近“clip 内部的已绑定动画数据 + 时间映射”。
+      - 若一定要找最接近的 Maya 概念，`DmeChannelsClip` 更像“一个 animation source/clip 可求值内容体”，而不是 Trax / Time Editor 里用户直接拖拽操作的 clip 实例。
+  - 2026-04-21：已补充评估 `DmeChannelsClip` 是否可以转为 Maya `AnimationLayer`：
+    - 结论分两层：
+      - 作为“导入落地手段”可以。
+      - 作为“严格语义等价物”不可以。
+    - 可以落到 `AnimationLayer` 的原因：
+      - `DmeChannelsClip` 的核心内容是“一组目标属性 + 对应关键帧样本”。
+      - 当 importer 已经把 `DmeChannel -> Maya plug` 解析完成后，确实可以把这些 key 写到：
+        - base animCurve
+        - 或某个 `animLayer`
+      - 当前 SMD / DMX importer 也正是这样做的：普通 case 写 base curves，需要增量/覆盖时写 `animLayer`。
+    - 不能视作严格等价的原因：
+      - `DmeChannelsClip` 自身是数据容器 + 时间映射壳，`AnimationLayer` 是“对同一批 scene plugs 做叠加/覆盖求值”的宿主机制，两者职责不同。
+      - `DmeChannelsClip` 可以天然表达一段独立 clip 的 `timeFrame`；`AnimationLayer` 不天然表达 clip 的 `start / offset / scale / source in/out` 语义。
+      - `DmeChannelsClip` 默认是一段显式片段；`AnimationLayer` 默认是覆盖整条场景时间轴上的一层贡献，不自带 clip 边界和实例化语义。
+      - 多个 `DmeChannelsClip` 可理解为多个独立动画片段；多个 `AnimationLayer` 更接近“多层叠加/覆盖关系”，不是“多段顺序 clip 编排”。
+    - 当前映射何时合理：
+      - 当目标是“把一个 `DmeChannelsClip` 的动画样本增量写入现有场景对象”时，用 `AnimationLayer` 很合理。
+      - 当目标是 source delta / additive overlay / update import 时，`AnimationLayer` 比 base curve 更接近预期宿主。
+    - 当前映射何时不够：
+      - 当目标是保留 `DmeChannelsClip` 作为独立 clip 实体时，`AnimationLayer` 不够。
+      - 当需要保留 `DmeTimeFrame.start/offset/scale`、多 clip 切换、片段复用、sequence/take/shot 编排时，单纯转成 `AnimationLayer` 会丢语义。
+    - 实施建议：
+      - 继续把 `AnimationLayer` 定位为 `DmeChannelsClip` 的“可选落地策略”，而不是“语义定义本身”。
+      - 文档和代码里都应避免写成 `DmeChannelsClip == AnimationLayer`，更准确的说法应是：
+        - `DmeChannelsClip` 可被导入为 base animCurves
+        - 也可在 update / source-delta 场景下导入为某个 `AnimationLayer` 上的 curves
+      - 若未来要做更完整 clip 语义，应在 `AnimationLayer` 之外单独引入 clip/container 元数据层。
+  - 2026-04-21：已补充评估“要表达多 clip 切换、复用、sequence/take/shot 编排，用什么形式最合适”：
+    - 结论：
+      - 最合适的不是单一 Maya 宿主名词，而是分三层建模：
+        - 原子动画内容层：继续用 `DmeChannelsClip`
+        - clip/sequence 逻辑层：新增或对齐到 `DmeSequence / DmeMultiSequence` 一类 source-level 容器
+        - Maya 展示/编排层：优先用 Time Editor 表达 clip 复用与重排；shot 级编排若涉及镜头与 sequence time，再单独映射到 Camera Sequencer
+    - 原因：
+      - `DmeChannelsClip` 适合表示“已绑定 channel + timeFrame”的原子片段，但不适合单独承载 source/instance、多 clip 复用、take 命名、shot 轨道等高层关系。
+      - 仓库现有 datamodel 也已经把更高层语义放在：
+        - `CDmeSequence`：持有 `animationList`、fps、event、ik、animcmd、layerList 等序列语义
+        - `CDmeMultiSequence`：持有多个 sequence 与 blend 关系
+        - `CDmeFilmClip / DmeTrack / DmeTrackGroup`：持有分层 clip、track、shot/movie 层级与时间编排
+      - 这说明 Source 侧最自然的建模本来就是“clip 内容”和“sequence/shot 编排”分层，而不是让单个 `DmeChannelsClip` 直接等价 Maya 某种 clip UI 对象。
+    - Maya 宿主选择建议：
+      - 多 clip 切换 / 复用：
+        - 优先 Time Editor。
+        - 原因：Time Editor 以 animation source + clip instance 为核心，天然支持复用、拆分、复制、重排、scale、blend，且不强依赖 character set。
+      - 传统角色非线性 clip：
+        - Trax 可作为兼容备选，但不建议作为主线。
+        - 原因：Trax 更偏 character set / 旧式角色工作流，对当前插件同时覆盖 transform、blendShape、control scalar 的异构对象域不如 Time Editor 自然。
+      - shot / sequence 编排：
+        - 若关注的是镜头、sequence time、shot reorder，应单独用 Camera Sequencer，而不是强塞进 animation layer 或普通 clip 宿主。
+        - 若关注的只是动作片段顺序组合，不一定需要 shot 级宿主，可先停留在 Time Editor composition。
+    - 不建议的形式：
+      - 不建议继续把多 clip / take / shot 语义压扁进单个 `DmeAnimationList + DmeChannelsClip`。
+      - 不建议用 `AnimationLayer` 承担 clip 切换、复用、sequence 编排；layer 更适合 overlay / additive / update，不适合片段编排。
+      - 不建议把 Camera Sequencer 当成通用动画 clip 宿主；它更适合 shot/camera 时间线，而不是 channel 级动画内容承载。
+    - 建议实施顺序：
+      - 第一步：先在插件内部显式拆出：
+        - Animation Source（原子 `DmeChannelsClip` 内容）
+        - Clip Instance（对 source 的实例、时间范围、重定时、命名）
+        - Shot / Sequence（轨道、顺序、切换、镜头时间）
+      - 第二步：Importer / exporter 继续保留当前 animCurve / animLayer 主线，确保 roundtrip 不退化。
+      - 第三步：在不影响主线的前提下，新增 Time Editor 发布层，把 clip instance 映射到 Maya 可见 clip。
+      - 第四步：只有明确需要 shot/camera 级编排时，再单独接 Camera Sequencer。
+  - 2026-04-21：已补充评估“使用 Time Editor 作为宿主，是否有更好的兼容性”：
+    - 结论：
+      - 若目标是“多 clip 复用、拆分、重排、非线性浏览”，Time Editor 的宿主兼容性更好。
+      - 若目标是“兼容当前 SMD/DMX importer/exporter 主线、update import、source delta、animation layer 覆盖”，Time Editor 的兼容性反而更差。
+    - 更好的兼容性体现在：
+      - 对 clip instance / animation source 模型天然友好，适合表达一源多实例、split、copy、scale、blend。
+      - 对异构 keyable 对象较宽容，不像 Trax 那样强依赖 character set 角色工作流。
+      - 若未来要把 `DmeChannelsClip` 上升为“可复用片段库”，Time Editor 比 Trax 更贴近目标宿主。
+    - 更差的兼容性体现在：
+      - 官方文档明确说明 Time Editor 不支持传统 Animation Layers；被 Time Editor clip 驱动的对象不能按当前场景 keying 方式直接打 key。
+      - 当前插件主线恰恰依赖普通场景 plug + animCurve + animLayer：
+        - importer 逐 plug 写 key
+        - source delta 依赖 additive/override layer
+        - exporter 直接从 DAG/plug 上游曲线采样
+      - 一旦把 Time Editor 变成主宿主，现有 update / append / animationOnly / source-delta / export roundtrip 都要重新定义。
+      - Time Editor 更适合作为非线性发布层，而不是当前导入主宿主。
+    - 兼容性判断建议：
+      - 对“高层 clip 编排能力”：
+        - Time Editor > Trax > AnimationLayer
+      - 对“当前插件主线兼容性”：
+        - animCurve / AnimationLayer > Trax > Time Editor
+      - 因此不能笼统说“Time Editor 兼容性更好”；必须先说明是对哪一层兼容。
+    - 建议：
+      - 不要把 Time Editor 作为当前 SMD/DMX 动画导入的默认主宿主。
+      - 若要引入 Time Editor，应作为第二宿主：
+        - 第一宿主：animCurve / AnimationLayer，保证现有导入导出与回归稳定
+        - 第二宿主：Time Editor，负责 clip 复用、重排、split、composition 发布
+      - 等内部 clip/source/shot 数据层明确后，再决定是否提供“导入后自动发布到 Time Editor”的可选开关。
+  - 2026-04-21：已评估参考 `D:\_Code_Here\Git\MayaTools\TakeSys\TakeSystemPipeline-python3\milPipeline-python3\milPipeline\dcc\maya\tools\takes_system`，通过增加一个 take system 作为中间层管理的可行性：
+    - 总结结论：
+      - 这条路线是当前为 SMD/DMX 引入多 clip / take / composition 管理的更稳方案。
+      - 它比“直接把 Time Editor 设为主宿主”更合理，因为它把 Time Editor 降成可选发布后端，而不是核心数据层。
+      - 但不建议照搬该实现；应抽取其“分层思想”，避免把现有项目强绑定到大量 Maya 容器回调和 pipeline 特定逻辑。
+    - 该参考实现的关键结构值得借鉴：
+      - `Take`：逻辑 take 容器，负责 current version、排序、导出标记、颜色等管理。
+      - `TakeVersion`：版本抽象层，拆成：
+        - `KeyAnimation`：以 animCurves / animLayers 为主的可直接落地动画版本
+        - `Composition`：以 Time Editor composition 为主的高层版本
+      - `TakesManager`：统一管理受控对象、当前 take、当前 version、切换和 bake。
+      - `plugins/timeEditor.py`：明确把 Time Editor 作为发布插件处理，并直接写明 “TimeEditor clips don't support live curves”，因此需要 bake 到 animSource。
+    - 与当前 csgo-src Maya 插件的契合点：
+      - 当前插件已经天然分成：
+        - source 文件解析层（DMX/SMD）
+        - 场景落地层（animCurve / animLayer）
+        - 可选更高层宿主待定
+      - take system 正好可以作为这三层之间的中间 canonical 层：
+        - 一个 `Take` 对应一个逻辑动作片段
+        - 一个 `TakeVersion` 对应同一片段的不同实现或发布状态
+        - `KeyAnimation` 可承接当前 importer/exporter 主线
+        - `Composition` 可承接未来 Time Editor 发布
+      - 这比直接让 `DmeChannelsClip`、`AnimationLayer`、`Time Editor clip` 互相硬等价要干净得多。
+    - 相比直接用 Time Editor 当主宿主的优势：
+      - 兼容当前 animCurve / animLayer 主线，不需要一开始就改 exporter 采样模型。
+      - 可以先把多 clip / take / 当前版本 / 导出标记 / 起止帧等高层语义稳定下来，再决定发布到哪个 Maya 宿主。
+      - 允许同一逻辑 take 同时存在：
+        - base curves / animation layer 版本
+        - baked Time Editor composition 版本
+      - 更容易做 roundtrip 与回归，因为中间层可以保留源文件命名、frame range、clip identity、导出策略。
+    - 主要风险与不建议照搬的部分：
+      - 参考实现深度依赖 Maya `container`、节点回调、自动接管 animCurve/animBlendNode/constraint/pairBlend 连接，这套机制较重，维护成本高。
+      - 它还有明显 pipeline 特化逻辑：export 标记、markers、FBX 导出、Snowdrop/内部工具插件、AnimLayer UI 修复等，不适合原样移植。
+      - 参考实现大量围绕 Maya scene state 做“当前 take 切换即重接线/重设 layer”的控制，这对本项目若直接照搬，容易把现有 importer/exporter 搅成状态机。
+    - 对本项目更合适的精简版建议：
+      - 第一阶段只引入最小中间层，不引入复杂场景回调接管：
+        - `TakeRecord`
+        - `TakeSource`
+        - `TakeInstance`
+        - `TakeComposition`
+      - 先把这些作为插件自己的 metadata / document model，而不是全面托管 Maya 所有动画连接。
+      - `KeyAnimation` 等价层优先记录：
+        - 源文件来源（dmx/smd）
+        - clip 名称
+        - start/end/frameRate
+        - 对应导入 root / target set
+        - 当前落地策略（base curves / animLayer / baked composition）
+      - `Composition` 层只在用户明确需要时发布到 Time Editor。
+    - 推荐结论：
+      - 建议引入“take system 中间层”这个设计方向。
+      - 不建议直接移植该参考项目的全量实现。
+      - 最合理的路线是：
+        - 借鉴其 `Take / TakeVersion / KeyAnimation / Composition / Manager` 分层
+        - 保留当前 csgo-src 的 animCurve / animLayer 主线
+        - 把 Time Editor 作为 `Composition` 类可选发布后端
+        - 后续再按需要接 shot / Camera Sequencer
+  - 2026-04-21：已补一版适合当前仓库的最小 take-system 中间层草案：
+    - 目标：
+      - 不改变现有 SMD/DMX importer/exporter 以 animCurve / animLayer 为主的稳定闭环。
+      - 在其之上增加一个轻量 canonical 层，用于承载多 clip / take / composition / shot 元数据。
+      - 让 Time Editor、AnimationLayer、未来 shot/Camera Sequencer 都成为“发布宿主”，而不是“唯一真相”。
+    - 建议对象模型：
+      - `TakeRegistry`
+        - 场景级根节点/注册表。
+        - 持有全部 `TakeRecord`、`ShotRecord`、当前 take、当前 composition、schemaVersion。
+      - `TakeRecord`
+        - 逻辑 take 实体。
+        - 只表达身份与管理语义，不直接持有 Maya 曲线节点。
+        - 关键字段：
+          - `id`
+          - `name`
+          - `sourceFormat` (`dmx` / `smd` / `manual`)
+          - `sourcePath`
+          - `markForExport`
+          - `color`
+          - `sorting`
+          - `tags`
+          - `currentVersion`
+          - `versions[]`
+      - `TakeVersionRecord`
+        - 抽象基类，表达同一 take 的某个具体版本。
+        - 公共字段：
+          - `id`
+          - `take`
+          - `versionType`
+          - `startFrame`
+          - `endFrame`
+          - `frameRate`
+          - `timeUnit`
+          - `createdFrom`
+          - `notes`
+      - `KeyAnimationVersion`
+        - 对应当前主线版本。
+        - 关键字段：
+          - `bindingSet`
+          - `curveBindings[]`
+          - `layerBindings[]`
+          - `importRoot`
+          - `targetNamespace`
+          - `hostMode` (`baseCurves` / `animLayer`)
+          - `sourceDeltaMode`
+          - `baked`
+        - 职责：
+          - 指向当前场景里真正驱动对象的 animCurve / animLayer 资源。
+          - 作为 importer/exporter 默认读写对象。
+      - `CompositionVersion`
+        - 对应发布到 Time Editor 的高层版本。
+        - 关键字段：
+          - `sourceTakeVersion`
+          - `timeEditorComposition`
+          - `animSources[]`
+          - `clipInstances[]`
+          - `publishedRange`
+          - `bakedFromKeyAnimation`
+        - 职责：
+          - 只负责高层 clip/composition 宿主，不作为默认 roundtrip 真相。
+      - `CurveBindingRecord`
+        - 一条 source channel 到 Maya plug/curve 的落地映射。
+        - 关键字段：
+          - `channelName`
+          - `targetNode`
+          - `targetPlug`
+          - `curveNode`
+          - `curveType`
+          - `semantic` (`positionX` / `orientationZ` / `flexWeight` / `customScalar`)
+      - `LayerBindingRecord`
+        - 一个 take version 对某个 Maya animLayer 的占用关系。
+        - 关键字段：
+          - `layerName`
+          - `override`
+          - `additive`
+          - `memberPlugs[]`
+      - `ClipInstanceRecord`
+        - 高层 clip 实例元数据。
+        - 关键字段：
+          - `sourceVersion`
+          - `instanceName`
+          - `sequenceStart`
+          - `sequenceEnd`
+          - `sourceStart`
+          - `sourceEnd`
+          - `timeScale`
+          - `mute`
+          - `weight`
+        - 职责：
+          - 用于表达复用、切换、重排。
+          - 可发布到 Time Editor，但本身不要求直接等于 Time Editor node。
+      - `ShotRecord`
+        - shot/sequence 时间编排层。
+        - 关键字段：
+          - `name`
+          - `sequenceStart`
+          - `sequenceEnd`
+          - `takeInstances[]`
+          - `camera`
+          - `enabled`
+        - 只在明确需要镜头/sequence 时间线时启用。
+    - 建议关系：
+      - `TakeRegistry`
+        - `takes[] -> TakeRecord`
+        - `shots[] -> ShotRecord`
+      - `TakeRecord`
+        - `versions[] -> TakeVersionRecord`
+        - `currentVersion -> TakeVersionRecord`
+      - `KeyAnimationVersion`
+        - `curveBindings[] -> CurveBindingRecord`
+        - `layerBindings[] -> LayerBindingRecord`
+      - `CompositionVersion`
+        - `sourceTakeVersion -> KeyAnimationVersion`
+        - `clipInstances[] -> ClipInstanceRecord`
+      - `ShotRecord`
+        - `takeInstances[] -> ClipInstanceRecord`
+    - 与当前插件接缝建议：
+      - importer：
+        - DMX/SMD 导入完成后创建/更新一个 `TakeRecord`
+        - 默认生成一个 `KeyAnimationVersion`
+        - 把 animCurve / animLayer 实际节点写进 `curveBindings` / `layerBindings`
+      - exporter：
+        - 默认只从 `TakeRecord.currentVersion`
+          - 若是 `KeyAnimationVersion`，走现有主线直接导出
+          - 若是 `CompositionVersion`，先显式 bake/resolve 到临时 `KeyAnimationVersion` 再导出
+      - UI：
+        - 第一阶段只做最小 Takes 面板：
+          - take 列表
+          - current version 切换
+          - publish to Time Editor
+          - duplicate / split / extract
+    - 第一阶段强约束：
+      - 不接管全场景所有动画连接。
+      - 不强依赖 Maya `container` / 大量节点回调。
+      - 不让 `CompositionVersion` 反向成为默认导出真相。
+      - 不在第一阶段引入 Camera Sequencer 真节点集成，只保留 `ShotRecord` 数据层。
 
 - 已修复问题（2026-04-09 本轮完成）：
   - **Maya 2022 API 兼容性**：`getAlias` → `plugsAlias`；`MFn::kSkinCluster` → `MFn::kSkinClusterFilter`；补充 `#include <maya/MDoubleArray.h>`；`setAlias` 参数类型错误修正。受影响文件：`DmxExportAnimation.cpp`、`DmxExportDeformers.cpp`、`DmxImportDeformers.cpp`。
@@ -337,11 +694,132 @@
     - 继续补组合型面部控制器和更完整 deformer / rig metadata，逐步接近 Valve 角色资产的 facial 工作流。
     - 继续评估 `exportMetadata=0` 的裁剪边界，明确哪些字段可以在不破坏回读的前提下继续瘦身。
   - 中期重构方向：
-    - 继续拆分 [DmxExportTranslator.cpp](dcc_plugin/src/exporter_dmx/DmxExportTranslator.cpp) 与 [DmxImportTranslator.cpp](dcc_plugin/src/importer_dmx/DmxImportTranslator.cpp) 中仍留在实现文件里的上下文结构、流程拼装和 Maya 侧 helper，优先把 animation、mesh、material、skin 的剩余主路径再收窄。
-    - 识别 importer/exporter 双侧共用的类型、工具函数和辅助结构，继续移入 [dcc_plugin/src/common](dcc_plugin/src/common_dmx)，减少跨侧重复定义。
-    - 在 [SimpleDmxDocument.h](dcc_plugin/src/common_dmx/SimpleDmxDocument.h) 与 [SimpleDmxTypes.h](dcc_plugin/src/common_dmx/SimpleDmxTypes.h) 这一层稳定后，继续补完整 attribute type、unknown field 保真和 text/binary 对称。
-    - 在 text 路径 unknown field / 顺序保真已落地的前提下，继续评估未知 declared type 的 text -> binary 降级策略、旁带保真或显式能力边界，避免 binary exporter 对自定义类型直接硬失败。
-    - 为动画 DMX 单独整理 importer/exporter 路线图，明确最小骨骼动画、标量动画、facial 动画和更高层 clip / sequence 语义的边界，不再混写进静态 mesh / skin 主计划。
+    - `DMX-REF-1` 盘点 DMX importer/exporter 共享候选：
+      - 状态：已完成（2026-05-07，已形成首版迁移清单）
+      - 目标：列出 [dcc_plugin/src/importer_dmx](dcc_plugin/src/importer_dmx) 与 [dcc_plugin/src/exporter_dmx](dcc_plugin/src/exporter_dmx) 中重复或近似重复的类型、工具函数、Maya API 包装和数据转换 helper。
+      - 输出：在本计划中补一张“可迁移 / 不迁移 / 需要先拆依赖”的清单，明确每项的源文件、目标公共层和风险。
+      - 完成判据：候选清单覆盖 animation、mesh、material、skin、transform correction、codec 六类，不把 `ImportContext/ExportContext` 这类方向性强的 session 状态误并入公共层。
+      - 盘点结论：
+        - translator 入口本身已经足够薄，[DmxImportTranslator.cpp](dcc_plugin/src/importer_dmx/DmxImportTranslator.cpp) 与 [DmxExportTranslator.cpp](dcc_plugin/src/exporter_dmx/DmxExportTranslator.cpp) 当前主要只承担 Maya file translator 入口转发，不是共享重构的主要收益点。
+        - 共享重构收益主要集中在 internals、session DOM 后处理、animation scalar/facial、mesh/material、deformer/skin 与 DMX value string/DOM mutation helper。
+        - [dcc_plugin/src/common](dcc_plugin/src/common) 已经承载 `AnimationCurveUtils`、`AnimationSampleUtils`、`ExportAnimationUtils`、`MaterialUtils`、`MaterialExportUtils`、`MayaCommandUtils`、`SkinClusterUtils`、`TransformCorrection` 等公共层；后续新增公共能力应优先复用这些边界，而不是再建并行 helper。
+      - 可迁移候选：
+        - option 串解析：
+          - 当前入口：[DmxExportInternals.cpp](dcc_plugin/src/exporter_dmx/DmxExportInternals.cpp) 的 `ParseOptionMap()` / `ParseBoolOption()`，importer 已复用 [ImportPolicy.h](dcc_plugin/src/common/ImportPolicy.h) 中的同类 helper。
+          - 目标层：优先抽到 common 中更中性的 option helper，或让 exporter 直接复用 `dcc_import_policy::ParseOptionMap()` / `ParseBoolOption()` 并在命名上后续再收敛。
+          - 风险：低；需确认大小写规范和默认值行为不变。
+        - DMX 数值字符串格式化 / 解析：
+          - 当前入口：[DmxExportInternals.cpp](dcc_plugin/src/exporter_dmx/DmxExportInternals.cpp) 的 `FormatFloat()`、`FormatVector2/3/4()`、`FormatQuaternion()`、`FormatMatrix()`、`FormatTimeSeconds()`；[DmxImportSession.cpp](dcc_plugin/src/importer_dmx/DmxImportSession.cpp) 与 [DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 各自有 `ParseVector3String()`、`ParseQuaternionString()`、`ParseMatrixString*()`、局部高精度 formatter。
+          - 目标层：新增 common_dmx 层的 `SimpleDmxValueString` 一类 helper，统一标准 DMX 标量/数组字符串的解析和写出精度策略。
+          - 风险：中；exporter 现用 6 位 fixed，import normalizer 现用 17 位精度，迁移前必须明确哪些路径要求稳定文本、哪些路径要求最大保真。
+        - DMX DOM mutable helper：
+          - 当前入口：[DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 的 `FindMutableAttribute()`、`ResolveMutableElement()`、`ResolveMutableElementArray()`；[DmxImportSession.cpp](dcc_plugin/src/importer_dmx/DmxImportSession.cpp) 的 `SetScalarStringAttribute()`、`SetStringArrayAttribute()`。
+          - 目标层：[SimpleDmxDocument.h](dcc_plugin/src/common_dmx/SimpleDmxDocument.h) / `.cpp` 增加 mutable attribute 查找、inline element 解析、保留原 declared type 写回的 helper。
+          - 风险：低到中；要保持属性顺序和 unknown field 保真，不要让 helper 隐式重排属性。
+        - 通用文件读取 / debug log 写入：
+          - 当前入口：[DmxImportInternals.cpp](dcc_plugin/src/importer_dmx/DmxImportInternals.cpp) 的 `ReadTextFile()`、`ResetImportDebugLog()`、`AppendImportDebugLog()` 与 [DmxExportInternals.cpp](dcc_plugin/src/exporter_dmx/DmxExportInternals.cpp) 的 `AppendDebugLog()`。
+          - 目标层：可放入 common 的轻量 file/debug helper，日志文件名由调用方传入。
+          - 风险：低；需要保持当前 import/export 分开的日志文件，避免混写影响定位。
+        - Maya node/material 创建包装：
+          - 当前入口：[DmxImportInternals.cpp](dcc_plugin/src/importer_dmx/DmxImportInternals.cpp) 的 `EnsureDependencyNode()`、`EnsureShadingGroup()`、`AssignTextureToShader()`；common 中已有 [MaterialUtils.cpp](dcc_plugin/src/common/MaterialUtils.cpp) 与 [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 的相近能力。
+          - 目标层：优先让 importer material 路径直接使用 `dcc_material` / `maya_cmd`，减少 DMX internals 中的自维护 Maya 节点创建逻辑。
+          - 风险：中；需确认节点复用、命名 sanitize、默认 shader list 注册、normal/bump texture 连接语义保持一致。
+        - DAG path / mesh child 查询：
+          - 当前入口：[DmxExportInternals.cpp](dcc_plugin/src/exporter_dmx/DmxExportInternals.cpp) 的 `DagPathKey()`、`TryGetMeshPathFromObject()`，SMD/VTA 侧也有类似“从 transform 找 renderable mesh descendant / primary mesh child”的需求。
+          - 目标层：可抽到 common 的 DAG/mesh query helper。
+          - 风险：中；不同格式对“primary mesh”“renderable descendant”“intermediate mesh”的选择规则不同，helper 只能抽底层查询，不能抽格式策略。
+      - 需要先拆依赖的候选：
+        - DMX document transform correction / normalizer：
+          - 当前入口：[DmxImportSession.cpp](dcc_plugin/src/importer_dmx/DmxImportSession.cpp) 的 `NormalizeDocumentForImportCorrection()` 及其 DAG/mesh/animation 修正函数；[DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 的 `ApplyDocumentTransformCorrection()` 与 `Correct*()` 系列。
+          - 目标层：后续可形成 DMX 专用 document normalizer 子模块，但不能直接并入 [TransformCorrection.cpp](dcc_plugin/src/common/TransformCorrection.cpp)。
+          - 原因：import/export 的方向、top-level 判定、metadata 删除策略、mesh local-only 语义不同；先要抽出“读写 DMX DOM 数值”的公共 helper，再拆“导入 normalizer”和“导出 normalizer”两个策略对象。
+        - animation scalar 与 facial 特判：
+          - 当前入口：[DmxImportAnimation.cpp](dcc_plugin/src/importer_dmx/DmxImportAnimation.cpp)、[DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp)、[ExportAnimationUtils.cpp](dcc_plugin/src/common/ExportAnimationUtils.cpp)、[AnimationCurveUtils.cpp](dcc_plugin/src/common/AnimationCurveUtils.cpp)。
+          - 目标层：先执行 `DMX-REF-3`，把通用 scalar channel 采样/写入与 `flexWeight`、combination controls、blendShape weight 绑定拆开。
+          - 原因：当前共享点不是“同一函数重复”，而是“通用通道层和 facial 目标解析层耦合”；直接抽 common 会把 facial 语义污染到普通 scalar。
+        - material import/export 语义：
+          - 当前入口：[DmxImportMeshMaterial.cpp](dcc_plugin/src/importer_dmx/DmxImportMeshMaterial.cpp)、[DmxExportMeshMaterial.cpp](dcc_plugin/src/exporter_dmx/DmxExportMeshMaterial.cpp)、[MaterialUtils.cpp](dcc_plugin/src/common/MaterialUtils.cpp)、[MaterialExportUtils.cpp](dcc_plugin/src/common/MaterialExportUtils.cpp)。
+          - 目标层：先执行 `DMX-REF-4`，定义 common material API 的输入输出模型。
+          - 原因：importer 是“从 DMX faceSets/material metadata 建 Maya 网络”，exporter 是“从 Maya shading assignment 提取 DMX faceSets/material metadata”，方向相反；需要先稳定材质数据结构，避免把 DMX 字段布局下沉到 common。
+        - deformer/skin/blendShape helper：
+          - 当前入口：[DmxImportDeformers.cpp](dcc_plugin/src/importer_dmx/DmxImportDeformers.cpp)、[DmxExportDeformers.cpp](dcc_plugin/src/exporter_dmx/DmxExportDeformers.cpp)、[SkinClusterUtils.cpp](dcc_plugin/src/common/SkinClusterUtils.cpp)。
+          - 目标层：先执行 `DMX-REF-5`，只把纯 Maya skinCluster 查询/写入 helper 留在 common，把 `jointList/jointWeights/jointIndices`、`deltaStates`、Valve facial/deformer 字段保留 DMX 专用。
+          - 原因：当前 importer 负责创建/更新 deformer，exporter 负责采样/编码 deformer；能共享的是 Maya API 操作，不是 DMX deformer 文档语义。
+        - mesh vertex channel / `IndexedChannel`：
+          - 当前入口：[DmxExportTranslatorTypes.h](dcc_plugin/src/exporter_dmx/DmxExportTranslatorTypes.h) 的 `IndexedChannel` 与 [DmxExportMesh.cpp](dcc_plugin/src/exporter_dmx/DmxExportMesh.cpp) 的 vertexData 构造；importer 侧 [DmxImportMesh.cpp](dcc_plugin/src/importer_dmx/DmxImportMesh.cpp) / [DmxImportMeshMaterial.cpp](dcc_plugin/src/importer_dmx/DmxImportMeshMaterial.cpp) 消费 `positions/normals/texcoord$N/tangents`。
+          - 目标层：可在 `SimpleDmx` 或 DMX mesh 子域中定义 vertex channel schema，但要先明确 importer/exporter 对 indexing、dedup、face-vertex order 的共同抽象。
+          - 原因：当前 export 是编码构建器，import 是拓扑重建器；抽象过早会增加复杂度。
+      - 不迁移候选：
+        - [ImportContext](dcc_plugin/src/importer_dmx/DmxImportTranslatorTypes.h) 与 [ExportContext](dcc_plugin/src/exporter_dmx/DmxExportTranslatorTypes.h) 不迁移到 common。
+          - 原因：它们是 session 方向性状态，分别保存导入复用映射、导出 builder element 映射、top-level roots、材质 root、transform policy 等，不是共享数据模型。
+        - [ImportOptions](dcc_plugin/src/importer_dmx/DmxImportTranslatorTypes.h) 与 [ExportOptions](dcc_plugin/src/exporter_dmx/DmxExportTranslatorTypes.h) 不直接合并。
+          - 原因：两侧 option 语义不同；可以共享 option parser 和 transform correction parser，但不应共享完整 options struct。
+        - `SanitizeNodeName()` 暂不迁移到 generic codec。
+          - 原因：它是 Maya 节点命名策略，不是 DMX codec 行为；若后续 SMD/DMX 需要统一节点命名，应进入 common 的 Maya naming helper，而不是 common_dmx serialization 层。
+        - `MeshMaterialData` 暂不迁移到 common。
+          - 原因：字段是当前 DMX exporter 的 material metadata 输出模型，尚未覆盖 SMD/VTA，也未表达完整 Maya shader graph。
+        - `DeltaStateGroup`、`BlendShapeTargetBinding`、`ScalarAttributeBinding` 暂不迁移。
+          - 原因：它们绑定当前 DMX importer 的 target registry 和 animation/facial 回写路径，先等 `DMX-REF-3` / `DMX-REF-5` 拆完再评估。
+      - 后续执行顺序建议：
+        - 先做低风险公共工具：option parser、DMX value string helper、DOM mutable helper。
+        - 再做边界整理：material API、deformer/skin helper、DAG/mesh query。
+        - 最后做高风险语义层：DMX document normalizer、animation scalar/facial 分层、vertex channel schema。
+    - `DMX-REF-2` 收窄 translator/session 主流程边界：
+      - 状态：进行中（2026-05-07 已完成 exporter 文档校正子域拆分）
+      - 目标：继续检查 [DmxImportTranslator.cpp](dcc_plugin/src/importer_dmx/DmxImportTranslator.cpp)、[DmxExportTranslator.cpp](dcc_plugin/src/exporter_dmx/DmxExportTranslator.cpp)、[DmxImportSession.cpp](dcc_plugin/src/importer_dmx/DmxImportSession.cpp)、[DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp)，把仍留在入口层的上下文构造、流程拼装和 Maya helper 下沉到明确子模块。
+      - 优先顺序：先处理不改变行为的 helper 移动，再处理流程对象拆分；每次只移动一个子域，避免 animation / mesh / material / skin 同时漂移。
+      - 完成判据：translator 文件只保留 Maya file translator 入口、option 透传和 session 调用；session 文件只保留高层编排，不直接承载大段 mesh/material/deformer 细节。
+      - 2026-05-07 执行记录：
+        - 已新增 [DmxExportDocumentCorrection.h](dcc_plugin/src/exporter_dmx/DmxExportDocumentCorrection.h) / [DmxExportDocumentCorrection.cpp](dcc_plugin/src/exporter_dmx/DmxExportDocumentCorrection.cpp)，把原先集中在 [DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 的 `ApplyDocumentTransformCorrection()` 与 `Correct*()` DOM 后处理逻辑移出 session。
+        - [DmxExportSession.cpp](dcc_plugin/src/exporter_dmx/DmxExportSession.cpp) 现在只在 `BuildDocument()` 中调用 `dmx_export_impl::ApplyDocumentTransformCorrection(modelElement, context.transformPolicy)`，session 不再直接承载 mesh/transform/animation DOM 校正细节。
+        - [DmxExportSession.h](dcc_plugin/src/exporter_dmx/DmxExportSession.h) 已移除私有 `ApplyDocumentTransformCorrection()` 成员；[CMakeLists.txt](dcc_plugin/src/exporter_dmx/CMakeLists.txt) 已注册新文件。
+        - 验证：
+          - `cmd /c dcc_plugin\\BuildPlugin.bat Release` 通过，并同步 `maya_dmx.mll` / `maya_smd.mll` 到 Maya module 插件目录。
+          - 使用 Maya 2022 mayapy 跑定向回归通过：`simple_mesh`、`simple_skinned_mesh`，覆盖 DMX text/binary roundtrip、selected export、transform/normal gate。
+          - 回归过程中仍出现既有 `VaccineKiller.mod` 权限 warning，但未阻塞结果。
+        - 剩余：
+          - importer 侧 [DmxImportSession.cpp](dcc_plugin/src/importer_dmx/DmxImportSession.cpp) 的 `NormalizeDocumentForImportCorrection()` 仍留在 session 文件中，后续应按同样方式拆成 DMX import document normalizer 子模块。
+          - exporter 新子模块内部仍保留 DOM mutable helper 和 DMX value string parse/format 私有函数；后续应由 `DMX-REF-6` / `DMX-REF-7` 或单独公共 helper 任务继续下沉到 common_dmx。
+    - `DMX-REF-3` 拆分通用 scalar 动画与 facial 特判：
+      - 状态：未开始
+      - 目标：把 `DmeFloatLog` 的通用 scalar plug 写入/导出逻辑，与 `flexWeight`、`DmeCombinationOperator`、blendShape weight 绑定逻辑继续解耦。
+      - 主要入口：[DmxImportAnimation.cpp](dcc_plugin/src/importer_dmx/DmxImportAnimation.cpp)、[DmxExportAnimation.cpp](dcc_plugin/src/exporter_dmx/DmxExportAnimation.cpp)、[AnimationCurveUtils.cpp](dcc_plugin/src/common/AnimationCurveUtils.cpp)。
+      - 完成判据：`simple_float_animation.dmx` 失败只归因到 scalar 通道层；`simple_blendshape_animation.dmx` 失败只归因到 facial target/geometry 层；两类 gate 的错误报告不再共用模糊路径。
+    - `DMX-REF-4` 材质公共层边界整理：
+      - 状态：未开始
+      - 目标：梳理 DMX importer/exporter 与 SMD 侧现有材质 helper，确认哪些 shader、texture path、face set、材质命名逻辑可以进入 [dcc_plugin/src/common](dcc_plugin/src/common)，哪些必须保留为 DMX 专用。
+      - 主要入口：[DmxImportMeshMaterial.cpp](dcc_plugin/src/importer_dmx/DmxImportMeshMaterial.cpp)、[DmxExportMeshMaterial.cpp](dcc_plugin/src/exporter_dmx/DmxExportMeshMaterial.cpp)、[MaterialUtils.cpp](dcc_plugin/src/common/MaterialUtils.cpp)、[MaterialExportUtils.cpp](dcc_plugin/src/common/MaterialExportUtils.cpp)。
+      - 完成判据：形成稳定的 common material API，不阻塞后续 `place2dTexture`、utility 链、更多 shader 类型和贴图路径还原。
+    - `DMX-REF-5` deformer/skin/blendShape helper 分层复核：
+      - 状态：未开始
+      - 目标：复核 [DmxImportDeformers.cpp](dcc_plugin/src/importer_dmx/DmxImportDeformers.cpp)、[DmxExportDeformers.cpp](dcc_plugin/src/exporter_dmx/DmxExportDeformers.cpp)、[SkinClusterUtils.cpp](dcc_plugin/src/common/SkinClusterUtils.cpp) 的职责分界。
+      - 输出：把纯 Maya skinCluster 查询/写入 helper 保持在 common，把 DMX 字段布局、deltaStates、Valve facial/deformer 语义保留在 DMX 专用层。
+      - 完成判据：复杂 `skin + deltaStates` 回归行为不变，且后续修 `sculptTarget -regenerate` fallback 时不需要同时改 importer/exporter 两套重复逻辑。
+    - `DMX-REF-6` SimpleDmx attribute type 覆盖补齐：
+      - 状态：未开始
+      - 目标：在 [SimpleDmxDocument.h](dcc_plugin/src/common_dmx/SimpleDmxDocument.h)、[SimpleDmxTypes.h](dcc_plugin/src/common_dmx/SimpleDmxTypes.h)、[SimpleDmxBinary.cpp](dcc_plugin/src/common_dmx/SimpleDmxBinary.cpp)、[SimpleDmxWrite.cpp](dcc_plugin/src/common_dmx/SimpleDmxWrite.cpp) 中补齐仍缺的标准 DMX attribute type 读写映射。
+      - 前置：先用 [src/public/datamodel/dmattributetypes.h](src/public/datamodel/dmattributetypes.h) 建立支持矩阵，标注“已支持 / 只读 / 只写 / 不支持 / 不适用”。
+      - 完成判据：新增最小样例覆盖每个新增标准类型，text -> binary -> text roundtrip 行为明确。
+    - `DMX-REF-7` unknown field 与顺序保真回归扩展：
+      - 状态：未开始
+      - 目标：把当前 text 路径 unknown field / 属性顺序保真能力扩展成更明确的 regression gate，覆盖 nested inline element、element array、引用顺序和混合已知/未知字段。
+      - 主要样例：[simple_unknown_order.dmx](dcc_plugin/samples/simple_unknown_order.dmx)，必要时新增更小的专项样例。
+      - 完成判据：text roundtrip 不丢未知字段、不重排已承诺保真的属性；binary 路径对无法承载的未知 declared type 给出明确错误或降级行为。
+    - `DMX-REF-8` 未知 declared type 的 binary 策略决策：
+      - 状态：未开始
+      - 目标：在 Valve binary DMX 固定 type code 边界下，确定未知 declared type 从 text 导出 binary 时的产品策略。
+      - 可选方案：显式失败并提示改用 text；自动回退 text 导出；引入插件私有旁带保真方案。
+      - 完成判据：选择一种默认策略并写入 importer/exporter 行为、错误消息和回归；避免 binary exporter 对自定义类型出现无上下文硬失败。
+    - `DMX-REF-9` TransformCorrection 共享抽象防漂移 gate：
+      - 状态：未开始
+      - 目标：为 [TransformCorrection.h](dcc_plugin/src/common/TransformCorrection.h) / [TransformCorrection.cpp](dcc_plugin/src/common/TransformCorrection.cpp) 固定 SMD 与 DMX 的共享/分叉边界。
+      - 范围：DMX 继续保持 hierarchy/local-only mesh 语义；SMD 继续保持 mesh point / normal baked correction；两边共用 top-level、local scale、normal/tangent 方向修正 helper。
+      - 完成判据：新增或整理小型单元/批回归说明，能在修改公共 helper 后同时覆盖 DMX `simple_mesh/simple_skinned_mesh/complex_chr_mesh` 与 SMD `simple_skinned_mesh/ctm_fbi` 的导出校正语义。
+    - `DMX-REF-10` 动画 clip/sequence 数据模型边界草案：
+      - 状态：未开始
+      - 目标：在 common / animation 子域里设计轻量数据结构，显式区分 channel sample、clip container、sequence metadata 三层。
+      - 非目标：本任务不实现多 clip roundtrip，不接 Trax / Time Editor，不改变现有单 clip bake 导入导出行为。
+      - 完成判据：形成可实现的接口草案，并明确当前 `DmeAnimationList / DmeChannelsClip / DmeTimeFrame` 的已承诺字段、忽略字段和未来扩展点。
 
 - importer 并入公共 codec 评估（2026-04-09）：
   - **结论：importer 不存在”私有 DOM”问题，已直接消费 `simple_dmx::Document`，不需要对称的整体迁移。**

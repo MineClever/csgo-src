@@ -5,6 +5,8 @@ add_library(maya_export_dmx STATIC
     DmxExportDag.h
     DmxExportDeformers.cpp
     DmxExportDeformers.h
+    DmxExportDocumentCorrection.cpp
+    DmxExportDocumentCorrection.h
     DmxExportInternals.cpp
     DmxExportInternals.h
     DmxExportMesh.cpp
