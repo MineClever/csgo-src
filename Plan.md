@@ -1736,6 +1736,10 @@
     - [SmdSourceDeltaProcessor.cpp](dcc_plugin/src/importer_smd/SmdSourceDeltaProcessor.cpp)
     - [AnimationCurveUtils.cpp](dcc_plugin/src/common/AnimationCurveUtils.cpp)
     - [AnimationSampleUtils.cpp](dcc_plugin/src/common/AnimationSampleUtils.cpp)
+  - 2026-05-10 任务同步：
+    - 已新增 [DeltaPredeltaPrinciples.md](dcc_plugin/docs/DeltaPredeltaPrinciples.md)，集中说明当前 DMX/SMD 插件中 `subtract`、`presubtract`、`linearDelta`、`splineDelta` 的核心公式、reference 采样来源、animation layer 特殊规则，以及 DMX `deltaStates` 几何差值与动画 source delta 的区别。
+    - 已新增 [DeltaPredeltaFlow.puml](dcc_plugin/docs/DeltaPredeltaFlow.puml)，用 PlantUML 活动图记录 source delta / predelta 导入流程，便于后续实现和回归对齐。
+    - 当前文档按现有实现记录边界：`Use Clip` 路径使用 `Reference Frame` 的单帧 layer sample 作为整段参考；写入 additive animation layer 且模式为 `subtract/presubtract` 时不提前做差值，避免二次减法。
   - 2026-04-20 任务同步：
     - [BuildPlugin.bat](dcc_plugin/BuildPlugin.bat) 已修复当前 VS2022/CMake 组合下的构建失败。原脚本把两个插件目标透传给 `cmake --build ... --target ...` 时会在 MSBuild 侧误落成 `MSB1009`；现已改为直接构建默认 solution 配置，并在真实脚本链路下重新验证 `Release` 构建通过，可稳定产出 `maya_dmx.mll` 与 `maya_smd.mll`。
     - [RunMayaBatchRegression.bat](dcc_plugin/RunMayaBatchRegression.bat) 的默认完整回归入口已补齐先前未纳入的专项 case：

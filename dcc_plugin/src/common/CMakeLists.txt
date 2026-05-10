@@ -17,6 +17,8 @@ add_library(maya_common STATIC
     NodeNameUtils.h
     SkinClusterUtils.cpp
     SkinClusterUtils.h
+    SourceDeltaUtils.h
+    ImportPolicy.h
 )
 
 maya_dmx_apply_common_target_settings(maya_common)

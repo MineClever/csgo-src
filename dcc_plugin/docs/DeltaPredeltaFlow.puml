@@ -1,0 +1,75 @@
+@startuml
+title DMX/SMD Delta / PreDelta Import Flow
+
+start
+
+:Read authored animation samples V[i];
+note right
+DMX: Dme*LogLayer times/values
+SMD: skeleton frames converted by animationFps
+end note
+
+:Apply top-level import transform correction when needed;
+
+if (sourceDeltaMode?) then (None)
+  :O[i] = V[i];
+else (subtract / presubtract / linearDelta / splineDelta)
+  if (Writing transform keys to animation layer\nand mode is subtract/presubtract?) then (yes)
+    :Keep authored values;
+    :O[i] = V[i];
+    note right
+    Additive layer should encode the overlay.
+    Pre-subtracting here would double-apply the delta.
+    end note
+  else (no)
+    if (mode is linearDelta?) then (yes)
+      :Build reference from first/last samples;
+      :t = i / (sampleCount - 1);
+      :R[i] = lerp/slerp(V[0], V[last], t);
+      :O[i] = V[i] - R[i]\ntranslation;
+      :O[i] = V[i] * inverse(R[i])\nrotation;
+    elseif (mode is splineDelta?) then (yes)
+      :Build smooth reference from first/last samples;
+      :t = i / (sampleCount - 1);
+      :t2 = 3*t*t - 2*t*t*t;
+      :R[i] = lerp/slerp(V[0], V[last], t2);
+      :O[i] = V[i] - R[i]\ntranslation;
+      :O[i] = V[i] * inverse(R[i])\nrotation;
+    else (subtract / presubtract)
+      if (Use Clip and sourceDeltaClip is valid?) then (yes)
+        :Sample specified Maya animation layer;
+        :R = layer sample at Reference Frame;
+        note right
+        Current implementation uses one reference frame
+        for the whole imported clip.
+        end note
+      else (no)
+        :Sample current Maya scene at each key time;
+        :R[i] = scene value at time[i];
+      endif
+
+      if (mode is presubtract?) then (yes)
+        :O[i] = R or R[i] - V[i]\ntranslation;
+        :O[i] = inverse(R or R[i]) * V[i]\nrotation;
+      else (subtract)
+        :O[i] = V[i] - R or R[i]\ntranslation;
+        :O[i] = V[i] * inverse(R or R[i])\nrotation;
+      endif
+    endif
+  endif
+endif
+
+:Convert quaternion output to Euler\nusing target rotate order;
+:Write translate/rotate keys to base animCurve\nor Maya animation layer;
+
+stop
+
+legend right
+V = authored source sample
+R = reference sample
+O = output sample written to Maya
+lerp = vector interpolation
+slerp = quaternion interpolation
+endlegend
+
+@enduml
