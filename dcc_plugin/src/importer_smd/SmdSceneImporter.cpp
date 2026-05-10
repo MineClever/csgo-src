@@ -192,14 +192,12 @@ MObject SmdSceneImporter::findParentObject(const simple_smd::Node &node) const
 
 const simple_smd::SkeletonPose *SmdSceneImporter::findPose(const simple_smd::SkeletonFrame &frame, int boneIndex) const
 {
-    const auto poseIt = std::find_if(
-        frame.poses.begin(),
-        frame.poses.end(),
-        [boneIndex](const simple_smd::SkeletonPose &pose)
-        {
-            return pose.boneIndex == boneIndex;
-        });
-    return poseIt == frame.poses.end() ? nullptr : &(*poseIt);
+    for (const auto& pose : frame.poses)
+    {
+        if (pose.boneIndex == boneIndex)
+            return &pose;
+    }
+    return nullptr;
 }
 
 bool SmdSceneImporter::isTopLevelNode(const simple_smd::Node &node) const
