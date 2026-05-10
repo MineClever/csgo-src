@@ -135,8 +135,26 @@
     },
     "ctm_fbi/ctm_fbi.smd": {
       "import_options": "useSceneRoot=1;importMode=append",
+      "rename_before_second_import": [
+        {"pattern": "|pelvis", "type": "joint", "new_name": "existing_pelvis"},
+        {"pattern": "|ctm_fbi_v2_hat_glasses_radio_variantA_grp1", "type": "transform", "new_name": "existing_ctm_fbi_v2_hat_glasses_radio_variantA_grp"},
+        {"pattern": "|ctm_fbi_v2_head_grp1", "type": "transform", "new_name": "existing_ctm_fbi_v2_head_grp"},
+        {"pattern": "|ctm_fbi_v2_body_variantB_grp1", "type": "transform", "new_name": "existing_ctm_fbi_v2_body_variantB_grp"},
+        {"pattern": "|ctm_fbi_v2_lower_body_variantB_grp1", "type": "transform", "new_name": "existing_ctm_fbi_v2_lower_body_variantB_grp"}
+      ],
       "single_nodes": [
-        {"pattern": "*pelvis", "type": "joint"}
+        {"pattern": "*pelvis", "type": "joint"},
+        {"pattern": "*ctm_fbi_v2_hat_glasses_radio_variantA_grp*", "type": "transform"},
+        {"pattern": "*ctm_fbi_v2_head_grp*", "type": "transform"},
+        {"pattern": "*ctm_fbi_v2_body_variantB_grp*", "type": "transform"},
+        {"pattern": "*ctm_fbi_v2_lower_body_variantB_grp*", "type": "transform"}
+      ],
+      "node_counts": [
+        {"type": "skinCluster", "count": 4},
+        {"pattern": "*ctm_fbi_v2_hat_glasses_radio_variantAShape*", "type": "mesh", "count": 2},
+        {"pattern": "*ctm_fbi_v2_headShape*", "type": "mesh", "count": 2},
+        {"pattern": "*ctm_fbi_v2_body_variantBShape*", "type": "mesh", "count": 2},
+        {"pattern": "*ctm_fbi_v2_lower_body_variantBShape*", "type": "mesh", "count": 2}
       ]
     }
   },
@@ -165,8 +183,26 @@
     },
     "ctm_fbi/ctm_fbi.smd": {
       "import_options": "useSceneRoot=1;importMode=update",
+      "rename_before_second_import": [
+        {"pattern": "|pelvis", "type": "joint", "new_name": "existing_pelvis"},
+        {"pattern": "|ctm_fbi_v2_hat_glasses_radio_variantA_grp1", "type": "transform", "new_name": "existing_ctm_fbi_v2_hat_glasses_radio_variantA_grp"},
+        {"pattern": "|ctm_fbi_v2_head_grp1", "type": "transform", "new_name": "existing_ctm_fbi_v2_head_grp"},
+        {"pattern": "|ctm_fbi_v2_body_variantB_grp1", "type": "transform", "new_name": "existing_ctm_fbi_v2_body_variantB_grp"},
+        {"pattern": "|ctm_fbi_v2_lower_body_variantB_grp1", "type": "transform", "new_name": "existing_ctm_fbi_v2_lower_body_variantB_grp"}
+      ],
       "single_nodes": [
-        {"pattern": "*pelvis", "type": "joint"}
+        {"pattern": "*pelvis", "type": "joint"},
+        {"pattern": "*ctm_fbi_v2_hat_glasses_radio_variantA_grp*", "type": "transform"},
+        {"pattern": "*ctm_fbi_v2_head_grp*", "type": "transform"},
+        {"pattern": "*ctm_fbi_v2_body_variantB_grp*", "type": "transform"},
+        {"pattern": "*ctm_fbi_v2_lower_body_variantB_grp*", "type": "transform"}
+      ],
+      "node_counts": [
+        {"type": "skinCluster", "count": 4},
+        {"pattern": "*ctm_fbi_v2_hat_glasses_radio_variantAShape*", "type": "mesh", "count": 2},
+        {"pattern": "*ctm_fbi_v2_headShape*", "type": "mesh", "count": 2},
+        {"pattern": "*ctm_fbi_v2_body_variantBShape*", "type": "mesh", "count": 2},
+        {"pattern": "*ctm_fbi_v2_lower_body_variantBShape*", "type": "mesh", "count": 2}
       ]
     }
   },

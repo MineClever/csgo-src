@@ -111,6 +111,25 @@ MStatus initializePlugin(MObject object)
 
 MStatus uninitializePlugin(MObject object)
 {
-    (void)object;
+    MFnPlugin plugin(object);
+
+    MStatus status = plugin_dmx_detail::DeregisterCommand(plugin, plugin_dmx_detail::kWorkflowCommandName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    status = plugin_dmx_detail::DeregisterTranslator(plugin, maya_dmx::kExporterTranslatorName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    status = plugin_dmx_detail::DeregisterTranslator(plugin, maya_dmx::kImporterTranslatorName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
     return MS::kSuccess;
 }

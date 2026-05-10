@@ -895,6 +895,10 @@
       - 构建/部署脚本同时支持 DMX 和 SMD
       - SMD 有独立 translator、独立 MEL 入口、独立 options 命名空间
     - 状态：已基本完成
+    - 2026-05-10 任务同步：
+      - [plugin_dmx/PluginMain.cpp](dcc_plugin/src/plugin_dmx/PluginMain.cpp) 的 `uninitializePlugin()` 已参照 [plugin_smd/PluginMain.cpp](dcc_plugin/src/plugin_smd/PluginMain.cpp) 补齐卸载注销逻辑。
+      - DMX 插件现在按注册逆序注销 `mayaDmxWorkflow` command、`Source DMX Export` translator、`Source DMX Import` translator，不再在卸载时直接空返回成功。
+      - 已通过 `cmake --build dcc_plugin\\build --config Release --target maya_plugin_dmx -- /m:1` 验证。
 
   - 里程碑 M2：SMD 最小格式闭环
     - 目标：打通 SMD 的最小导入导出主线。
@@ -1570,6 +1574,22 @@
   - 完成判据：
     - 真实样例重新纳入 `append/update gate`。
     - 二次导入时对象复用、rename 前缀兼容、层级命中行为可预测且可回归。
+  - 2026-05-10 任务同步：
+    - 已加强 [MayaBatchRegression.config.json](dcc_plugin/tools/MayaBatchRegression.config.json) 中 `ctm_fbi/ctm_fbi.smd` 的 `append_gate_expectations` 与 `update_gate_expectations`：
+      - 第一轮导入后会把 `|pelvis` 与 4 个真实 mesh group 重命名成 `existing_*` 前缀形式，再执行第二轮 `append/update` 导入。
+      - gate 现在会验证 rename 前缀匹配后不会重复生成根骨、4 个 mesh group、4 组 visible/original mesh shape，以及 4 个 `skinCluster`。
+    - 已扩展 [maya_batch_regression_lib.py](dcc_plugin/tools/maya_batch_regression_lib.py)：
+      - 新增 `rename_before_second_import` 支持，用于在第二次导入前模拟 Maya 场景中已有对象被用户或宿主重命名的情况。
+      - 新增 `node_counts` 支持，用于明确检查真实角色二次导入后没有重复 mesh / skinCluster。
+      - `update` gate 在重命名后会重新采集 imported roots 与基准快照，避免把“测试主动重命名”误判成 update 失败。
+    - 已验证：
+      - `python -m py_compile dcc_plugin\\tools\\maya_batch_regression_lib.py dcc_plugin\\tools\\MayaBatchRegression.py` 通过。
+      - `python -m json.tool dcc_plugin\\tools\\MayaBatchRegression.config.json` 通过。
+      - `mayapy dcc_plugin\\tools\\MayaBatchRegression.py --cases ctm_fbi/ctm_fbi.smd` 通过加强后的 `ctm_fbi` append/update gate。
+      - `mayapy dcc_plugin\\tools\\MayaBatchRegression.py --cases simple_blendshape_animation MostComplexSampleSet/chr_mesh.smd ctm_fbi/ctm_fbi.smd` 通过，说明共用 gate 扩展未破坏既有 DMX/SMD append/update 验证。
+    - 当前结论：
+      - `M-SMD-1` 第一阶段已收口：`ctm_fbi` 真实角色样例已具备可回归的二次导入、对象复用、rename 前缀兼容与 skinCluster 不重复验证。
+      - 仍保留既有低优先级 warning：`skin influence update` 路径中 Maya 仍可能输出 bind pose 缺失提示；当前未阻塞 `ctm_fbi` 主路径和加强后的 gate。
 
 - `M-SMD-2` 真实动画样例回归扩展：
   - 主要代码入口：

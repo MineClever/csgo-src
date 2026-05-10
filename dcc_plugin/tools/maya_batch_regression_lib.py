@@ -697,6 +697,8 @@ class GateValidator:
             retain_value["_resolved_plug"] = plug_name
             cmds.setAttr(plug_name, retain_value["value"])
 
+        self.apply_rename_before_second_import(expectation, "Append", normalized_case_name)
+
         cmds.file(input_path, **import_kwargs)
 
         for single_node in expectation.get("single_nodes", []):
@@ -715,6 +717,8 @@ class GateValidator:
                     f"expected exactly one {single_node_type['type']} matching "
                     f"{single_node_type.get('name') or single_node_type.get('name_suffix')}, got {matching_nodes}"
                 )
+
+        self.validate_node_counts(expectation, "Append", normalized_case_name)
 
         for retain_value in expectation.get("retain_values", []):
             plug_name = retain_value.get("_resolved_plug") or self.ctx.resolve_expected_plug(retain_value)
@@ -765,6 +769,14 @@ class GateValidator:
             original_values[plug_name] = cmds.getAttr(plug_name)
             cmds.setAttr(plug_name, overwrite_value["value"])
 
+        if expectation.get("rename_before_second_import"):
+            self.apply_rename_before_second_import(expectation, "Update", normalized_case_name)
+            imported_roots = self.ctx.collect_imported_roots(before_assemblies)
+            reference_meshes = SnapshotUtils.snapshot_scene_meshes()
+            reference_node_types = SnapshotUtils.snapshot_imported_node_types(cmds, imported_roots)
+            reference_skins = SnapshotUtils.snapshot_skin_bindings(cmds, imported_roots)
+            reference_blendshapes = SnapshotUtils.snapshot_blendshape_bindings(cmds, imported_roots)
+
         cmds.file(input_path, **import_kwargs)
 
         current_imported_roots = self.ctx.collect_imported_roots(before_assemblies)
@@ -790,6 +802,8 @@ class GateValidator:
                     f"expected exactly one {single_node_type['type']} matching "
                     f"{single_node_type.get('name') or single_node_type.get('name_suffix')}, got {matching_nodes}"
                 )
+
+        self.validate_node_counts(expectation, "Update", normalized_case_name)
 
         for overwrite_value in expectation.get("overwrite_values", []):
             plug_name = overwrite_value.get("_resolved_plug") or self.ctx.resolve_expected_plug(overwrite_value)
@@ -824,6 +838,40 @@ class GateValidator:
             reference_blendshapes,
             SnapshotUtils.snapshot_blendshape_bindings(cmds, imported_roots),
         )
+
+    def apply_rename_before_second_import(self, expectation, gate_name, normalized_case_name):
+        cmds = self.ctx.cmds
+        for rename_spec in expectation.get("rename_before_second_import", []):
+            pattern = rename_spec["pattern"]
+            node_type = rename_spec.get("type")
+            matches = cmds.ls(pattern, long=True, type=node_type) if node_type else cmds.ls(pattern, long=True)
+            matches = matches or []
+            if len(matches) != 1:
+                raise RuntimeError(
+                    f"{gate_name} gate failed for {normalized_case_name}. "
+                    f"expected exactly one node to rename matching {pattern}, got {matches}"
+                )
+
+            new_name = cmds.rename(matches[0], rename_spec["new_name"])
+            rename_spec["_renamed_node"] = new_name
+
+    def validate_node_counts(self, expectation, gate_name, normalized_case_name):
+        cmds = self.ctx.cmds
+        for node_count in expectation.get("node_counts", []):
+            pattern = node_count.get("pattern")
+            node_type = node_count.get("type")
+            if pattern:
+                matches = cmds.ls(pattern, long=True, type=node_type) if node_type else cmds.ls(pattern, long=True)
+            else:
+                matches = cmds.ls(type=node_type)
+            matches = matches or []
+            expected_count = int(node_count["count"])
+            if len(matches) != expected_count:
+                target = pattern or node_type
+                raise RuntimeError(
+                    f"{gate_name} gate failed for {normalized_case_name}. "
+                    f"expected {expected_count} nodes matching {target}, got {matches}"
+                )
 
     def validate_topology_update_gate(self, case_name, format_config, input_path):
         expectation = self.ctx.config.get_case_expectation("topology_update_gate_expectations", case_name)
