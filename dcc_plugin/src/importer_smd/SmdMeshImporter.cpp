@@ -508,6 +508,73 @@ MObject FindNodeByName(const MString &nodeName)
     return object;
 }
 
+MString DescribeTopologyMismatch(
+    const MObject &meshObject,
+    const MIntArray &polygonCounts,
+    const MIntArray &polygonConnects)
+{
+    MStatus status;
+    MFnMesh meshFn(meshObject, &status);
+    if (!status)
+    {
+        return "failed to bind mesh";
+    }
+
+    const unsigned int existingVertexCount = meshFn.numVertices(&status);
+    if (!status)
+    {
+        return "failed to query existing vertex count";
+    }
+
+    unsigned int incomingVertexCount = 0;
+    for (unsigned int index = 0; index < polygonConnects.length(); ++index)
+    {
+        const int pointIndex = polygonConnects[index];
+        if (pointIndex >= 0)
+        {
+            incomingVertexCount = std::max(incomingVertexCount, static_cast<unsigned int>(pointIndex + 1));
+        }
+    }
+
+    if (existingVertexCount != incomingVertexCount)
+    {
+        return MString("vertex count mismatch (existing=") + existingVertexCount + ", incoming=" + incomingVertexCount + ")";
+    }
+
+    MIntArray existingCounts;
+    MIntArray existingConnects;
+    status = meshFn.getVertices(existingCounts, existingConnects);
+    if (!status)
+    {
+        return "failed to query existing topology";
+    }
+
+    if (existingCounts.length() != polygonCounts.length() || existingConnects.length() != polygonConnects.length())
+    {
+        return MString("polygon topology size mismatch (existing counts/connects=")
+            + existingCounts.length() + "/" + existingConnects.length()
+            + ", incoming=" + polygonCounts.length() + "/" + polygonConnects.length() + ")";
+    }
+
+    for (unsigned int index = 0; index < polygonCounts.length(); ++index)
+    {
+        if (existingCounts[index] != polygonCounts[index])
+        {
+            return MString("polygon vertex-count layout mismatch at polygon index ") + index;
+        }
+    }
+
+    for (unsigned int index = 0; index < polygonConnects.length(); ++index)
+    {
+        if (existingConnects[index] != polygonConnects[index])
+        {
+            return MString("polygon connectivity mismatch at connect index ") + index;
+        }
+    }
+
+    return "";
+}
+
 }
 
 std::string SerializeRawVertexMap(const std::vector<std::pair<int, unsigned int>> &rawToSharedVertexIndex)
@@ -683,29 +750,57 @@ MStatus SmdMeshImporter::importMaterialGroup(const std::string &materialName, MO
 
     const MObject existingMeshObject = reusedExistingGroup ? findPrimaryMeshChild(transformObject) : MObject::kNullObj;
     const bool hasExistingMeshChild = !existingMeshObject.isNull();
+
+    // Pre-compute topology match, used both for the reuse decision and for
+    // the topology-mismatch warning+skip path below.
+    const bool topologyMatchInUpdate = hasExistingMeshChild
+        ? meshTopologyMatches(existingMeshObject, polygonCounts, polygonConnects)
+        : false;
+
     const bool canReuseExistingMeshForUpdate =
         hasExistingMeshChild &&
         dcc_import_policy::UsesUpdateCurrentScene(scenePolicy_) &&
         hasWeights &&
-        meshTopologyMatches(existingMeshObject, polygonCounts, polygonConnects);
+        topologyMatchInUpdate;
 
-    if (hasExistingMeshChild)
+    if (hasExistingMeshChild && dcc_import_policy::UsesUpdateCurrentScene(scenePolicy_))
     {
         if (canReuseExistingMeshForUpdate)
         {
+            // Reuse path: falls through to in-place mesh update below.
         }
-        else if (dcc_import_policy::UsesUpdateCurrentScene(scenePolicy_))
+        else if (!topologyMatchInUpdate)
         {
+            // Topology mismatch: warn and skip mesh overwrite, keeping the
+            // existing mesh intact.  This aligns with the DMX importer
+            // behaviour (DmxImportMesh.cpp), which also refuses to overwrite
+            // an existing mesh when the topology differs, rather than
+            // destroying it and starting over.
+            const MString mismatchReason =
+                smd_mesh_import_impl::DescribeTopologyMismatch(
+                    existingMeshObject, polygonCounts, polygonConnects);
+            maya_smd::ReportWarning(
+                MString("maya_smd: update skipped mesh overwrite because "
+                    "existing mesh topology did not match incoming mesh for ")
+                + materialName.c_str() + " (" + mismatchReason + ")");
+            return MS::kSuccess;
+        }
+        else
+        {
+            // hasExistingMeshChild && UsesUpdateCurrentScene && !hasWeights
+            // Mesh has no skin weights in the SMD: delete existing mesh
+            // shape+history and recreate without skin.
             status = smd_mesh_import_impl::DeleteExistingMeshGroupForUpdate(scenePolicy_, transformObject);
             if (!status)
             {
                 return maya_smd::ReportError(MString("maya_smd: failed to clear existing mesh for material group ") + materialName.c_str(), status);
             }
         }
-        else
-        {
-            return MS::kSuccess;
-        }
+    }
+
+    if (hasExistingMeshChild && !dcc_import_policy::UsesUpdateCurrentScene(scenePolicy_))
+    {
+        return MS::kSuccess;
     }
 
     MFnMesh meshFn;
@@ -1008,48 +1103,38 @@ MStatus SmdMeshImporter::updateExistingSkinClusterBindings(
         return MS::kFailure;
     }
 
-    MDagPathArray existingInfluencePaths;
-    status = dcc_skinning::EnsureSkinClusterContainsInfluences(scenePolicy_, skinClusterObject, influencePaths, existingInfluencePaths);
+    // Use EnsureSkinClusterContainsInfluences to add any influences that
+    // do not yet exist on the cluster.  It returns the resolved influence
+    // paths (accounting for namespace/rename matching), which we then use
+    // for bindPreMatrix lookups below.
+    MDagPathArray resolvedInfluencePaths;
+    status = dcc_skinning::EnsureSkinClusterContainsInfluences(
+        scenePolicy_, skinClusterObject, influencePaths, resolvedInfluencePaths);
     if (!status)
     {
         return MS::kFailure;
     }
 
-    std::unordered_map<std::string, unsigned int> existingInfluenceByPath =
-        dcc_skinning::BuildInfluenceIndexByPath(existingInfluencePaths);
-
-    MFnDependencyNode skinClusterNode(skinClusterObject, &status);
-    if (!status)
-    {
-        return MS::kFailure;
-    }
-
-    MPlug bindPreMatrixArrayPlug = skinClusterNode.findPlug("bindPreMatrix", true, &status);
-    if (!status)
-    {
-        return MS::kFailure;
-    }
-
+    // For each required influence, find its resolved physical match and
+    // write the corresponding bindPreMatrix entry.  Using
+    // FindMatchingInfluencePath (rather than an exact-path map) ensures
+    // that influences which already existed under a differently-namespaced
+    // or renamed DAG path are still correctly matched.
     for (unsigned int influenceIndex = 0; influenceIndex < influencePaths.length(); ++influenceIndex)
     {
-        const std::string fullPath = influencePaths[influenceIndex].fullPathName().asChar();
-        const auto existingIt = existingInfluenceByPath.find(fullPath);
-        if (existingIt == existingInfluenceByPath.end())
-        {
-            return maya_smd::ReportWarning(
-                MString("maya_smd: update skipped skinCluster overwrite because an existing influence did not match for ")
-                + meshParentPath.fullPathName());
-        }
-
         MDagPath matchedInfluencePath;
-        if (!dcc_skinning::FindMatchingInfluencePath(scenePolicy_, existingInfluencePaths, influencePaths[influenceIndex], matchedInfluencePath))
+        if (!dcc_skinning::FindMatchingInfluencePath(
+                scenePolicy_, resolvedInfluencePaths,
+                influencePaths[influenceIndex], matchedInfluencePath))
         {
             return maya_smd::ReportWarning(
-                MString("maya_smd: update skipped skinCluster overwrite because a required influence path could not be resolved for ")
+                MString("maya_smd: update skipped skinCluster overwrite because "
+                    "a required influence path could not be resolved for ")
                 + meshParentPath.fullPathName());
         }
 
-        const unsigned int logicalInfluenceIndex = skinClusterFn.indexForInfluenceObject(matchedInfluencePath, &status);
+        const unsigned int logicalInfluenceIndex =
+            skinClusterFn.indexForInfluenceObject(matchedInfluencePath, &status);
         if (!status)
         {
             return MS::kFailure;
@@ -1065,7 +1150,8 @@ MStatus SmdMeshImporter::updateExistingSkinClusterBindings(
         }
     }
 
-    status = dcc_skinning::SetSkinClusterGeomMatrix(skinClusterObject, meshParentPath.inclusiveMatrix());
+    status = dcc_skinning::SetSkinClusterGeomMatrix(
+        skinClusterObject, meshParentPath.inclusiveMatrix());
     return status ? MS::kSuccess : MS::kFailure;
 }
 

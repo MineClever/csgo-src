@@ -64,3 +64,4 @@ dcc_plugin/maya_module/scripts/*
 dcc_plugin/build/*
 dcc_plugin/samples/Ellis/DMX/AnimDelta_test.ma
 dcc_plugin/samples/Ellis/DMX/mechanic_model_merged.ma
+.claude/*

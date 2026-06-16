@@ -1138,6 +1138,13 @@
     当前剩余边界：
     - SMD `update` 在拓扑不一致时仍会退回当前的旧 mesh/history 清理后重建路径。
     - SMD `skinCluster` 与 DMX 一样，对 influence 集合变化场景当前仍只 warning 跳过 overwrite，尚未支持增量 influence 调整。
+  - 2026-06-16：已修复 SMD `update` 的两条边界（与 DMX 对齐）：
+    - **拓扑不匹配不再删旧重建**：[SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 新增 `DescribeTopologyMismatch()`（与 [DmxImportMesh.cpp](dcc_plugin/src/importer_dmx/DmxImportMesh.cpp) 的 `DescribeMeshTopologyMismatch()` 逻辑一致），`importMode=update` 且拓扑不匹配时会 reportWarning + return MS::kSuccess，保留旧 mesh 完整无损。移除了旧路径中 `DeleteExistingMeshGroupForUpdate()` 后重建的破坏性行为。
+    - **Influence 路径匹配改用模糊查找**：[SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 的 `updateExistingSkinClusterBindings()` 重写：去掉基于 `fullPathName()` 全等匹配的 `existingInfluenceByPath` 查表，改为直接在 `EnsureSkinClusterContainsInfluences()` 返回的 `resolvedInfluencePaths` 上逐条调 `FindMatchingInfluencePath()`（使用 `MatchesNodeNameForAppend` 模糊匹配），避免因 namespace/rename 导致的全路径不等而跳过整条蒙皮更新。
+    - 验证：
+      - `cmd /c dcc_plugin\\BuildPlugin.bat Release` 通过
+      - `mayapy` 定向回归：`MostComplexSampleSet/chr_mesh.smd`、`ctm_fbi/ctm_fbi.smd`、`simple_skinned_mesh`、`simple_mesh` 全部通过
+      - `mayapy` 完整默认回归：28 个 case 全部通过（并发 8，墙钟约 110s）
   - 2026-04-12：已把 Import UI 层同步到当前的共用导入工作流语义。当前 [performDmxImport.mel](dcc_plugin/src/mel/performDmxImport.mel) / [performSmdImport.mel](dcc_plugin/src/mel/performSmdImport.mel) 以及对应 module 脚本 [dcc_plugin/maya_module/scripts/performDmxImport.mel](dcc_plugin/maya_module/scripts/performDmxImport.mel)、[dcc_plugin/maya_module/scripts/performSmdImport.mel](dcc_plugin/maya_module/scripts/performSmdImport.mel)、[dcc_plugin/maya_module/scripts/doDmxImportArgList.mel](dcc_plugin/maya_module/scripts/doDmxImportArgList.mel) 已补上并持久化这些已有真实行为的选项：
     - `useSceneRoot`
     - `readNamespaceFromScene`
@@ -1590,6 +1597,10 @@
     - 当前结论：
       - `M-SMD-1` 第一阶段已收口：`ctm_fbi` 真实角色样例已具备可回归的二次导入、对象复用、rename 前缀兼容与 skinCluster 不重复验证。
       - 仍保留既有低优先级 warning：`skin influence update` 路径中 Maya 仍可能输出 bind pose 缺失提示；当前未阻塞 `ctm_fbi` 主路径和加强后的 gate。
+  - 2026-06-16 任务同步（SMD update 与 DMX 对齐）：
+    - **拓扑不匹配不再删旧重建**：[SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) `importMode=update` 且拓扑不匹配时，不再调 `DeleteExistingMeshGroupForUpdate()` 删旧重建，改为新增 `DescribeTopologyMismatch()` 给出详细诊断后 reportWarning + return MS::kSuccess，保留旧 mesh 完整无损（与 DMX 侧 [DmxImportMesh.cpp](dcc_plugin/src/importer_dmx/DmxImportMesh.cpp) 行为对齐）。
+    - **Influence 路径匹配改用模糊查找**：[SmdMeshImporter.cpp](dcc_plugin/src/importer_smd/SmdMeshImporter.cpp) 重写 `updateExistingSkinClusterBindings()`，去掉原有 `fullPathName()` 全等查表，改为在 `EnsureSkinClusterContainsInfluences()` 返回的 `resolvedInfluencePaths` 上逐条调 `FindMatchingInfluencePath()`，避免因 namespace/rename 导致的全路径不等而跳过整条蒙皮更新。
+    - 验证：完整默认回归 28/28 通过（并发 8，墙钟约 110s）
 
 - `M-SMD-2` 真实动画样例回归扩展：
   - 主要代码入口：
