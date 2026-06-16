@@ -2,15 +2,11 @@
 
 #include "ObjImportSession.h"
 
-#include <common/ImportPolicy.h>
-#include <common/SceneMergeStrategy.h>
 #include <common_obj/SimpleObjDocument.h>
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 
-#include <maya/MDagPath.h>
 #include <maya/MObject.h>
 #include <maya/MStatus.h>
 
@@ -30,6 +26,7 @@ private:
         const rapidobj::Attributes &attributes,
         const rapidobj::Mesh &mesh,
         const std::string &shapeName,
+        MObject parent,
         MObject &outTransformObj);
     MStatus assignDefaultMaterial(const MObject &meshTransformObj);
     MStatus assignPerFaceMaterials(
@@ -40,6 +37,5 @@ private:
 
     std::shared_ptr<const simple_obj::Document> document_;
     ObjImportOptions importOptions_;
-    dcc_import_policy::SceneMergeResolver mergeResolver_;
     MObject importRoot_ = MObject::kNullObj;
 };

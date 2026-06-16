@@ -1,12 +1,11 @@
-﻿#include "ObjImportSession.h"
+#include "ObjImportSession.h"
 #include "ObjSceneImporter.h"
 
-#include <common/SceneMergeStrategy.h>
+#include <common/ImportPolicy.h>
 #include <common_obj/MayaObjCommon.h>
 #include <common_obj/SimpleObjDocument.h>
 
 #include <memory>
-#include <cstdlib>
 #include <string>
 #include <unordered_map>
 
@@ -92,9 +91,6 @@ MStatus ObjImportSession::Run()
     ObjImportOptions normalizedImportOptions = importOptions;
     normalizedImportOptions.transformCorrection = dcc_import_transform::TransformCorrection();
 
-    dcc_import_policy::SceneMergeStrategy sceneMergeStrategy(normalizedImportOptions.scenePolicy);
-    normalizedImportOptions.scenePolicy = sceneMergeStrategy.policy();
-
     ObjSceneImporter importer(document, normalizedImportOptions);
     return importer.Import();
 }
@@ -122,11 +118,11 @@ ObjImportOptions ObjImportSession::parseOptions() const
     const std::unordered_map<std::string, std::string> optionMap =
         dcc_import_policy::ParseOptionMap(options_);
 
-    dcc_import_policy::SceneMergeStrategy sceneMergeStrategy =
-        dcc_import_policy::SceneMergeStrategy::Parse(optionMap);
-    sceneMergeStrategy.captureCurrentNamespace();
-    sceneMergeStrategy.normalizeForImport(fileObject_.rawName().asChar());
-    parsedOptions.scenePolicy = sceneMergeStrategy.policy();
+    auto useSceneRootIt = optionMap.find("usesceneroot");
+    if (useSceneRootIt != optionMap.end())
+    {
+        parsedOptions.useSceneRoot = dcc_import_policy::ParseBoolOption(optionMap, "usesceneroot", false);
+    }
 
     parsedOptions.transformCorrection = dcc_import_transform::ParseTransformCorrection(optionMap);
 

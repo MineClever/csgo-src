@@ -1,6 +1,5 @@
 #pragma once
 
-#include <common/ImportPolicy.h>
 #include <common/TransformCorrection.h>
 
 #include <maya/MFileObject.h>
@@ -10,7 +9,7 @@
 struct ObjImportOptions
 {
     dcc_import_transform::TransformCorrection transformCorrection;
-    dcc_import_policy::SceneImportPolicy scenePolicy;
+    bool useSceneRoot = false;
     bool flipUvV = true;
 };
 

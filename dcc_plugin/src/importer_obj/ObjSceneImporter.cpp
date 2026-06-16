@@ -1,4 +1,4 @@
-﻿#include "ObjSceneImporter.h"
+#include "ObjSceneImporter.h"
 
 #include <common/MaterialUtils.h>
 #include <common_obj/MayaObjCommon.h>
@@ -12,7 +12,6 @@
 #include <maya/MFloatArray.h>
 #include <maya/MFloatPoint.h>
 #include <maya/MFloatPointArray.h>
-#include <maya/MFnDagNode.h>
 #include <maya/MFnMesh.h>
 #include <maya/MFnTransform.h>
 #include <maya/MIntArray.h>
@@ -24,8 +23,6 @@
 namespace obj_scene_importer_detail
 {
 
-// Combined key for OBJ's separated indices (position / texcoord / normal).
-// After Triangulate() all indices are 0-based; -1 for texcoord/normal means "not present".
 using VertexKey = std::tuple<int, int, int>;
 
 struct UnifiedMeshData
@@ -34,12 +31,10 @@ struct UnifiedMeshData
     MIntArray polygonCounts;
     MIntArray polygonConnects;
 
-    // UV data
     MFloatArray uArray;
     MFloatArray vArray;
-    MIntArray uvIds; // per face-vertex, indexing into uArray/vArray
+    MIntArray uvIds;
 
-    // Per-face-vertex normals
     MVectorArray normalArray;
     MIntArray normalFaceList;
     MIntArray normalVertexList;
@@ -60,7 +55,6 @@ void BuildUnifiedMeshData(
 
     std::map<VertexKey, int> vertexMap;
 
-    // After Triangulate(), each face has exactly 3 vertices
     const int numFaces = static_cast<int>(mesh.num_face_vertices.size());
     int mayaVertexIndex = 0;
 
@@ -86,14 +80,12 @@ void BuildUnifiedMeshData(
                 currentVertexIdx = mayaVertexIndex++;
                 vertexMap[key] = currentVertexIdx;
 
-                // Position
                 const int posBase = 3 * idx.position_index;
                 outData.vertexArray.append(MFloatPoint(
                     static_cast<float>(positions[posBase + 0]),
                     static_cast<float>(positions[posBase + 1]),
                     static_cast<float>(positions[posBase + 2])));
 
-                // UV for this Maya vertex
                 if (hasTexcoords && idx.texcoord_index >= 0)
                 {
                     const int uvBase = 2 * idx.texcoord_index;
@@ -116,7 +108,6 @@ void BuildUnifiedMeshData(
             outData.polygonConnects.append(currentVertexIdx);
             outData.uvIds.append(currentVertexIdx);
 
-            // Per-face-vertex normal
             if (hasNormals && idx.normal_index >= 0)
             {
                 const int nrmBase = 3 * idx.normal_index;
@@ -140,7 +131,6 @@ ObjSceneImporter::ObjSceneImporter(
     const ObjImportOptions &importOptions)
     : document_(std::move(document))
     , importOptions_(importOptions)
-    , mergeResolver_(importOptions_.scenePolicy)
 {
 }
 
@@ -156,7 +146,6 @@ MStatus ObjSceneImporter::Import()
 
     for (const rapidobj::Shape &shape : result.shapes)
     {
-        // Only import shapes that have mesh data (skip lines/points-only shapes)
         if (shape.mesh.indices.size() == 0)
         {
             continue;
@@ -174,7 +163,9 @@ MStatus ObjSceneImporter::Import()
 
 MStatus ObjSceneImporter::createImportRoot()
 {
-    if (!mergeResolver_.usesSceneRoot())
+    // useSceneRoot=1: place content directly in the scene, skip wrapper root
+    // useSceneRoot=0: create a wrapper root node
+    if (importOptions_.useSceneRoot)
     {
         return MS::kSuccess;
     }
@@ -194,11 +185,14 @@ MStatus ObjSceneImporter::createImportRoot()
 
 MStatus ObjSceneImporter::importShape(const rapidobj::Shape &shape)
 {
+    const MObject parent = importRoot_.isNull() ? MObject::kNullObj : importRoot_;
+
     MObject meshTransformObj;
     MStatus status = createMayaMesh(
         document_->GetResult().attributes,
         shape.mesh,
         shape.name,
+        parent,
         meshTransformObj);
 
     if (!status)
@@ -206,7 +200,6 @@ MStatus ObjSceneImporter::importShape(const rapidobj::Shape &shape)
         return status;
     }
 
-    // Assign materials
     const bool hasMaterialIds = std::any_of(
         shape.mesh.material_ids.begin(),
         shape.mesh.material_ids.end(),
@@ -239,6 +232,7 @@ MStatus ObjSceneImporter::createMayaMesh(
     const rapidobj::Attributes &attributes,
     const rapidobj::Mesh &mesh,
     const std::string &shapeName,
+    MObject parent,
     MObject &outTransformObj)
 {
     UnifiedMeshData meshData;
@@ -251,12 +245,9 @@ MStatus ObjSceneImporter::createMayaMesh(
 
     MString nodeName = sanitizeNodeName(shapeName);
 
-    // Create a transform for the mesh group, parented under the import root (if one exists)
     MStatus status;
     MFnTransform transformFn;
-    MObject transformObj = transformFn.create(
-        importRoot_.isNull() ? MObject::kNullObj : importRoot_,
-        &status);
+    MObject transformObj = transformFn.create(parent, &status);
     if (!status)
     {
         return maya_obj::ReportError("maya_obj: failed to create mesh transform", status);
@@ -264,7 +255,6 @@ MStatus ObjSceneImporter::createMayaMesh(
 
     transformFn.setName(nodeName + "_grp#");
 
-    // Create the mesh shape as a child of the transform
     MFnMesh meshFn;
     MObject meshObj = meshFn.create(
         static_cast<int>(meshData.vertexArray.length()),
@@ -282,7 +272,6 @@ MStatus ObjSceneImporter::createMayaMesh(
 
     meshFn.setName(nodeName + "Shape#");
 
-    // Assign UVs
     if (meshData.uArray.length() > 0)
     {
         MString uvSetName("map1");
@@ -293,7 +282,6 @@ MStatus ObjSceneImporter::createMayaMesh(
         }
     }
 
-    // Assign per-face-vertex normals
     if (meshData.normalArray.length() > 0)
     {
         meshFn.setFaceVertexNormals(
@@ -340,7 +328,6 @@ MStatus ObjSceneImporter::assignPerFaceMaterials(
     const rapidobj::Materials &materials,
     const MObject &meshTransformObj)
 {
-    // Build material-id to face-index-list mapping
     std::map<int, std::vector<int>> materialFaceGroups;
 
     const int numFaces = static_cast<int>(mesh.num_face_vertices.size());
@@ -358,7 +345,6 @@ MStatus ObjSceneImporter::assignPerFaceMaterials(
         return assignDefaultMaterial(meshTransformObj);
     }
 
-    // Resolve the mesh DAG path once for face-level assignment
     MDagPath meshDagPath;
     MDagPath::getAPathTo(meshTransformObj, meshDagPath);
     meshDagPath.extendToShape();
@@ -368,7 +354,6 @@ MStatus ObjSceneImporter::assignPerFaceMaterials(
         const int matId = entry.first;
         const rapidobj::Material &material = materials[matId];
 
-        // Build a material base name from the OBJ material name or fall back to mat ID
         const std::string baseName = material.name.empty()
             ? "obj_material_" + std::to_string(matId)
             : material.name;
@@ -420,8 +405,6 @@ MString ObjSceneImporter::sanitizeNodeName(const std::string &name) const
         return MString("obj_mesh");
     }
 
-    // OBJ shape / group names may contain characters that Maya disallows in node names.
-    // Replace common problematic characters with underscores.
     std::string sanitized = name;
     for (char &c : sanitized)
     {
@@ -431,7 +414,6 @@ MString ObjSceneImporter::sanitizeNodeName(const std::string &name) const
         }
     }
 
-    // Must start with a letter or underscore
     if (!sanitized.empty() && std::isdigit(static_cast<unsigned char>(sanitized[0])))
     {
         sanitized = "obj_" + sanitized;
