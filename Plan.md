@@ -2413,3 +2413,31 @@
   - 当前 x86 工具链下未检测到可用 Autodesk FBX SDK，因此自动回退到 OpenFBX。
   - `utils/studiomdl` 缺少 `libedgegeomtool`，当前会以无 edgegeom 支持模式构建。
   - 当前机器/工具链未安装 MFC，因此影响若干工具目标，详见上面的 MFC 相关问题。
+
+## OBJ 格式导入支持 (Maya 插件)
+
+- 状态：已完成（基础实现，2026-06-16）
+- 优先级：中
+- 目标：在 dcc_plugin 中新增 Wavefront OBJ 格式的导入支持，遵循 SMD/DMX 的 Maya 插件架构模式
+- 方案：基于 rapidobj 单头文件库（MIT 许可，C++17），仅实现导入（不含导出）
+- 新增模块：
+  - `dcc_plugin/src/common_obj/` — OBJ 格式公共代码（MayaObjCommon、SimpleObjDocument、rapidobj.hpp）
+  - `dcc_plugin/src/importer_obj/` — OBJ 导入实现（ObjImportTranslator、ObjImportSession、ObjSceneImporter）
+  - `dcc_plugin/src/plugin_obj/` — Maya 插件入口（PluginMain.cpp）
+- 构建产物：`maya_obj.mll`（294KB，Release x64）
+- 已实现功能：
+  - 基于 rapidobj::ParseFile() 解析 .obj 文件（含 .mtl 材质库）
+  - rapidobj::Triangulate() 将非三角面转为三角形
+  - OBJ 分离索引（position/texcoord/normal）→ Maya 统一顶点列表
+  - UV 导入（支持 flipUvV 选项）
+  - 逐面顶点法线导入
+  - 材质导入（按 material_ids 分组，创建 Lambert ShadingEngine，支持 per-face 材质分配）
+  - TransformCorrection 支持（坐标系统校正）
+  - SceneImportPolicy 支持（useSceneRoot、importMode 等选项）
+  - 节点名称清理（OBJ 特殊字符 → Maya 合法名称）
+- 后续待完善：
+  - OBJ groups (g) / objects (o) 的多对象分离导入
+  - vertex color 导入
+  - PBR 材质属性映射
+  - 回归测试用例
+  - MTL 纹理路径 → Maya file texture 节点绑定

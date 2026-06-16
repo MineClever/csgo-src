@@ -1,0 +1,28 @@
+global proc int mayaObjTranslatorImport(string $parent,
+                                        string $action,
+                                        string $initialSettings,
+                                        string $resultCallback)
+{
+    if (!`exists MayaObjImport_applyOptionsString`) {
+        source "performObjImport.mel";
+    }
+
+    if ($action == "post") {
+        ObjImportOptionsUI($parent);
+        MayaObjImport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "fill") {
+        MayaObjImport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "query") {
+        string $optionsString = MayaObjImport_collectOptionsString();
+        eval($resultCallback + " \"" + $optionsString + "\"");
+        return 1;
+    }
+
+    return 0;
+}

@@ -1,0 +1,189 @@
+global proc MayaObjImport_setOptionVars(int $forceFactorySettings)
+{
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_useSceneRoot`) { optionVar -intValue MayaObj_useSceneRoot 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_importMode`) { optionVar -stringValue MayaObj_importMode "create"; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_translateX`) { optionVar -floatValue MayaObj_translateX 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_translateY`) { optionVar -floatValue MayaObj_translateY 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_translateZ`) { optionVar -floatValue MayaObj_translateZ 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_rotateX`) { optionVar -floatValue MayaObj_rotateX 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_rotateY`) { optionVar -floatValue MayaObj_rotateY 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_rotateZ`) { optionVar -floatValue MayaObj_rotateZ 0; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_scaleX`) { optionVar -floatValue MayaObj_scaleX 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_scaleY`) { optionVar -floatValue MayaObj_scaleY 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_scaleZ`) { optionVar -floatValue MayaObj_scaleZ 1; }
+    if ($forceFactorySettings || !`optionVar -exists MayaObj_flipUvV`) { optionVar -intValue MayaObj_flipUvV 1; }
+}
+
+global proc string MayaObjImport_defaultOptionsString()
+{
+    return "useSceneRoot=0;importMode=create;translateX=0;translateY=0;translateZ=0;rotateX=0;rotateY=0;rotateZ=0;scaleX=1;scaleY=1;scaleZ=1;flipUvV=1";
+}
+
+global proc string MayaObjImport_collectOptionVarString()
+{
+    MayaObjImport_setOptionVars(0);
+    string $options = ("useSceneRoot=" + `optionVar -q MayaObj_useSceneRoot`
+        + ";importMode=" + `optionVar -q MayaObj_importMode`
+        + ";translateX=" + `optionVar -q MayaObj_translateX`
+        + ";translateY=" + `optionVar -q MayaObj_translateY`
+        + ";translateZ=" + `optionVar -q MayaObj_translateZ`
+        + ";rotateX=" + `optionVar -q MayaObj_rotateX`
+        + ";rotateY=" + `optionVar -q MayaObj_rotateY`
+        + ";rotateZ=" + `optionVar -q MayaObj_rotateZ`
+        + ";scaleX=" + `optionVar -q MayaObj_scaleX`
+        + ";scaleY=" + `optionVar -q MayaObj_scaleY`
+        + ";scaleZ=" + `optionVar -q MayaObj_scaleZ`
+        + ";flipUvV=" + `optionVar -q MayaObj_flipUvV`);
+    return $options;
+}
+
+global proc MayaObjImport_applyOptionsString(string $options)
+{
+    string $effectiveOptions = $options;
+    if (size($effectiveOptions) == 0) { $effectiveOptions = MayaObjImport_defaultOptionsString(); }
+    int $useSceneRoot = 0;
+    string $importMode = "create";
+    float $translateX = 0; float $translateY = 0; float $translateZ = 0;
+    float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
+    float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
+    int $flipUvV = 1;
+
+    string $optionList[]; tokenize($effectiveOptions, ";", $optionList);
+    for ($option in $optionList) {
+        string $parts[]; tokenize($option, "=", $parts);
+        if (size($parts) < 2) { continue; }
+        if ($parts[0] == "useSceneRoot") { $useSceneRoot = $parts[1]; }
+        else if ($parts[0] == "importMode") { $importMode = $parts[1]; }
+        else if ($parts[0] == "translateX") { $translateX = $parts[1]; }
+        else if ($parts[0] == "translateY") { $translateY = $parts[1]; }
+        else if ($parts[0] == "translateZ") { $translateZ = $parts[1]; }
+        else if ($parts[0] == "rotateX") { $rotateX = $parts[1]; }
+        else if ($parts[0] == "rotateY") { $rotateY = $parts[1]; }
+        else if ($parts[0] == "rotateZ") { $rotateZ = $parts[1]; }
+        else if ($parts[0] == "scaleX") { $scaleX = $parts[1]; }
+        else if ($parts[0] == "scaleY") { $scaleY = $parts[1]; }
+        else if ($parts[0] == "scaleZ") { $scaleZ = $parts[1]; }
+        else if ($parts[0] == "flipUvV") { $flipUvV = $parts[1]; }
+    }
+
+    if (`checkBoxGrp -exists objImportUseSceneRoot`) { checkBoxGrp -e -value1 $useSceneRoot objImportUseSceneRoot; }
+    if (`optionMenuGrp -exists objImportMode`) {
+        if ($importMode == "update") { optionMenuGrp -e -select 2 objImportMode; }
+        else if ($importMode == "append") { optionMenuGrp -e -select 3 objImportMode; }
+        else { optionMenuGrp -e -select 1 objImportMode; }
+    }
+    if (`floatFieldGrp -exists objImportTranslation`) {
+        floatFieldGrp -e -value1 $translateX -value2 $translateY -value3 $translateZ objImportTranslation;
+    }
+    if (`floatFieldGrp -exists objImportRotation`) {
+        floatFieldGrp -e -value1 $rotateX -value2 $rotateY -value3 $rotateZ objImportRotation;
+    }
+    if (`floatFieldGrp -exists objImportScale`) {
+        floatFieldGrp -e -value1 $scaleX -value2 $scaleY -value3 $scaleZ objImportScale;
+    }
+    if (`checkBoxGrp -exists objImportFlipUvV`) {
+        checkBoxGrp -e -value1 $flipUvV objImportFlipUvV;
+    }
+}
+
+global proc string MayaObjImport_collectOptionsString()
+{
+    int $useSceneRoot = 0;
+    if (`checkBoxGrp -exists objImportUseSceneRoot`) { $useSceneRoot = `checkBoxGrp -q -value1 objImportUseSceneRoot`; }
+    string $importMode = "create";
+    if (`optionMenuGrp -exists objImportMode`) {
+        int $modeSelect = `optionMenuGrp -q -select objImportMode`;
+        if ($modeSelect == 2) { $importMode = "update"; }
+        else if ($modeSelect == 3) { $importMode = "append"; }
+    }
+    float $translateX = 0; float $translateY = 0; float $translateZ = 0;
+    float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
+    float $scaleX = 1; float $scaleY = 1; float $scaleZ = 1;
+    if (`floatFieldGrp -exists objImportTranslation`) {
+        $translateX = `floatFieldGrp -q -value1 objImportTranslation`;
+        $translateY = `floatFieldGrp -q -value2 objImportTranslation`;
+        $translateZ = `floatFieldGrp -q -value3 objImportTranslation`;
+    }
+    if (`floatFieldGrp -exists objImportRotation`) {
+        $rotateX = `floatFieldGrp -q -value1 objImportRotation`;
+        $rotateY = `floatFieldGrp -q -value2 objImportRotation`;
+        $rotateZ = `floatFieldGrp -q -value3 objImportRotation`;
+    }
+    if (`floatFieldGrp -exists objImportScale`) {
+        $scaleX = `floatFieldGrp -q -value1 objImportScale`;
+        $scaleY = `floatFieldGrp -q -value2 objImportScale`;
+        $scaleZ = `floatFieldGrp -q -value3 objImportScale`;
+    }
+    int $flipUvV = 1;
+    if (`checkBoxGrp -exists objImportFlipUvV`) {
+        $flipUvV = `checkBoxGrp -q -value1 objImportFlipUvV`;
+    }
+
+    string $options = ("useSceneRoot=" + $useSceneRoot
+        + ";importMode=" + $importMode
+        + ";translateX=" + $translateX
+        + ";translateY=" + $translateY
+        + ";translateZ=" + $translateZ
+        + ";rotateX=" + $rotateX
+        + ";rotateY=" + $rotateY
+        + ";rotateZ=" + $rotateZ
+        + ";scaleX=" + $scaleX
+        + ";scaleY=" + $scaleY
+        + ";scaleZ=" + $scaleZ
+        + ";flipUvV=" + $flipUvV);
+    return $options;
+}
+
+global proc string ObjImportOptionsUI(string $parent)
+{
+    setParent $parent;
+    setUITemplate -pushTemplate DefaultTemplate;
+    waitCursor -state 1;
+    string $optionLayout = `scrollLayout`;
+        columnLayout -adjustableColumn true;
+            checkBoxGrp -numberOfCheckBoxes 1 -label "Root Target" -label1 "Import Directly Into Scene Root" -annotation "When enabled, import skips the dedicated wrapper root and places content directly in the Maya scene." objImportUseSceneRoot;
+            optionMenuGrp -label "Merge Mode" -annotation "Create creates new nodes. Update reuses matching hierarchy and mesh groups. Append only fills missing nodes." objImportMode;
+                menuItem -label "Create New";
+                menuItem -label "Update Existing";
+                menuItem -label "Append Missing";
+            separator -style "in";
+            text -align "left" -label "Geometry";
+            checkBoxGrp -numberOfCheckBoxes 1 -label "UV" -label1 "Flip UV V (1 - V)" -annotation "Flips the V coordinate during UV import to match the expected Maya orientation." objImportFlipUvV;
+            separator -style "in";
+            text -align "left" -label "Transform Correction";
+            text -align "left" -label "Applied directly during import as translation, rotation and scale correction. Namespace options use Maya's native Import file panel.";
+            floatFieldGrp -numberOfFields 3 -label "Translation" -annotation "Applied directly during import before nodes are written into the Maya scene." objImportTranslation;
+            floatFieldGrp -numberOfFields 3 -label "Rotation" -annotation "Degrees. Applied directly during import instead of creating a correction wrapper node." objImportRotation;
+            floatFieldGrp -numberOfFields 3 -label "Scale" -annotation "Scale correction applied directly during import." objImportScale;
+        setParent ..;
+    setParent ..;
+    waitCursor -state 0;
+    setUITemplate -popTemplate;
+    return $optionLayout;
+}
+
+global proc MayaObj_importFileOptionsUICreate(string $parent) { ObjImportOptionsUI($parent); }
+global proc MayaObj_importFileOptionsUIInit(string $parent, string $filter) { MayaObjImport_setOptionVars(0); MayaObjImport_applyOptionsString(MayaObjImport_collectOptionVarString()); }
+
+global proc MayaObj_importFileOptionsUICommit(string $parent)
+{
+    string $optionString = MayaObjImport_collectOptionsString();
+    MayaObjImport_applyOptionsString($optionString);
+    string $optionList[]; tokenize($optionString, ";", $optionList);
+    for ($option in $optionList) {
+        string $parts[]; tokenize($option, "=", $parts);
+        if (size($parts) < 2) { continue; }
+        if ($parts[0] == "useSceneRoot") { optionVar -intValue MayaObj_useSceneRoot $parts[1]; }
+        else if ($parts[0] == "importMode") { optionVar -stringValue MayaObj_importMode $parts[1]; }
+        else if ($parts[0] == "translateX") { optionVar -floatValue MayaObj_translateX $parts[1]; }
+        else if ($parts[0] == "translateY") { optionVar -floatValue MayaObj_translateY $parts[1]; }
+        else if ($parts[0] == "translateZ") { optionVar -floatValue MayaObj_translateZ $parts[1]; }
+        else if ($parts[0] == "rotateX") { optionVar -floatValue MayaObj_rotateX $parts[1]; }
+        else if ($parts[0] == "rotateY") { optionVar -floatValue MayaObj_rotateY $parts[1]; }
+        else if ($parts[0] == "rotateZ") { optionVar -floatValue MayaObj_rotateZ $parts[1]; }
+        else if ($parts[0] == "scaleX") { optionVar -floatValue MayaObj_scaleX $parts[1]; }
+        else if ($parts[0] == "scaleY") { optionVar -floatValue MayaObj_scaleY $parts[1]; }
+        else if ($parts[0] == "scaleZ") { optionVar -floatValue MayaObj_scaleZ $parts[1]; }
+        else if ($parts[0] == "flipUvV") { optionVar -intValue MayaObj_flipUvV $parts[1]; }
+    }
+}
