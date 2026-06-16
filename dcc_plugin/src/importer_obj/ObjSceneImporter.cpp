@@ -1,4 +1,4 @@
-#include "ObjSceneImporter.h"
+﻿#include "ObjSceneImporter.h"
 
 #include <common/MaterialUtils.h>
 #include <common_obj/MayaObjCommon.h>
