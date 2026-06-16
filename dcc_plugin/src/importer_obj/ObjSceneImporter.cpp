@@ -57,15 +57,16 @@ void BuildUnifiedMeshData(
 
     const int numFaces = static_cast<int>(mesh.num_face_vertices.size());
     int mayaVertexIndex = 0;
+    int idxOffset = 0;
 
     for (int faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
-        outData.polygonCounts.append(3);
+        const int numFaceVerts = static_cast<int>(mesh.num_face_vertices[faceIdx]);
+        outData.polygonCounts.append(numFaceVerts);
 
-        for (int v = 0; v < 3; ++v)
+        for (int v = 0; v < numFaceVerts; ++v)
         {
-            const int idxOffset = faceIdx * 3 + v;
-            const rapidobj::Index &idx = mesh.indices[idxOffset];
+            const rapidobj::Index &idx = mesh.indices[idxOffset + v];
 
             const VertexKey key(idx.position_index, idx.texcoord_index, idx.normal_index);
 
@@ -119,6 +120,8 @@ void BuildUnifiedMeshData(
                 outData.normalVertexList.append(v);
             }
         }
+
+        idxOffset += numFaceVerts;
     }
 }
 
