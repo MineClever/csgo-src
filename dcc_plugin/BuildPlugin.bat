@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
 set PLUGIN_ROOT=%~dp0
 set PLUGIN_ROOT=%PLUGIN_ROOT:~0,-1%
@@ -43,7 +43,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo ============================================================ > "%BUILD_LOG%"
-echo  Maya DMX Plugin Build Log (%CONFIG%, %PLATFORM%) >> "%BUILD_LOG%"
+echo  Maya Plugin Build Log (%CONFIG%, %PLATFORM%) >> "%BUILD_LOG%"
 echo ============================================================ >> "%BUILD_LOG%"
 echo. >> "%BUILD_LOG%"
 echo Full rebuild: build directory recreated from scratch. >> "%BUILD_LOG%"
@@ -58,9 +58,8 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-
 echo.
-echo Building plugin...
+echo Building all plugin targets...
 echo. >> "%BUILD_LOG%"
 echo [BUILD] cmake --build "%BUILD_DIR%" --config %CONFIG% >> "%BUILD_LOG%"
 cmake --build "%BUILD_DIR%" --config %CONFIG% >> "%BUILD_LOG%" 2>&1
@@ -71,6 +70,19 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
+set SOURCE_BIN_DIR=%PLUGIN_ROOT%\bin\%CONFIG%
+
+REM --- Check that at least one .mll was produced ---
+set HAS_MLL=0
+for %%f in ("%SOURCE_BIN_DIR%\*.mll") do set HAS_MLL=1
+if "!HAS_MLL!"=="0" (
+    echo.
+    echo ERROR: No .mll files found in "%SOURCE_BIN_DIR%"
+    pause
+    exit /b 1
+)
+
+REM --- Ensure module plugin directory exists ---
 if not exist "%MODULE_PLUGIN_DIR%" (
     mkdir "%MODULE_PLUGIN_DIR%"
     if %ERRORLEVEL% NEQ 0 (
@@ -81,36 +93,40 @@ if not exist "%MODULE_PLUGIN_DIR%" (
     )
 )
 
-copy /Y "%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll" "%MODULE_PLUGIN_DIR%\maya_dmx.mll" >nul
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo ERROR: failed to sync maya_dmx.mll into "%MODULE_PLUGIN_DIR%"
-    pause
-    exit /b %ERRORLEVEL%
+REM --- Sync all .mll files into the Maya module directory ---
+echo.
+echo Syncing plugins to module directory...
+for %%f in ("%SOURCE_BIN_DIR%\*.mll") do (
+    copy /Y "%%f" "%MODULE_PLUGIN_DIR%\" >nul
+    if !ERRORLEVEL! NEQ 0 (
+        echo ERROR: failed to sync %%~nxf into "%MODULE_PLUGIN_DIR%"
+        pause
+        exit /b !ERRORLEVEL!
+    )
 )
 
-copy /Y "%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.mll" "%MODULE_PLUGIN_DIR%\maya_smd.mll" >nul
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo ERROR: failed to sync maya_smd.mll into "%MODULE_PLUGIN_DIR%"
-    pause
-    exit /b %ERRORLEVEL%
+REM --- PDB handling ---
+if /I "%BUILD_PDB%"=="OFF" (
+    del /Q "%SOURCE_BIN_DIR%\*.pdb" >nul 2>nul
+) else (
+    for %%f in ("%SOURCE_BIN_DIR%\*.pdb") do (
+        copy /Y "%%f" "%MODULE_PLUGIN_DIR%\" >nul 2>nul
+    )
 )
 
 echo.
 echo Build succeeded. Outputs:
-if /I "%BUILD_PDB%"=="OFF" (
-del /Q "%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.pdb" >nul 2>nul
-del /Q "%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.pdb" >nul 2>nul
+for %%f in ("%SOURCE_BIN_DIR%\*.mll") do (
+    echo   "%SOURCE_BIN_DIR%\%%~nxf"
 )
-echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll"
-echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.mll"
 echo Synced module plugins:
-echo   "%MODULE_PLUGIN_DIR%\maya_dmx.mll"
-echo   "%MODULE_PLUGIN_DIR%\maya_smd.mll"
+for %%f in ("%MODULE_PLUGIN_DIR%\*.mll") do (
+    echo   "%%f"
+)
 if /I "%BUILD_PDB%"=="ON" (
-echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.pdb"
-echo   "%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.pdb"
+    for %%f in ("%SOURCE_BIN_DIR%\*.pdb") do (
+        if exist "%%f" echo   "%%f"
+    )
 )
 echo Log: "%BUILD_LOG%"
 pause
