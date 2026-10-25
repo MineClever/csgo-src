@@ -13,6 +13,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--plugin", dest="plugin_dmx", required=True)
     parser.add_argument("--plugin-smd")
+    parser.add_argument("--plugin-gltf")
     parser.add_argument("--samples", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--cases", nargs="+")
@@ -30,6 +31,8 @@ def normalize_args(args):
     args.plugin_dmx = os.path.abspath(args.plugin_dmx)
     if args.plugin_smd:
         args.plugin_smd = os.path.abspath(args.plugin_smd)
+    if args.plugin_gltf:
+        args.plugin_gltf = os.path.abspath(args.plugin_gltf)
     args.samples = os.path.abspath(args.samples)
     args.output = os.path.abspath(args.output)
     args.config = os.path.abspath(args.config)
@@ -57,6 +60,8 @@ def build_child_command(args, case_name):
     ]
     if args.plugin_smd:
         command.extend(["--plugin-smd", args.plugin_smd])
+    if args.plugin_gltf:
+        command.extend(["--plugin-gltf", args.plugin_gltf])
     return command
 
 
@@ -172,6 +177,8 @@ def run_cases_in_process(args, case_names):
     }
     if args.plugin_smd:
         plugin_paths_by_format["smd"] = args.plugin_smd
+    if args.plugin_gltf:
+        plugin_paths_by_format["gltf"] = args.plugin_gltf
 
     maya.standalone.initialize(name="python")
     try:

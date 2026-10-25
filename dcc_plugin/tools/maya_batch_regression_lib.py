@@ -91,7 +91,7 @@ class MayaRegressionContext:
         normalized_name = self.config.normalize_case_name(case_name)
         root, ext = os.path.splitext(normalized_name)
         candidate_paths = []
-        if ext.lower() in (".dmx", ".dmxb", ".dmxbin", ".smd", ".vta"):
+        if ext.lower() in (".dmx", ".dmxb", ".dmxbin", ".smd", ".vta", ".gltf", ".glb"):
             candidate_paths.append(os.path.join(self.sample_dir, normalized_name))
         else:
             candidate_paths.append(os.path.join(self.sample_dir, f"{normalized_name}.dmx"))
@@ -99,6 +99,8 @@ class MayaRegressionContext:
             candidate_paths.append(os.path.join(self.sample_dir, f"{normalized_name}.dmxbin"))
             candidate_paths.append(os.path.join(self.sample_dir, f"{normalized_name}.smd"))
             candidate_paths.append(os.path.join(self.sample_dir, f"{normalized_name}.vta"))
+            candidate_paths.append(os.path.join(self.sample_dir, f"{normalized_name}.gltf"))
+            candidate_paths.append(os.path.join(self.sample_dir, f"{normalized_name}.glb"))
 
         for candidate_path in candidate_paths:
             if os.path.isfile(candidate_path):
@@ -247,6 +249,29 @@ class SnapshotUtils:
             "blendshape_count": len(cmds.ls(type="blendShape", long=True) or []),
             "transform_count": len(cmds.ls(type="transform", long=True) or []),
         }
+
+    @staticmethod
+    def snapshot_file_texture_color_spaces(cmds):
+        texture_snapshots = {}
+        for file_node in cmds.ls(type="file") or []:
+            file_texture_name = ""
+            color_space = ""
+            ignore_rules = None
+
+            if cmds.objExists(file_node + ".fileTextureName"):
+                file_texture_name = cmds.getAttr(file_node + ".fileTextureName") or ""
+            if cmds.objExists(file_node + ".colorSpace"):
+                color_space = cmds.getAttr(file_node + ".colorSpace") or ""
+            if cmds.objExists(file_node + ".ignoreColorSpaceFileRules"):
+                ignore_rules = bool(cmds.getAttr(file_node + ".ignoreColorSpaceFileRules"))
+
+            texture_snapshots[file_node] = {
+                "fileTextureName": file_texture_name,
+                "colorSpace": color_space,
+                "ignoreColorSpaceFileRules": ignore_rules,
+            }
+
+        return texture_snapshots
 
     @staticmethod
     def snapshot_imported_node_types(cmds, root_paths):
@@ -432,6 +457,88 @@ class SnapshotUtils:
         if len(unique_mesh_paths) != 1:
             raise RuntimeError(f"Expected exactly one visible mesh, got {unique_mesh_paths}")
         return unique_mesh_paths[0]
+
+
+    @staticmethod
+    def snapshot_bone_hierarchy(cmds, root_paths):
+        """Records joint hierarchy: joint type, parent-child relationships, and joint count."""
+        hierarchy = {"joints": {}, "joint_count": 0}
+        for root_path in root_paths:
+            descendants = cmds.listRelatives(root_path, allDescendents=True, fullPath=True, type="joint") or []
+            hierarchy["joint_count"] += len(descendants)
+            for joint in descendants:
+                parent = cmds.listRelatives(joint, parent=True, fullPath=True) or ["<none>"]
+                children = cmds.listRelatives(joint, children=True, fullPath=True, type="joint") or []
+                relative = joint[len(root_path):].lstrip("|")
+                hierarchy["joints"][relative] = {
+                    "parent": parent[0][len(root_path):].lstrip("|") if parent[0] != "<none>" else "<none>",
+                    "child_count": len(children),
+                }
+        return hierarchy
+
+    @staticmethod
+    def snapshot_skin_weights_sample(cmds, root_paths, sample_indices=(0,)):
+        """Samples skin weights at specified vertex indices for all skinned meshes."""
+        weight_samples = {}
+        for root_path in root_paths:
+            descendant_meshes = cmds.listRelatives(root_path, allDescendents=True, fullPath=True, type="mesh") or []
+            root_meshes = cmds.listRelatives(root_path, shapes=True, fullPath=True, type="mesh") or []
+            for mesh in root_meshes + descendant_meshes:
+                if cmds.getAttr(mesh + ".intermediateObject"):
+                    continue
+                history = cmds.listHistory(mesh) or []
+                skin_clusters = [n for n in history if cmds.nodeType(n) == "skinCluster"]
+                if not skin_clusters:
+                    continue
+                parents = cmds.listRelatives(mesh, parent=True, fullPath=True) or [mesh]
+                mesh_key = parents[0][len(root_path):].lstrip("|") if root_path in parents[0] else parents[0]
+                vert_count = cmds.polyEvaluate(mesh, vertex=True) or 0
+                mesh_samples = {}
+                for vi in sample_indices:
+                    if vi >= vert_count:
+                        continue
+                    try:
+                        weights = cmds.skinPercent(skin_clusters[0], f"{mesh}.vtx[{vi}]", query=True, value=True) or []
+                        influences = cmds.skinPercent(skin_clusters[0], f"{mesh}.vtx[{vi}]", query=True, transform=None) or []
+                        mesh_samples[str(vi)] = dict(zip(influences, [round(w, 6) for w in weights]))
+                    except Exception:
+                        pass
+                if mesh_samples:
+                    weight_samples[mesh_key] = mesh_samples
+        return weight_samples
+
+    @staticmethod
+    def snapshot_animation_sample_values(cmds, root_paths, sample_times, plugs_of_interest=None):
+        """Sample animation curve values at specific frame times for comparison."""
+        import maya.cmds as mc
+        current_time = mc.currentTime(query=True)
+        try:
+            samples = {}
+            all_joints = []
+            for root_path in root_paths:
+                joints = cmds.listRelatives(root_path, allDescendents=True, fullPath=True, type="joint") or []
+                all_joints.extend(joints)
+            if plugs_of_interest is None:
+                plugs_of_interest = []
+                for joint in all_joints:
+                    for attr in ["translateX", "translateY", "translateZ", "rotateX", "rotateY", "rotateZ", "scaleX", "scaleY", "scaleZ"]:
+                        if cmds.objExists(f"{joint}.{attr}"):
+                            key_count = cmds.keyframe(joint, attribute=attr, query=True, keyframeCount=True) or 0
+                            if key_count > 0:
+                                plugs_of_interest.append(f"{joint}.{attr}")
+            for plug_name in plugs_of_interest:
+                if not cmds.objExists(plug_name):
+                    continue
+                node, attr = plug_name.rsplit(".", 1)
+                plug_samples = {}
+                for t in sample_times:
+                    mc.currentTime(t, edit=True)
+                    val = cmds.getAttr(plug_name)
+                    plug_samples[str(t)] = round(float(val), 6) if isinstance(val, (int, float)) else val
+                samples[plug_name] = plug_samples
+            return samples
+        finally:
+            mc.currentTime(current_time, edit=True)
 
 
 class SnapshotComparator:
@@ -643,6 +750,100 @@ class SnapshotComparator:
                     last_error = exc
         raise last_error
 
+    @classmethod
+    def compare_bone_hierarchy(cls, reference_hierarchy, candidate_hierarchy):
+        """Verify joint hierarchy structure is consistent through roundtrip."""
+        if reference_hierarchy["joint_count"] != candidate_hierarchy["joint_count"]:
+            raise RuntimeError(
+                f"Bone hierarchy joint count mismatch. "
+                f"expected={reference_hierarchy['joint_count']} actual={candidate_hierarchy['joint_count']}"
+            )
+        def compare_exact(lhs_joints, rhs_joints):
+            ref_keys = set(lhs_joints["joints"].keys())
+            cand_keys = set(rhs_joints["joints"].keys())
+            missing = sorted(ref_keys - cand_keys)
+            extra = sorted(cand_keys - ref_keys)
+            if missing or extra:
+                raise RuntimeError(f"Bone hierarchy joint set mismatch. Missing={missing} Extra={extra}")
+            for joint, info in lhs_joints["joints"].items():
+                cand_info = rhs_joints["joints"].get(joint, {})
+                if info["child_count"] != cand_info.get("child_count", -1):
+                    raise RuntimeError(
+                        f"Bone hierarchy child count mismatch for {joint}. "
+                        f"expected={info['child_count']} actual={cand_info.get('child_count', -1)}"
+                    )
+                if info["parent"] != cand_info.get("parent", ""):
+                    raise RuntimeError(
+                        f"Bone hierarchy parent mismatch for {joint}. "
+                        f"expected={info['parent']} actual={cand_info.get('parent', '')}"
+                    )
+        def wrap_hierarchy(data):
+            return {"joints": data, "joint_count": reference_hierarchy.get("joint_count", 0)}
+        cls._compare_wrapper_aware(
+            wrap_hierarchy(reference_hierarchy["joints"]),
+            wrap_hierarchy(candidate_hierarchy["joints"]),
+            compare_exact
+        )
+
+    @classmethod
+    def compare_skin_weight_samples(cls, reference_weights, candidate_weights, tolerance=0.01):
+        """Verify skin weight values are consistent through roundtrip (within tolerance)."""
+        def compare_exact(lhs, rhs):
+            ref_keys = set(lhs.keys())
+            cand_keys = set(rhs.keys())
+            missing = sorted(ref_keys - cand_keys)
+            extra = sorted(cand_keys - ref_keys)
+            if missing or extra:
+                raise RuntimeError(f"Skin weight sample mesh set mismatch. Missing={missing} Extra={extra}")
+            for mesh_key in sorted(ref_keys):
+                ref_mesh = lhs[mesh_key]
+                cand_mesh = rhs[mesh_key]
+                if set(ref_mesh.keys()) != set(cand_mesh.keys()):
+                    raise RuntimeError(
+                        f"Skin weight sample vertex set mismatch for {mesh_key}"
+                    )
+                for vi in sorted(ref_mesh.keys()):
+                    ref_infs = ref_mesh[vi]
+                    cand_infs = cand_mesh[vi]
+                    if set(ref_infs.keys()) != set(cand_infs.keys()):
+                        raise RuntimeError(
+                            f"Skin weight influence set mismatch for {mesh_key} vertex {vi}"
+                        )
+                    for inf in ref_infs:
+                        diff = abs(ref_infs[inf] - cand_infs.get(inf, 0.0))
+                        if diff > tolerance:
+                            raise RuntimeError(
+                                f"Skin weight value mismatch for {mesh_key} vtx {vi} inf {inf}. "
+                                f"diff={diff:.6f} (tol={tolerance})"
+                            )
+        cls._compare_wrapper_aware(reference_weights, candidate_weights, compare_exact)
+
+    @classmethod
+    def compare_animation_sample_values(cls, reference_samples, candidate_samples, tolerance=0.01):
+        """Verify animation curve values at sampled frames match within tolerance."""
+        def compare_exact(lhs, rhs):
+            ref_keys = set(lhs.keys())
+            cand_keys = set(rhs.keys())
+            missing = sorted(ref_keys - cand_keys)
+            extra = sorted(cand_keys - ref_keys)
+            if missing or extra:
+                raise RuntimeError(f"Animation sample plug set mismatch. Missing={missing} Extra={extra}")
+            for plug in sorted(ref_keys):
+                ref_times = lhs[plug]
+                cand_times = rhs.get(plug, {})
+                if set(ref_times.keys()) != set(cand_times.keys()):
+                    raise RuntimeError(
+                        f"Animation sample time set mismatch for {plug}"
+                    )
+                for t in sorted(ref_times.keys()):
+                    diff = abs(float(ref_times[t]) - float(cand_times.get(t, 0.0)))
+                    if diff > tolerance:
+                        raise RuntimeError(
+                            f"Animation sample value mismatch for {plug} at time {t}. "
+                            f"expected={ref_times[t]} actual={cand_times.get(t, 'N/A')} diff={diff:.6f}"
+                        )
+        cls._compare_wrapper_aware(reference_samples, candidate_samples, compare_exact)
+
 
 class GateValidator:
     def __init__(self, context):
@@ -674,6 +875,71 @@ class GateValidator:
                     f"Animation gate failed for {normalized_case_name}. "
                     f"missing animated plug containing: {required_substring}"
                 )
+
+    def validate_texture_color_space_gate(self, case_name, texture_snapshots):
+        expectation = self.ctx.config.get_case_expectation("texture_color_space_gate_expectations", case_name)
+        if not expectation:
+            return
+
+        normalized_case_name = self.ctx.config.normalize_case_name(case_name)
+
+        require_cm_enabled = expectation.get("require_color_management_enabled")
+        if require_cm_enabled is not None:
+            import maya.mel
+            cm_enabled = bool(int(maya.mel.eval("colorManagement -query -cmfe") or 0))
+            if cm_enabled != bool(require_cm_enabled):
+                raise RuntimeError(
+                    f"Texture color-space gate failed for {normalized_case_name}. "
+                    f"expected colorManagement cmfe={bool(require_cm_enabled)}, got {cm_enabled}"
+                )
+
+        if len(texture_snapshots) < expectation.get("min_file_nodes", 0):
+            raise RuntimeError(
+                f"Texture color-space gate failed for {normalized_case_name}. "
+                f"expected at least {expectation['min_file_nodes']} file nodes, got {len(texture_snapshots)}"
+            )
+
+        require_ignore_rules = expectation.get("require_ignore_color_space_file_rules")
+        for rule in expectation.get("path_contains", []):
+            needle = rule["contains"].lower()
+            matches = [
+                (node_name, snapshot)
+                for node_name, snapshot in texture_snapshots.items()
+                if needle in snapshot.get("fileTextureName", "").lower()
+            ]
+
+            min_count = rule.get("min_count", 1)
+            if len(matches) < min_count:
+                raise RuntimeError(
+                    f"Texture color-space gate failed for {normalized_case_name}. "
+                    f"expected at least {min_count} file node(s) with path containing '{rule['contains']}', got {len(matches)}"
+                )
+
+            expected_color_space = rule.get("color_space")
+            if expected_color_space:
+                mismatches = [
+                    (node_name, snapshot.get("colorSpace"))
+                    for node_name, snapshot in matches
+                    if snapshot.get("colorSpace") != expected_color_space
+                ]
+                if mismatches:
+                    raise RuntimeError(
+                        f"Texture color-space gate failed for {normalized_case_name}. "
+                        f"expected colorSpace={expected_color_space} for paths containing '{rule['contains']}', got {mismatches}"
+                    )
+
+            if require_ignore_rules is not None:
+                mismatches = [
+                    (node_name, snapshot.get("ignoreColorSpaceFileRules"))
+                    for node_name, snapshot in matches
+                    if snapshot.get("ignoreColorSpaceFileRules") != require_ignore_rules
+                ]
+                if mismatches:
+                    raise RuntimeError(
+                        f"Texture color-space gate failed for {normalized_case_name}. "
+                        f"expected ignoreColorSpaceFileRules={require_ignore_rules} for paths containing "
+                        f"'{rule['contains']}', got {mismatches}"
+                    )
 
     def validate_append_gate(self, case_name, format_config, input_path):
         expectation = self.ctx.config.get_case_expectation("append_gate_expectations", case_name)
@@ -2356,6 +2622,9 @@ class RegressionRunner:
         blendshape_marker_path,
         animation_marker_path,
         import_options="",
+        reference_bone_hierarchy=None,
+        reference_skin_weights=None,
+        reference_anim_samples=None,
     ):
         cmds = self.ctx.cmds
         cmds.file(new=True, force=True)
@@ -2371,12 +2640,23 @@ class RegressionRunner:
         candidate_skins = SnapshotUtils.snapshot_skin_bindings(cmds, imported_roots)
         candidate_blendshapes = SnapshotUtils.snapshot_blendshape_bindings(cmds, imported_roots)
         candidate_animations = SnapshotUtils.snapshot_animation_bindings(cmds, imported_roots)
+        candidate_bone_hierarchy = SnapshotUtils.snapshot_bone_hierarchy(cmds, imported_roots)
+        candidate_skin_weights = SnapshotUtils.snapshot_skin_weights_sample(cmds, imported_roots, sample_indices=(0, 100, 500))
+        candidate_anim_samples = SnapshotUtils.snapshot_animation_sample_values(cmds, imported_roots, sample_times=(0.0, 0.5, 1.0))
 
         SnapshotComparator.compare_mesh_snapshots(reference_meshes, candidate_meshes)
         SnapshotComparator.compare_node_type_snapshots(reference_node_types, candidate_node_types)
         SnapshotComparator.compare_skin_snapshots(reference_skins, candidate_skins)
         SnapshotComparator.compare_blendshape_snapshots(reference_blendshapes, candidate_blendshapes)
         SnapshotComparator.compare_animation_snapshots(reference_animations, candidate_animations)
+
+        # Enhanced checks: bone hierarchy, skin weight values, animation frame sampling
+        if reference_bone_hierarchy and reference_bone_hierarchy.get("joint_count", 0) > 0:
+            SnapshotComparator.compare_bone_hierarchy(reference_bone_hierarchy, candidate_bone_hierarchy)
+        if reference_skin_weights:
+            SnapshotComparator.compare_skin_weight_samples(reference_skin_weights, candidate_skin_weights)
+        if reference_anim_samples:
+            SnapshotComparator.compare_animation_sample_values(reference_anim_samples, candidate_anim_samples)
 
         self.ctx.write_marker(mesh_marker_path)
         self.ctx.write_marker(type_marker_path)
@@ -2420,6 +2700,7 @@ class RegressionRunner:
         smd_selected_export_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.smd_selected_export_gate.txt")
         dmx_selected_export_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.dmx_selected_export_gate.txt")
         scene_transform_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.scene_transform_gate.txt")
+        texture_color_space_gate_marker = os.path.join(self.ctx.output_dir, f"{case_output_name}{options_suffix}.texture_color_space_gate.txt")
 
         import_kwargs = self.ctx.build_import_kwargs(format_config, import_options)
         cmds = self.ctx.cmds
@@ -2435,8 +2716,14 @@ class RegressionRunner:
         original_skins = SnapshotUtils.snapshot_skin_bindings(cmds, imported_roots)
         original_blendshapes = SnapshotUtils.snapshot_blendshape_bindings(cmds, imported_roots)
         original_animations = SnapshotUtils.snapshot_animation_bindings(cmds, imported_roots)
+        original_bone_hierarchy = SnapshotUtils.snapshot_bone_hierarchy(cmds, imported_roots)
+        original_skin_weights = SnapshotUtils.snapshot_skin_weights_sample(cmds, imported_roots, sample_indices=(0, 100, 500))
+        original_anim_samples = SnapshotUtils.snapshot_animation_sample_values(cmds, imported_roots, sample_times=(0.0, 0.5, 1.0))
+        original_texture_color_spaces = SnapshotUtils.snapshot_file_texture_color_spaces(cmds)
         self.validator.validate_animation_gate(case_name, original_animations)
         self.ctx.write_marker(import_animation_gate_marker)
+        self.validator.validate_texture_color_space_gate(case_name, original_texture_color_spaces)
+        self.ctx.write_marker(texture_color_space_gate_marker)
 
         for export_variant in format_config.export_variants:
             cmds.file(new=True, force=True)
@@ -2485,6 +2772,9 @@ class RegressionRunner:
                 blendshape_marker,
                 animation_marker,
                 import_options=import_options,
+                reference_bone_hierarchy=original_bone_hierarchy,
+                reference_skin_weights=original_skin_weights,
+                reference_anim_samples=original_anim_samples,
             )
 
         if not import_options:

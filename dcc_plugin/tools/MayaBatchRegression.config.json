@@ -43,9 +43,30 @@
           "animation_marker_suffix": "roundtrip_text_animcheck.txt"
         }
       ]
+    },
+    "gltf": {
+      "extensions": [".gltf", ".glb"],
+      "import_type": "cgltf glTF GLB Import",
+      "export_type": "cgltf glTF GLB Export",
+      "export_variants": [
+        {
+          "name": "text",
+          "extension": ".gltf",
+          "options": "",
+          "mesh_marker_suffix": "roundtrip_text_meshcheck.txt",
+          "type_marker_suffix": "roundtrip_text_typecheck.txt",
+          "skin_marker_suffix": "roundtrip_text_skincheck.txt",
+          "blendshape_marker_suffix": "roundtrip_text_blendshapecheck.txt",
+          "animation_marker_suffix": "roundtrip_text_animcheck.txt"
+        }
+      ]
     }
   },
   "default_cases": [
+    "gltf/simple_triangle",
+    "gltf/simple_mesh",
+    "gltf/simple_box",
+    "gltf/xiaoyu_tekken_3d_model/scene",
     "simple_hierarchy",
     "simple_blendshape",
     "simple_mesh",
@@ -76,6 +97,12 @@
     "humans_sdk/male_sdk/male_06_expressions.vta"
   ],
   "animation_gate_expectations": {
+    "gltf/xiaoyu_tekken_3d_model/scene": {
+      "min_animated_plugs": 6,
+      "required_any_suffix_groups": [
+        [".rotateX", ".rotateY", ".rotateZ"]
+      ]
+    },
     "MostComplexSampleSet/vcaanim_VertexAnim": {
       "min_animated_plugs": 2,
       "required_any_suffix_groups": [[".translateX", ".translateY", ".translateZ"], [".rotateX", ".rotateY", ".rotateZ"]]
@@ -111,6 +138,17 @@
     "Ellis/DMX/animation/c5m1_intro_mechanic.dmx": {
       "min_animated_plugs": 2,
       "required_any_suffix_groups": [[".translateX", ".translateY", ".translateZ"], [".rotateX", ".rotateY", ".rotateZ"]]
+    }
+  },
+  "texture_color_space_gate_expectations": {
+    "gltf/xiaoyu_tekken_3d_model/scene": {
+      "min_file_nodes": 4,
+      "require_ignore_color_space_file_rules": true,
+      "require_color_management_enabled": true,
+      "path_contains": [
+        {"contains": "baseColor", "color_space": "sRGB", "min_count": 2},
+        {"contains": "normal", "color_space": "Raw", "min_count": 2}
+      ]
     }
   },
   "append_gate_expectations": {

@@ -10,6 +10,8 @@
 #include <maya/MFnUnitAttribute.h>
 #include <maya/MGlobal.h>
 #include <maya/MItDependencyGraph.h>
+#include <maya/MAnimUtil.h>
+#include <maya/MObjectArray.h>
 #include <maya/MPlugArray.h>
 #include <maya/MSelectionList.h>
 #include <maya/MTimeArray.h>
@@ -196,6 +198,148 @@ MStatus CreateAnimationLayerCurveForPlug(
     return MS::kSuccess;
 }
 
+
+bool AppendUniqueCurveName(
+    const MObject &curveObject,
+    MStringArray &curveNames,
+    std::unordered_set<std::string> &seenNames)
+{
+    if (curveObject.isNull() || !curveObject.hasFn(MFn::kAnimCurve))
+    {
+        return false;
+    }
+
+    MStatus status;
+    MFnDependencyNode curveFn(curveObject, &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    const MString curveName = curveFn.name();
+    if (curveName.length() == 0)
+    {
+        return false;
+    }
+
+    if (seenNames.insert(curveName.asChar()).second)
+    {
+        curveNames.append(curveName);
+        return true;
+    }
+
+    return false;
+}
+
+void AppendAnimationCurvesUpstreamFromPlug(
+    const MPlug &layerPlug,
+    MStringArray &curveNames,
+    std::unordered_set<std::string> &seenNames)
+{
+    if (layerPlug.isNull())
+    {
+        return;
+    }
+
+    AppendUniqueCurveName(layerPlug.node(), curveNames, seenNames);
+
+    MStatus status;
+    MPlug traversalPlug(layerPlug);
+    MItDependencyGraph iterator(
+        traversalPlug,
+        MFn::kAnimCurve,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
+    if (!status)
+    {
+        return;
+    }
+
+    for (; !iterator.isDone(); iterator.next())
+    {
+        const MObject curveObject = iterator.currentItem(&status);
+        if (!status)
+        {
+            status = MS::kSuccess;
+            continue;
+        }
+
+        AppendUniqueCurveName(curveObject, curveNames, seenNames);
+    }
+}
+
+MStatus FindAnimationLayerCurvesForPlugApi(
+    const MString &layerName,
+    const MPlug &plug,
+    MStringArray &curveNames)
+{
+    curveNames.clear();
+    if (layerName.length() == 0 || plug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MObjectArray layers;
+    MPlugArray layerPlugs;
+    if (!MAnimUtil::findAnimationLayers(plug, layers, layerPlugs))
+    {
+        return MS::kSuccess;
+    }
+
+    std::unordered_set<std::string> seenNames;
+    const unsigned int layerCount = layers.length() < layerPlugs.length() ? layers.length() : layerPlugs.length();
+    for (unsigned int layerIndex = 0; layerIndex < layerCount; ++layerIndex)
+    {
+        const MObject layerObject = layers[layerIndex];
+        if (layerObject.isNull() || !layerObject.hasFn(MFn::kDependencyNode))
+        {
+            continue;
+        }
+
+        MStatus status;
+        MFnDependencyNode layerFn(layerObject, &status);
+        if (!status || layerFn.name() != layerName)
+        {
+            continue;
+        }
+
+        AppendAnimationCurvesUpstreamFromPlug(layerPlugs[layerIndex], curveNames, seenNames);
+    }
+
+    return MS::kSuccess;
+}
+
+MStatus FindAnimationLayerCurvesForPlugCommand(
+    const MString &layerName,
+    const MPlug &plug,
+    MStringArray &curveNames)
+{
+    curveNames.clear();
+    if (layerName.length() == 0 || plug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MString nodeName;
+    MString attributeName;
+    MString fullPlugName;
+    MStatus status = ResolvePlugCommandNames(plug, nodeName, attributeName, fullPlugName);
+    if (!status)
+    {
+        return MStatus::kFailure;
+    }
+
+    MString queryCommand("animLayer -q -findCurveForPlug \"");
+    queryCommand += fullPlugName;
+    queryCommand += "\" \"";
+    queryCommand += layerName;
+    queryCommand += "\"";
+
+    status = MGlobal::executeCommand(queryCommand, curveNames, false, false);
+    return status ? MS::kSuccess : MS::kFailure;
+}
 } // namespace detail
 
 using namespace detail;
@@ -454,6 +598,229 @@ MStatus EnsureShaderRegisteredInDefaultShaderList(const MObject &shaderObject)
     }
 
     return MS::kFailure;
+}
+
+MStatus EnsureNodeRegisteredInDefaultRenderUtilityList(const MObject &nodeObject)
+{
+    if (nodeObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status;
+    MFnDependencyNode nodeFn(nodeObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    const MString classification = MFnDependencyNode::classification(nodeFn.typeName());
+    if (classification.indexW("utility") < 0)
+    {
+        return MS::kSuccess;
+    }
+
+    MObject defaultRenderUtilityListObject;
+    if ((!TryGetNodeByName("defaultRenderUtilityList1", defaultRenderUtilityListObject) || defaultRenderUtilityListObject.isNull()) &&
+        (!TryGetNodeByName(":defaultRenderUtilityList1", defaultRenderUtilityListObject) || defaultRenderUtilityListObject.isNull()))
+    {
+        return MS::kFailure;
+    }
+
+    MFnDependencyNode defaultRenderUtilityListFn(defaultRenderUtilityListObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug utilitiesPlug = defaultRenderUtilityListFn.findPlug("utilities", true, &status);
+    if (!status || !utilitiesPlug.isArray())
+    {
+        return MS::kFailure;
+    }
+    const MString utilitiesPlugName = utilitiesPlug.name();
+
+    MPlug messagePlug = nodeFn.findPlug("message", true, &status);
+    if (!status || messagePlug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MPlugArray destinationConnections;
+    messagePlug.connectedTo(destinationConnections, false, true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (unsigned int connectionIndex = 0; connectionIndex < destinationConnections.length(); ++connectionIndex)
+    {
+        const MPlug destinationPlug = destinationConnections[connectionIndex];
+        if (destinationPlug.isNull() || destinationPlug.node() != defaultRenderUtilityListObject)
+        {
+            continue;
+        }
+
+        const MPlug owningArrayPlug = destinationPlug.isElement() ? destinationPlug.array() :
+            (destinationPlug.isChild() ? destinationPlug.parent() : destinationPlug);
+        if (owningArrayPlug.name() == utilitiesPlugName)
+        {
+            return MS::kSuccess;
+        }
+    }
+
+    unsigned int nextLogicalIndex = 0;
+    const unsigned int existingElementCount = utilitiesPlug.evaluateNumElements();
+    for (unsigned int elementIndex = 0; elementIndex < existingElementCount; ++elementIndex)
+    {
+        const MPlug existingElement = utilitiesPlug.elementByPhysicalIndex(elementIndex, &status);
+        if (!status)
+        {
+            return MS::kFailure;
+        }
+
+        nextLogicalIndex = std::max(nextLogicalIndex, existingElement.logicalIndex() + 1);
+    }
+
+    MPlug targetElementPlug = utilitiesPlug.elementByLogicalIndex(nextLogicalIndex, &status);
+    if (!status || targetElementPlug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MDGModifier modifier;
+    status = modifier.connect(messagePlug, targetElementPlug);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    status = modifier.doIt();
+    if (status)
+    {
+        return MS::kSuccess;
+    }
+
+    destinationConnections.clear();
+    messagePlug.connectedTo(destinationConnections, false, true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    for (unsigned int connectionIndex = 0; connectionIndex < destinationConnections.length(); ++connectionIndex)
+    {
+        const MPlug destinationPlug = destinationConnections[connectionIndex];
+        if (destinationPlug.isNull() || destinationPlug.node() != defaultRenderUtilityListObject)
+        {
+            continue;
+        }
+
+        const MPlug owningArrayPlug = destinationPlug.isElement() ? destinationPlug.array() :
+            (destinationPlug.isChild() ? destinationPlug.parent() : destinationPlug);
+        if (owningArrayPlug.name() == utilitiesPlugName)
+        {
+            return MS::kSuccess;
+        }
+    }
+
+    return MS::kFailure;
+}
+
+MStatus EnsureColorManagementEnabled()
+{
+    int isEnabled = 0;
+    const MStatus queryStatus = MGlobal::executeCommand(
+        "colorManagement -query -cmfe", isEnabled, false, false);
+    if (queryStatus && isEnabled)
+    {
+        return MS::kSuccess;
+    }
+
+    const MStatus enableStatus = MGlobal::executeCommand(
+        "colorManagement -cmfe true", false, false);
+    return enableStatus ? MS::kSuccess : MS::kFailure;
+}
+
+MStatus EnsureTextureRemovedFromDefaultTextureList(const MObject &textureObject)
+{
+    if (textureObject.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MStatus status;
+    MFnDependencyNode textureFn(textureObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MObject defaultTextureListObject;
+    if ((!TryGetNodeByName("defaultTextureList1", defaultTextureListObject) || defaultTextureListObject.isNull()) &&
+        (!TryGetNodeByName(":defaultTextureList1", defaultTextureListObject) || defaultTextureListObject.isNull()))
+    {
+        return MS::kSuccess;
+    }
+
+    MFnDependencyNode defaultTextureListFn(defaultTextureListObject, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MPlug texturesPlug = defaultTextureListFn.findPlug("textures", true, &status);
+    if (!status || !texturesPlug.isArray())
+    {
+        return MS::kFailure;
+    }
+    const MString texturesPlugName = texturesPlug.name();
+
+    MPlug messagePlug = textureFn.findPlug("message", true, &status);
+    if (!status || messagePlug.isNull())
+    {
+        return MS::kFailure;
+    }
+
+    MPlugArray destinationConnections;
+    messagePlug.connectedTo(destinationConnections, false, true, &status);
+    if (!status)
+    {
+        return MS::kFailure;
+    }
+
+    MStatus result = MS::kSuccess;
+    for (unsigned int connectionIndex = 0; connectionIndex < destinationConnections.length(); ++connectionIndex)
+    {
+        const MPlug destinationPlug = destinationConnections[connectionIndex];
+        if (destinationPlug.isNull() || destinationPlug.node() != defaultTextureListObject)
+        {
+            continue;
+        }
+
+        const MPlug owningArrayPlug = destinationPlug.isElement() ? destinationPlug.array() :
+            (destinationPlug.isChild() ? destinationPlug.parent() : destinationPlug);
+        if (owningArrayPlug.name() != texturesPlugName)
+        {
+            continue;
+        }
+
+        MDGModifier modifier;
+        status = modifier.disconnect(messagePlug, destinationPlug);
+        if (!status)
+        {
+            result = MS::kFailure;
+            continue;
+        }
+
+        status = modifier.doIt();
+        if (!status)
+        {
+            result = MS::kFailure;
+        }
+    }
+
+    return result;
 }
 
 MStatus ConnectPlugsForce(const MPlug &sourcePlug, const MPlug &destinationPlug)
@@ -938,23 +1305,8 @@ MStatus ClearAnimationLayerCurve(
         return MS::kFailure;
     }
 
-    MString nodeName;
-    MString attributeName;
-    MString fullPlugName;
-    MStatus status = ResolvePlugCommandNames(plug, nodeName, attributeName, fullPlugName);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MString queryCommand("animLayer -q -findCurveForPlug \"");
-    queryCommand += fullPlugName;
-    queryCommand += "\" \"";
-    queryCommand += layerName;
-    queryCommand += "\"";
-
     MStringArray curveNames;
-    status = MGlobal::executeCommand(queryCommand, curveNames, false, false);
+    MStatus status = FindAnimationLayerCurvesForPlug(layerName, plug, curveNames);
     if (!status)
     {
         return MS::kSuccess;
@@ -984,29 +1336,13 @@ MStatus FindAnimationLayerCurvesForPlug(
     const MPlug &plug,
     MStringArray &curveNames)
 {
-    curveNames.clear();
-    if (layerName.length() == 0 || plug.isNull())
+    MStatus status = FindAnimationLayerCurvesForPlugApi(layerName, plug, curveNames);
+    if (status && curveNames.length() > 0)
     {
-        return MS::kFailure;
+        return MS::kSuccess;
     }
 
-    MString nodeName;
-    MString attributeName;
-    MString fullPlugName;
-    MStatus status = ResolvePlugCommandNames(plug, nodeName, attributeName, fullPlugName);
-    if (!status)
-    {
-        return MStatus::kFailure;
-    }
-
-    MString queryCommand("animLayer -q -findCurveForPlug \"");
-    queryCommand += fullPlugName;
-    queryCommand += "\" \"";
-    queryCommand += layerName;
-    queryCommand += "\"";
-
-    status = MGlobal::executeCommand(queryCommand, curveNames, false, false);
-    return status ? MS::kSuccess : MS::kFailure;
+    return FindAnimationLayerCurvesForPlugCommand(layerName, plug, curveNames);
 }
 
 MStatus SetKeyframesOnAnimationLayer(

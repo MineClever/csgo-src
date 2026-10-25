@@ -8,6 +8,25 @@
 - 仅记录可执行、可追踪的问题，并提供足够的上下文，方便后续快速接手。
 - 在 Maya 插件开发过程中，如果遇到 Maya API 行为、参数语义或版本兼容边界不清晰的实现点，优先查阅 Autodesk 官方 C++ API 参考文档：https://help.autodesk.com/view/MAYAUL/2024/CHS/?guid=MAYA_API_REF_cpp_ref_index_html ，确认后再决定实现方式。
 
+## 文档整理记录
+
+### Source Engine 武器挂载说明
+- 状态：已完成
+- 产物：
+  - [docs/source_engine_weapon_mounting.md](docs/source_engine_weapon_mounting.md)
+  - [docs/source_engine_weapon_mounting_flow.puml](docs/source_engine_weapon_mounting_flow.puml)
+- 内容：整理了 Source/CS:GO 武器库存挂载、active weapon 切换、第一人称 viewmodel、第三人称 weaponworldmodel、网络同步和掉落解除挂载的实现链路，并列出关键源码文件。
+- 后续：如后续修改武器拾取、viewmodel 或 world model 逻辑，应同步复核该文档，避免文档和实现漂移。
+
+### BoneMerge 与 Attachment 跨引擎实现说明
+- 状态：已完成
+- 2026-10-25：确认原设计文档已缺失，重新生成同名 Markdown，并新增配套求值流程图；补充了矩阵空间约定、子网格 inverse bind 蒙皮、缓存版本、依赖图、生命周期及验收条件。本次仅恢复文档，未确认新的运行时代码问题。
+- 产物：
+  - [docs/bone_merge_attachment_portable_design.md](docs/bone_merge_attachment_portable_design.md)
+  - [docs/bone_merge_attachment_flow.puml](docs/bone_merge_attachment_flow.puml)
+- 内容：整理了 BoneMerge 和 Attachment 的数据模型、运行时求值顺序、缓存失效、父子 attachment transform、culling、网络同步、伪代码和跨引擎测试清单，目标是让 Agent 能在非 Source 引擎中复刻同类功能。
+- 后续：若后续继续深入 viewmodel attachment override、reverse bonemerge 或动画 IK 与武器模型互驱，应在该文档补充高级章节。
+
 ## 当前构建问题
 
 ### 1. `client_csgo` 链接失败，阻塞完整 Release 构建
@@ -221,6 +240,25 @@
     - 完整 deformer 栈、约束、历史链和更高层动画/rig 元数据。
     - 更大范围的 Valve 历史 DMX 兼容、未知字段保真、通用 DOM/codec。
     - UFE、USD、代理节点等非 DAG 混合场景对象的完整支持。
+
+### 10. glTF/GLB 导入导出插件仍需修复
+- 状态：进行中
+- 优先级：高
+- 目标目录：[dcc_plugin](dcc_plugin)
+- 现象：
+  - Maya 的 glTF/GLB 导入导出文件对话框中，`File Type Specific Options` 仍可能显示为空或 `No options available`。
+  - 目前人工确认过的失败现象包括：导入后骨骼变成水平链条状、蒙皮爆炸、顶点映射错误，期望结果应接近 [samples/gltf/xiaoyu_tekken_3d_model/scene.ma](dcc_plugin/samples/gltf/xiaoyu_tekken_3d_model/scene.ma)。
+- 已确认：
+  - glTF 样例 `scene.gltf` 的根部包含 orientation / correction 两级根节点，后续骨骼与缩放处理不能直接按普通 DAG 节点照搬。
+  - `JOINTS_0` 不能按单标量 accessor 读取，必须按无符号整型向量读取；导入端已改为该路径。
+  - glTF 导入端已改成与 SMD/DMX 相同的 `scrollLayout` / `setParent $parent` / `waitCursor` UI 流程，并已通过 [InstallPluginModuleToMaya.bat](dcc_plugin/InstallPluginModuleToMaya.bat) 同步到 Maya 模块目录。
+- 最新回归：
+  - 已用 [tools/gltf_import_dump.py](dcc_plugin/tools/gltf_import_dump.py) 对 `scene.gltf` 做了全新导入，并在 [build/gltf_import_dump](dcc_plugin/build/gltf_import_dump) 下保存了新的 [scene_imported.ma](dcc_plugin/build/gltf_import_dump/scene_imported.ma)、[scene_dump.json](dcc_plugin/build/gltf_import_dump/scene_dump.json) 和 [scene_dump.txt](dcc_plugin/build/gltf_import_dump/scene_dump.txt)。
+  - 当前导入结果里，skinCluster 权重分布是稀疏且归一化的，`segmentScaleCompensate` 已从 `True` 修正为 `False`，更接近 `scene.gltf` 对应的 Maya joint 语义。
+- 后续步骤：
+  - 重新在 Maya 2022.5 中验证 glTF/GLB 选项是否正常显示。
+  - 若 UI 仍为空，继续对齐 `mayaGltfTranslatorImport.mel` / `mayaGltfTranslatorExport.mel` 与 SMD/DMX 的 translator wrapper 约定。
+  - 继续校正 glTF 骨骼的本地变换语义、关节方向与蒙皮权重写入顺序，参考 [R:\Temp\maya2gltf_ref\src](R:/Temp/maya2gltf_ref/src) 的处理流程以及本次 `scene.gltf` 的新导入 dump。
 
 - DMX 动画 importer/exporter 单独路线图（2026-04-13 整理）：
   - 目标：
@@ -1485,6 +1523,19 @@
     - 该属性也允许用户后续手工添加或修改；导出时在启用特定选项后优先使用该属性值，否则继续使用当前 Maya 节点名。
     - 目标案例：例如 Maya 节点名为 `ValveBiped_Bip01_Pelvis`，但属性值为 `ValveBiped.Bip01.Pelvis`；启用选项后导出为 `ValveBiped.Bip01.Pelvis`，关闭选项后仍导出 `ValveBiped_Bip01_Pelvis`。
 
+- DCC common 文件合并评估（2026-07-04）：
+  - `AnimationSampleUtils.h/.cpp`、`ExportAnimationUtils.h/.cpp` 不建议直接物理合并进 `AnimationCurveUtils.h/.cpp`。当前三者虽然同属动画公共层，但职责分别是导入/写曲线、场景/layer 采样、导出侧 curve 查询与 sample set 评估；强行合并会让导入侧包含导出查询结构，让导出侧包含导入写曲线和 animation layer 写入接口，扩大头文件依赖与命名空间耦合。
+  - 可接受的折中方向：保留现有 `.cpp` 拆分，新增一个轻量聚合头（例如 `AnimationUtils.h`）只做 include 门面，或只把确实重复的 `CurrentTimeGuard` / transform channel 常量 / curve 遍历小函数抽成内部 shared helper；不要把全部实现塞进一个大文件。
+  - `MaterialExportUtils.h/.cpp` 也不建议直接合并进 `MaterialUtils.h/.cpp`。当前 `MaterialUtils` 偏导入/创建/连接 Maya 材质网络，`MaterialExportUtils` 偏导出/读取 shadingGroup、shader、材质属性和 polygon 分配；合并后会把创建型 API 与读取型 API 混在同一公共头里，增加 importer/exporter 双向耦合。
+  - 若后续想减少文件数量，优先采用“统一命名 + 保留方向边界”的整理方式：例如改名为 `AnimationImportUtils` / `AnimationExportUtils`、`MaterialImportUtils` / `MaterialExportUtils`，并抽共享私有 helper，而不是按领域合成单个超大 `AnimationCurveUtils` 或 `MaterialUtils`。
+- DCC import/export 并行化评估（2026-07-04）：
+  - 结论：可以局部引入并行化，但不建议在 importer/exporter 主流程上直接套 TBB/OpenMP。Maya DAG/DG 创建、节点连接、`MFn*` 修改、`MGlobal` 命令、`MPxFileTranslator::reader/writer` 内的场景写入仍应保持主线程顺序执行。
+  - 优先选择：若确实需要并行运行时，优先评估 TBB，而不是 OpenMP。Maya DevKit 里 `threadedBoundingBox`、`gpuCache`、`threadingLockTests`、`splatDeformer` 等样例均使用 TBB 做几何计算或后台缓存读取；OpenMP 在当前 DevKit 样例和项目 CMake 中没有现成路径。
+  - 当前已有并行能力：OBJ 解析依赖的 `rapidobj` 已在 `ParseFile()`、MTL 解析和 `Triangulate()` 内部使用 `std::thread` / `std::async` / `hardware_concurrency()`，OBJ importer 不应再额外套一层 TBB/OpenMP，避免线程过度订阅。
+  - 可并行候选：DMX/SMD/OBJ 导入前的纯文档 normalizer，例如 transform correction 批量处理 positions/normals/delta/animation sample；导出后的纯文档修正、二进制/文本序列化前的数据预处理；glTF buffer/accessor 数据解包、法线/切线/UV/权重数组转换等纯内存阶段。
+  - 不建议并行的路径：`ImportDagHierarchyRecursive()`、`ImportDagShapesRecursive()`、`SmdSceneImporter::Import()`、`SmdMeshImporter::Import()`、`VtaSceneImporter::Import()`、`GltfSceneImporter::Import()` 中所有创建 Maya 节点、mesh、skinCluster、blendShape、材质网络、动画曲线和 animation layer 的步骤；exporter 读取 Maya scene/DG 的阶段也不应在多个 worker 中直接访问 Maya API。
+  - 推荐实施顺序：先加性能计时和样例基线，确认瓶颈是否在纯数据层；再抽一个 `dcc_parallel` 小封装，默认串行，可选启用 TBB；第一阶段只 parallelize SMD/DMX/OBJ 的 transform correction 数组循环或 glTF buffer unpack，并用完整 mayapy 回归验证确定性。
+  - 风险：TBB/OpenMP 可能与 Maya 自身 Evaluation Manager、viewport、插件内部已有线程池或 rapidobj 线程产生过度订阅；OpenMP 还会引入编译开关和运行时差异。任何并行化都必须可关闭，并且不能改变导入导出文件中 face/material/animation channel 的稳定顺序。
 - 当前建议优先级：
   - 第一优先级：`M-DMX-1`、`M-DMX-2`、`M-SMD-1`
   - 第二优先级：`M-DMX-5`、`M-DMX-3`、`M-SMD-2`
@@ -2181,6 +2232,18 @@
     - 当前 Maya 2022.5 baseline 下，不能指望通过参考 `maya-usd` 直接移除本项目的 `animLayer` MEL 桥接。
     - 可以继续保留现有“命令层建 layer / 找 layer curve，C++ 层用 `MFnAnimCurve` 批量写 key”的混合方案。
     - 若后续要进一步减少 MEL，建议只评估把 `findCurveForPlug` 的一部分查询逻辑改成 DG 遍历和缓存，而不是尝试完全照搬 `maya-usd`。
+  - 2026-07-04：按用户要求对照 Maya 2022.5 DevKit 样例 `devkit/plug-ins/atomImportExport` 重新评估 Common 动画层 C++ API 替代空间，结论如下：
+    - `atomAnimLayers.cpp` 官方样例自身仍通过 `MGlobal::executeCommand` 调用 `atomGetAllLayersOrdered`、`animLayer`、`animLayer -e -attribute`、`animLayer -removeAttribute` 和 `pasteKey -al`，并没有展示可直接替代本项目 `EnsureAnimationLayer()` / `AddPlugToAnimationLayer()` 的纯 C++ animation layer 创建、排序、挂接方案。
+    - 样例中可借鉴的 C++ 部分主要是 `MAnimUtil::findAnimationLayers(plug, layers, plugs)`：它可用于发现 plug 已关联的 animation layer 与相关 plug，比完全依赖 `animLayer -q -findCurveForPlug` 更接近 API 路径。
+    - 当前项目已经完成最重要的混合优化：先用一次 `setKeyframe -animLayer` 建立 layer curve，再用 `MFnAnimCurve::addKeys()` 批量写剩余 key；这与 `atomImportExport` 的思路一致，即 layer 宿主行为交给命令层，曲线数据交给 C++ API。
+    - 可继续评估的小步改进：新增一个基于 `MAnimUtil::findAnimationLayers()` 的 helper，优先从目标 plug 关联的 layer plug / upstream animCurve 中解析曲线，失败时再回退到 `animLayer -q -findCurveForPlug`；同时给 `FindAnimationLayerCurvesForPlug()` / `ClearAnimationLayerCurve()` 加导入会话级缓存，减少重复命令调用。
+    - 不建议直接手工创建 `animBlendNode*`、`animLayer` 成员关系或重接 layer blend graph 来完全替代 `animLayer` 命令；这部分宿主语义复杂且官方样例也没有这样做，风险高于收益。
+  - 2026-07-04 实施同步：已在 [MayaCommandUtils.cpp](dcc_plugin/src/common/MayaCommandUtils.cpp) 为 `FindAnimationLayerCurvesForPlug()` / `ClearAnimationLayerCurve()` 增加 C++ 查询优先路径。
+    - 新路径先调用 `MAnimUtil::findAnimationLayers(plug, layers, plugs)`，按目标 `animLayer` 名称筛选 layer，再从对应 layer plug 上游用 `MItDependencyGraph` 查找 `MFn::kAnimCurve`。
+    - 若 C++ 路径没有解析到曲线，仍回退到原有 `animLayer -q -findCurveForPlug` 命令，保持 Maya 2022.5 宿主兼容性。
+    - `ClearAnimationLayerCurve()` 现在复用同一查询入口删除曲线，避免继续维护一份独立的 MEL 查询逻辑。
+    - 验证：`cmake --build dcc_plugin\build --config Release --target maya_plugin_dmx maya_plugin_smd -- /m:1` 通过；`mayapy dcc_plugin\tools\MayaBatchRegression.py --cases ctm_fbi/ctm_fbi_anims/rom_skin.smd` 通过。
+    - 验证备注：同轮尝试运行 `MostComplexSampleSet/vcaanim_VertexAnim` 时，case 在普通 roundtrip 骨骼层级检查处失败（`vca_arm|...` 路径差异），尚未进入本次 animation layer 查询断言；该问题需另行确认是否为当前工作区已有 DMX 回归漂移。
   - 完成判据：
     - 若保持 Maya 2022.5 baseline，则明确哪些桥接调用属于“保留项”。
     - 若未来升级 API baseline，则单独建项评估哪些桥接可迁回 C++ API。
@@ -2392,6 +2455,48 @@
     - 已验证：
       - `cmd /c dcc_plugin\BuildPlugin.bat Release` 通过
       - `mayapy dcc_plugin\tools\MayaBatchRegression.py --cases simple_mesh ...` 定向通过，说明回归脚本已能正常使用新的 `Source *` translator 名称
+  - 2026-06-19：已开始收口 glTF / GLB translator 回归，当前完成如下：
+    - [dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp](dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp) / [GltfSceneImporter.h](dcc_plugin/src/importer_gltf/GltfSceneImporter.h) 已修复：
+      - scene-less glTF 只导入 root node，避免重复递归整棵 DAG 导致 joint 层级重复创建。
+      - skin / animation 目标不再通过“sanitize 后的节点名”反查，而改为直接保存 `cgltf_node* -> MDagPath` 映射，避免同名节点或 Maya 自动重命名时把骨骼、动画、蒙皮绑错。
+      - glTF skinCluster 创建流程已改成参照 SMD / DMX 的稳定图连接方式：复制 intermediate 原始 mesh、连接 `inputGeometry/originalGeometry/outputGeometry`、写 `bindPreMatrix/geomMatrix`，再整块写入归一化后的权重缓冲；不再使用仅手工创建节点并直连 `matrix[]` 的简化路径。
+      - skin record 现按 primitive 粒度保存，避免多 primitive mesh 错把第一个 primitive 的 JOINTS/WEIGHTS 用到其它 primitive。
+    - [dcc_plugin/src/exporter_gltf/GltfSceneExporter.cpp](dcc_plugin/src/exporter_gltf/GltfSceneExporter.cpp) / [GltfSceneExporter.h](dcc_plugin/src/exporter_gltf/GltfSceneExporter.h) 已修复：
+      - JOINTS_0 改为 `uint16` + `cgltf_component_type_r_16u`，符合 glTF 规范，不再错误写成 `uint32`。
+      - inverse bind matrix 现按 glTF column-major 顺序写出，并通过 `indexForInfluenceObject()` 读取 Maya skinCluster 的实际 logical influence index，避免导出骨骼矩阵错位。
+    - [dcc_plugin/src/exporter_gltf/GltfExportSession.cpp](dcc_plugin/src/exporter_gltf/GltfExportSession.cpp) 已修复 `scaleX/scaleY/scaleZ` 选项解析大小写错误，避免导出 UI 的缩放选项被静默忽略。
+    - 已验证：
+      - `cmd /c dcc_plugin\\BuildPlugin.bat Release` 完整构建通过。
+      - `maya_gltf.mll` 已重新生成并同步到 `dcc_plugin\\maya_module\\plug-ins\\windows\\2022\\`。
+    - 2026-06-19 晚间补充验证与修复：
+      - [dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp](dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp) 新增/修正：
+        - glTF `matrix` 到 Maya `MMatrix` 的转换方向已修正，根节点 `RootNode (gltf orientation matrix)` / `RootNode (model correction matrix)` 不再因为矩阵转置错误导致整体骨架原点错位。
+        - 顶层节点现会按 SMD 同样方式应用 `transformCorrection`，并将 glTF 默认导入缩放改为 `100,100,100`，默认导出缩放改为 `0.01,0.01,0.01`，以匹配 glTF 米制与 Maya 厘米制。
+        - joint 创建时已显式关闭 `segmentScaleCompensate`，并尝试按 `inverseBindMatrices` 回填 joint bind pose，减少 Maya joint 默认行为对骨架传播的干扰。
+      - [dcc_plugin/src/plugin_gltf/PluginMain.cpp](dcc_plugin/src/plugin_gltf/PluginMain.cpp)：
+        - glTF/GLB import/export translator 默认 options 已同步为上述单位换算默认值。
+      - [dcc_plugin/src/mel/performGltfImport.mel](dcc_plugin/src/mel/performGltfImport.mel) / [performGltfExport.mel](dcc_plugin/src/mel/performGltfExport.mel)：
+        - 已修正选项界面根布局父级挂接方式。
+        - 已修正 `setParent..;` 非法写法。
+        - 已将 UI builder 改为返回 scrollLayout，并改用 `DefaultTemplate` 与更稳妥的 `columnLayout/floatFieldGrp` 语法，继续向 OBJ/SMD 的可用布局靠拢。
+      - [dcc_plugin/src/mel/mayaGltfTranslatorImport.mel](dcc_plugin/src/mel/mayaGltfTranslatorImport.mel) / [mayaGltfTranslatorExport.mel](dcc_plugin/src/mel/mayaGltfTranslatorExport.mel)：
+        - 已进一步简化为与 SMD 同构的 `post / fill / query` 回调流程，去掉额外的 UI 二次同步逻辑，避免 options 面板在 Maya file dialog 生命周期中被空状态覆盖。
+      - [dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp](dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp) 继续修正：
+        - 已确认并修复 `JOINTS_0` 读取 API 误用：此前把 `VEC4` joint accessor 当作单分量 index accessor 逐项读取，理论上会直接打乱 influence 映射并导致爆炸蒙皮。
+        - 已新增 `ReadAccessorUInts()`，改为按每顶点完整读取 joint index 向量。
+        - inverse bind matrix 读取已统一走 glTF→Maya 矩阵转换 helper，避免节点矩阵与 bindPreMatrix 使用两套不一致的矩阵转置规则。
+        - 针对 joint 节点已开始拆分 `TRS direct set` 路径，避免所有 glTF joint 都强制走 `MTransformationMatrix` 分解后再写回 Maya，减少水平链条问题继续由 Maya joint 分解行为放大。
+      - 当前回归结论：
+        - `mayapy` 下已确认 glTF 导入后会生成完整 root chain 与 3 个 `skinCluster`，蒙皮连接仍在。
+        - `Armature_rootJoint` 世界位置已回到接近参考 [scene.ma](dcc_plugin/samples/gltf/xiaoyu_tekken_3d_model/scene.ma) 的量级与坐标：`[-2.498871, -17.165355, -6.605831]`。
+        - 但 `Bip001_Armature` 到 `Bip001_Head_Armature` 这段 joint 链仍存在朝向/局部轴差异，当前世界位置仍未完全贴近参考 `scene.ma`，说明后续还要继续收敛 Maya joint 语义与 glTF bind pose 的映射。
+        - glTF 选项面板脚本已做结构性修复，但 `mayapy` 验证继续被本机外部 `userSetup.py` / VaccineKiller 启动脚本污染；仍需在干净的真实 Maya GUI 宿主下最终复测“导入/导出选项显示”这一项。
+    - 待继续验证：
+      - 仍需在真实 Maya 宿主下复测 glTF / GLB 导入导出选项面板显示、骨骼层级结果、skinCluster 是否实际驱动 mesh，以及 `.gltf` / `.glb` 各跑至少一条最小 roundtrip。
+      - 重点继续排查 `Bip001_*` joint 链与参考 `scene.ma` 的差异，优先方向：
+        - Maya joint 的 local rotate / jointOrient / bindPose 写入顺序是否仍与 glTF bind pose 不一致；
+        - 是否需要在 skin bind pose 回填阶段显式写 jointOrient 或改用更接近 FBX 导入结果的 joint 设置流程，而不是直接对 joint 节点做 transform matrix 分解。
+
 ## 环境与工具链说明
 
 ### A. 批处理构建包装脚本已做兼容性修复
@@ -2441,3 +2546,157 @@
   - PBR 材质属性映射
   - 回归测试用例
   - MTL 纹理路径 → Maya file texture 节点绑定
+
+### 10. glTF/GLB 导入导出插件仍需修复
+- [x] 导入/导出 UI 菜单已重写为 MEL 包装入口，和 SMD/DMX 的调用方式对齐。
+- [x] glTF 导入器已补齐 skinCluster 创建、JOINTS_0 读取和权重写入的基础流程。
+- [x] `segmentScaleCompensate` 已从错误的 `True` 修正为 `False`，避免 joint 层级被额外缩放干扰。
+- [x] glTF 导入/导出 MEL 选项脚本中的非法 `setOptionVar` 调用已全部替换为 Maya 标准 `optionVar`，已消除 `performGltfImport.mel line 33: Cannot find procedure "setOptionVar"` 这类 UI 初始化中断。
+- [x] glTF 导入/导出 MEL 选项脚本的 options 解析已从错误的 ``string $tokens[] = `tokenize ...``` 改为 Maya 兼容的 `tokenize($text, ";", $tokens)` 形式，已消除 `Invalid call to "tokenize"` 这一类对话框初始化报错。
+- [x] glTF 导入/导出 MEL 选项脚本中的非标准 `intVal()` 调用已替换为 MEL 原生 `(int)$value` 强制转换，已消除 `Cannot find procedure "intVal"` 这一类 options 解析报错。
+- [x] glTF 导入/导出 MEL 选项脚本继续做了静态兼容性收敛：已把 `tokenize $token "=" $pair` 改为 `tokenize($token, "=", $pair)`，把 `optionVar -floatValue ... ($value)` 改为 `((float)$value)`，并把 `UIInit` 回调签名补齐为与 SMD 同构的 `(string $parent, string $filter)`。
+- [x] 已把本轮让结果变差的 glTF importer 结构实验整体回退，并重新编译 / 同步 `maya_gltf.mll`；当前 Maya 模块路径里的插件已恢复到进入这轮实验前的状态。
+- [ ] 继续对照最新更新后的 `samples/gltf/xiaoyu_tekken_3d_model/scene.ma`（现为 Z-up 参照场景）与新的导入 dump 进行比较。
+- [ ] 后续比较规则调整为：优先比较世界矩阵，且先只比较 joint/worldMatrix 的位置差异；等位置收敛后，再处理 joint 朝向、局部旋转与骨骼方向问题。
+- [ ] 若仍存在骨骼横向串链或蒙皮爆炸，继续比对 joint/worldMatrix、bindPose 和 skinCluster influence 顺序。
+- [ ] 下一步先围绕 `Armature_rootJoint`、`Bip001_Armature`、`Bip001_Spine2_Armature` 等关键骨骼，逐项比较最新 `scene.ma` 与导入结果的 world-space translation，定位“位置偏差”首先是来自顶层 wrapper、joint 本地矩阵，还是 bind pose / skinCluster 绑定链。
+- [ ] 2026-07-06 评估：glTF 导入端应在创建 `skinCluster` 前显式恢复 glTF rest/bind pose，再用该姿态创建蒙皮并写入 `bindPreMatrix` / `geomMatrix`，最后才导入 frame 动画曲线。当前 [GltfSceneImporter.cpp](dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp) 的主流程虽然是 `createNodeHierarchy -> setupSkins -> importAnimations`，但 `CreateSkinClusterWithApi()` 直接使用创建时 joint 的 `inclusiveMatrixInverse()` 作为 `bindPreMatrix`，尚未显式从 `skin.inverseBindMatrices` 反推并锁定绑定姿态；如果节点当前 TRS 或顶层 correction 已偏离 bind pose，就会把错误姿态固化到 skinCluster，容易表现为骨骼串链或蒙皮爆炸。后续实现应新增一个明确阶段：缓存当前节点 TRS、按 glTF node 默认 TRS 或 `inverseBindMatrices` 还原绑定姿态、创建 skinCluster 和写权重、再恢复/写入动画曲线，并将 `scene.gltf` 的 joint worldMatrix 与 skinCluster bindPreMatrix 加入回归断言。
+- [x] 2026-07-06 已起步实现：新增 glTF 导入选项 `restoreDefaultPoseAfterSkin`，并接入 [GltfImportSession.h](dcc_plugin/src/importer_gltf/GltfImportSession.h)、[GltfImportSession.cpp](dcc_plugin/src/importer_gltf/GltfImportSession.cpp)、[performGltfImport.mel](dcc_plugin/src/mel/performGltfImport.mel) 与 [PluginMain.cpp](dcc_plugin/src/plugin_gltf/PluginMain.cpp)。[GltfSceneImporter.cpp](dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp) 现在会在每条 skinCluster 创建前尝试从 `skin.inverseBindMatrices` 反推 joint bind world matrix 并临时设置 bind pose；skinCluster 创建完成后，默认恢复 glTF node 默认 TRS，再继续写权重和导入动画。关闭该选项时会保留绑定时姿态，便于检查 bind pose 本身。已通过 `cmake --build dcc_plugin\build --config Release --target maya_plugin_gltf -- /m:1` 编译，并用 [gltf_import_dump.py](dcc_plugin/tools/gltf_import_dump.py) 加载 [scene.gltf](dcc_plugin/samples/gltf/xiaoyu_tekken_3d_model/scene.gltf) 验证导入完成，输出到 [gltf_import_dump_restore_pose](dcc_plugin/build/gltf_import_dump_restore_pose)，结果仍生成 117 个 joint 与 3 个 skinCluster。
+- [ ] 2026-06-21：已对照 Autodesk Standard Surface 规范页 `https://autodesk.github.io/standard-surface/` 评估当前 `maya_gltf` 的 PBR 材质导入导出能力，结论是“公共 glTF 数据结构已具备大半扩展字段，但 Maya 映射层仍停留在最小材质槽级别”，需要单独排一期材质收口工作。
+  - 总目标：
+    - 让 `maya_gltf` 的材质导入导出从“仅保留基础材质槽名称 + 少量颜色”提升到“以 Maya `standardSurface` 为核心的可预期 PBR roundtrip”。
+    - 第一阶段先保证 `baseColor/opacity/metalness/specularRoughness/emission` 和四类核心贴图可稳定往返。
+    - 第二阶段再逐步接入 `KHR_materials_specular/transmission/ior/clearcoat/sheen`，把 Standard Surface 与 glTF 扩展的一一映射收口。
+    - 高阶项只做有把握的近似，不追求一次把所有规范字段都接上。
+  - 规范侧可直接对齐的核心语义：
+    - `base/base_color`、`metalness`、`specular/specular_color/specular_IOR/specular_roughness`
+    - `coat/coat_roughness/coat_IOR`
+    - `transmission/transmission_color/thin_walled`
+    - `sheen/sheen_color/sheen_roughness`
+    - `emission/emission_color`
+    - 可选高级项：`anisotropy`、`thin_film`、`subsurface`、`transmission_depth/volume`
+  - 当前 importer 现状（[GltfSceneImporter.cpp](dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp)）：
+    - 只通过 `EnsureSurfaceShaderBinding("lambert", ...)` 创建 `lambert` 材质，不会创建 `standardSurface`。
+    - 只读取 `pbrMetallicRoughness.baseColorFactor/baseColorTexture` 和 `emissiveFactor`，分别落到 `color/transparency/incandescence`。
+    - `metallicRoughnessTexture`、`normalTexture`、`occlusionTexture`、`emissiveTexture`、`alphaMode/alphaCutoff`、`doubleSided` 以及 `KHR_materials_*` 扩展目前都没有真正映射进 Maya 节点网络。
+    - base color 贴图 alpha 目前直接连到 `transparencyR`，既没有做 `1 - alpha` 反相，也没有同步 `G/B` 三通道，透明语义并不正确。
+  - 当前 exporter 现状（[GltfSceneExporter.cpp](dcc_plugin/src/exporter_gltf/GltfSceneExporter.cpp) / [GltfSceneExporter.h](dcc_plugin/src/exporter_gltf/GltfSceneExporter.h)）：
+    - 导出材质数据模型只有 `baseColorFactor[4]`、`emissiveFactor[3]`、`metallicFactor`、`roughnessFactor` 这四组标量，没有贴图槽也没有扩展字段缓存。
+    - 采样 Maya 材质时只读 `color`、`transparency`、`incandescence`；`metallic/roughness` 甚至不是从节点属性读取，而是按 `lambert=roughness1.0`、其它=roughness0.5 的硬编码推断。
+    - 虽然 `cgltf.h/cgltf_write.h` 已支持 `KHR_materials_clearcoat/specular/transmission/ior/sheen/volume/anisotropy/...` 的读写结构，但 exporter 侧根本没有填这些字段。
+  - 已确认的基础条件：
+    - [MaterialUtils.cpp](dcc_plugin/src/common/MaterialUtils.cpp) 的 `EnsureSurfaceShaderBinding()` 已支持按给定节点类型创建并绑定表面材质，不受 `lambert` 限制。
+    - [cgltf.h](dcc_plugin/src/common_gltf/cgltf.h) / [cgltf_write.h](dcc_plugin/src/common_gltf/cgltf_write.h) 已具备大部分 glTF 材质与 `KHR_materials_*` 扩展的解析/写出结构。
+    - 当前主要缺口不在 glTF DOM 层，而在 Maya 材质图查询、贴图拆包和 `standardSurface` 参数映射。
+  - 执行策略：
+    - 优先做“行为可验证”的小步闭环，每一阶段都要求至少一条导入和一条导出样例通过。
+    - importer / exporter 共用同一份字段映射表与贴图语义说明，避免两边各自近似导致 roundtrip 漂移。
+    - 先覆盖标量和直接 file texture；复杂 utility 链、层叠节点和自定义 graph 放到后续兼容层，不在首轮硬解。
+  - 阶段拆分：
+    - 阶段 A：材质数据模型与映射表重构
+      - 目标：把 `ExportedMaterial` 从当前 4 组标量扩成“足以表达一轮 standardSurface/glTF 基础映射”的结构。
+      - 任务：
+        - 为 exporter 增加基础字段：`alphaMode/alphaCutoff/doubleSided`、baseColor/emissive/normal/metallicRoughness 贴图引用、`specular/ior/transmission/clearcoat/sheen` 标量槽。
+        - 定义 glTF ↔ `standardSurface` 的统一映射表，明确每个字段的 Maya plug 名、默认值、方向和丢失信息说明。
+        - 统一 importer/exporter 对“未连接贴图 vs 常量值”的判定规则。
+      - 完成判据：
+        - `GltfSceneExporter.h` / `GltfSceneImporter.cpp` 不再各自隐式定义材质语义。
+        - 文档或代码注释中能明确说明 `base/metal/roughness/specular/coat/transmission/sheen` 的映射关系。
+    - 阶段 B：基础 `standardSurface` 标量双向映射
+      - 目标：先让无贴图材质 roundtrip 可用。
+      - 任务：
+        - importer 默认改为创建 `standardSurface`，不再固定创建 `lambert`。
+        - 导入 `baseColor` → `baseColor`，`opacity/alphaMode` → `opacity`，`metallicFactor` → `metalness`，`roughnessFactor` → `specularRoughness`，`emissiveFactor` → `emissionColor` + 合理的 `emission` 开关/强度策略。
+        - exporter 从 `standardSurface` 真实读取 `baseColor`、`opacity`、`metalness`、`specularRoughness`、`emissionColor`，去掉按 shader type 硬编码 roughness 的旧逻辑。
+        - 对非 `standardSurface` 的旧材质保留降级路径：继续支持 `lambert`/其它简单表面材质，但导出时显式按降级规则写 glTF。
+      - 完成判据：
+        - 纯常量色材质导入后能生成可用 `standardSurface`。
+        - 同一材质从 Maya 导出 glTF 再导入 Maya 后，`baseColor/opacity/metalness/specularRoughness/emissionColor` 的误差在可接受范围内。
+    - 阶段 C：核心贴图网络接入
+      - 目标：补齐首轮最关键的四类纹理。
+      - 任务：
+        - importer 支持 `baseColorTexture`、`metallicRoughnessTexture`、`normalTexture`、`emissiveTexture`。
+        - 为 `metallicRoughnessTexture` 明确通道拆包：G → roughness、B → metalness；避免把整张贴图直接误接到单色 plug。
+        - normal map 路径改为标准 bump2d/aiNormal 风格的 Maya 法线链，而不是把法线贴图当普通颜色贴图。
+        - 修正 base color alpha 到 Maya `opacity/transparency` 的反相与三通道一致性，避免现有只连 `R` 的错误。
+        - exporter 尽可能识别直连 file texture + 基础 utility 链，恢复对应 glTF 贴图槽。
+      - 完成判据：
+        - 四类核心贴图至少支持“单 file 节点直连”的稳定导入导出。
+        - `metallicRoughnessTexture` 的通道拆包在 importer/exporter 两侧语义一致。
+    - 阶段 D：glTF 材质扩展第一批
+      - 目标：对齐与 Standard Surface 最接近的一组 `KHR_materials_*` 扩展。
+      - 任务：
+        - 接入 `KHR_materials_specular` ↔ `specular/specularColor`。
+        - 接入 `KHR_materials_ior` ↔ `specularIOR`。
+        - 接入 `KHR_materials_transmission` ↔ `transmission`，并明确与 `opacity`/`thin_walled` 的组合规则。
+        - 接入 `KHR_materials_clearcoat` ↔ `coat/coatRoughness`。
+        - 接入 `KHR_materials_sheen` ↔ `sheen/sheenColor/sheenRoughness`。
+      - 完成判据：
+        - exporter 只在字段非默认时写出对应扩展，避免无意义膨胀。
+        - importer 对不支持的扩展子项给出可追踪 warning，而不是静默丢弃。
+    - 阶段 E：高阶扩展评估与降级策略
+      - 目标：避免把不可控语义硬映射进首轮材质系统。
+      - 任务：
+        - 单独评估 `volume`、`anisotropy`、`iridescence/thin film`、`diffuse_transmission`、`subsurface` 的 Maya 可落地性。
+        - 若 Maya 原生 `standardSurface` 无法稳定表达，优先定义“保守降级 + warning + 注释”的策略，而不是输出错误近似。
+        - 评估是否需要额外 metadata 保存无法 roundtrip 的字段。
+      - 完成判据：
+        - 每个高阶扩展都有“支持 / 降级 / 暂不支持”的明确结论。
+  - 回归与验证计划：
+    - 样例类型：
+      - 常量材质：纯 baseColor + opacity + emission。
+      - 贴图材质：baseColor + metallicRoughness + normal + emissive。
+      - 扩展材质：clearcoat、transmission、sheen、specular、ior 各至少一例。
+      - 兼容材质：旧 `lambert` / 简单 Hypershade 网络的导出降级路径。
+    - 验证维度：
+      - Maya 导入后材质节点类型是否正确为 `standardSurface`。
+      - 关键 plug 数值是否与 glTF 常量一致。
+      - 贴图是否接到正确节点和正确通道。
+      - Maya -> glTF -> Maya roundtrip 后，材质球是否没有明显参数漂移。
+      - `.gltf` 与 `.glb` 各至少覆盖一条基础样例。
+    - 预期需要新增/整理：
+      - `dcc_plugin/samples/gltf/` 下的最小材质样例集。
+      - Maya batch regression 中针对 glTF 材质节点与连接关系的断言，而不只看 mesh/skin。
+  - 风险与约束：
+    - `standardSurface` 与 glTF 并非完全同构，尤其是 `volume`、`subsurface`、`thin film`、`anisotropy` 的视觉等价性有限。
+    - Maya 图网络是任意有向图，exporter 首轮不应尝试完整理解复杂 layered/utility graph，只处理受控直连子集。
+    - `normalTexture`、`metallicRoughnessTexture` 这类通道语义如果 importer/exporter 两侧定义不统一，最容易造成 roundtrip 漂移。
+    - 现有回归体系更偏 mesh/skin；材质图的自动断言需要补建设，否则容易“能编译但材质实际错误”。
+  - 实施顺序建议：
+    - 第一优先级：阶段 A + 阶段 B。
+    - 第二优先级：阶段 C。
+    - 第三优先级：阶段 D。
+    - 第四优先级：阶段 E。
+  - 里程碑完成判据：
+    - `maya_gltf` 能用 `standardSurface` 稳定导入/导出基础 PBR 材质。
+    - 对 `baseColor/opacity/metalness/specularRoughness/emission` 与四类核心贴图完成首轮 roundtrip。
+    - 对 `KHR_materials_specular/transmission/ior/clearcoat/sheen` 至少具备“已支持”或“明确降级”的稳定行为。
+  - 2026-06-21 本轮已执行的第一步（阶段 A + 阶段 B 起步）：
+    - [dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp](dcc_plugin/src/importer_gltf/GltfSceneImporter.cpp) 已把默认导入材质从 `lambert` 切到 `standardSurface`。
+    - importer 已开始写入基础标量：
+      - `baseColorFactor.rgb` → `baseColor`
+      - `baseColorFactor.a` → `opacity`
+      - `metallicFactor` → `metalness`
+      - `roughnessFactor` → `specularRoughness`
+      - `emissiveFactor` → `emissionColor`，并在非零时开启 `emission`
+    - importer 已开始消费第一批扩展常量：
+      - `KHR_materials_specular`
+      - `KHR_materials_ior`
+      - `KHR_materials_transmission`
+      - `KHR_materials_clearcoat`
+      - `KHR_materials_sheen`
+    - exporter 的材质数据模型已扩充，除原有 `baseColor/emissive/metallic/roughness` 外，新增了 `specular/specularColor/ior/transmission/clearcoat/sheen/alphaMode/alphaCutoff/doubleSided` 等基础字段，为后续贴图与扩展写回铺路。
+    - exporter 读取 Maya 材质时已优先查询 `standardSurface` 常用 plug，而不再只依赖 `color/transparency/incandescence` 与 shader type 的 roughness 硬编码。
+    - exporter 写 glTF 时已开始按非默认值写出 `KHR_materials_specular`、`KHR_materials_ior`、`KHR_materials_transmission`、`KHR_materials_clearcoat`、`KHR_materials_sheen` 的常量字段。
+    - 已验证：
+      - `cmake --build dcc_plugin\build --config Release --target maya_plugin_gltf -- /m:1` 构建通过。
+      - `simple_mesh` 与 `xiaoyu_tekken_3d_model/scene.gltf` 的导入检查已确认：`standardSurface` 创建正常，`defaultTextureList1` 已被清空，`opacity` 数值在无透明纹理时保持为 `1.0`。
+      - `xiaoyu_tekken_3d_model/scene.gltf` 导出已确认能写回 `baseColorTexture` 与 `normalTexture`，`normalTexture.scale` 也已回到默认 `1.0`，`images/textures` 均已落盘。
+      - `defaultRenderUtilityList1` 已开始接收 `place2dTexture`、`bump2d` 等 utility 节点；`opacity` 连接已改为 `file.outAlpha -> standardSurface.opacityR/G/B` 的直连方式。
+      - exporter 的扩展写出条件已放宽为“只要存在纹理路径就写”，避免 `specular/transmission/clearcoat/sheen` 这类 texture-only 材质因为 factor 默认值而被静默裁掉。
+    - 当前仍未完成：
+      - `metallicRoughnessTexture`、`emissiveTexture`、`occlusionTexture` 的代码路径已补上，仍需继续找带这些槽位的真实样例做回归确认；更复杂的 utility 链、扩展纹理语义也仍需持续补完。
+      - `alphaMode=MASK`、`doubleSided` 的宿主行为目前仅有数据层字段，尚未形成完整 Maya 侧显示/导出策略。
+      - 2026-07-06 已实现基础贴图色彩空间设置：公共 [MaterialUtils.cpp](dcc_plugin/src/common/MaterialUtils.cpp) 的 file 贴图创建路径已新增 `TextureColorSpace` 参数，创建/复用 file 节点后会设置 `ignoreColorSpaceFileRules=true`，并按用途写 `colorSpace=sRGB` 或 `Raw`。DMX diffuse/base color 类贴图继续走默认 `sRGB`，normal/bump 固定走 `Raw`；glTF 的 `metallicRoughness/specular factor/transmission/clearcoat/sheen roughness` 等数据贴图已显式传 `Raw`，baseColor/emissive/specularColor/sheenColor 等颜色贴图保持 `sRGB`。已通过 `maya_plugin_gltf` 与 `maya_plugin_dmx` Release 构建验证。Maya batch regression 已新增 `texture_color_space_gate_expectations`，`gltf/xiaoyu_tekken_3d_model/scene` 会断言 2 张 baseColor 贴图为 `sRGB`、2 张 normal 贴图为 `Raw` 且 `ignoreColorSpaceFileRules=true`；单 case 实跑已生成 `texture_color_space_gate` marker，直接导入检查也确认 4 个 file 节点色彩空间正确。该单 case 的完整 roundtrip 仍在后续回读阶段被既有 glTF 节点命名 mismatch 阻断，和本次色彩空间 gate 无关。后续还需把同类断言扩到稳定 DMX 真实贴图样例；OBJ 的 MTL 贴图接入时也应复用同一规则，避免新增并行路径。
+
+

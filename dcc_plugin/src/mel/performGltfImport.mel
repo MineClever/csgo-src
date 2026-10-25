@@ -1,0 +1,661 @@
+// Import options UI procedures for glTF/GLB Import.
+// Uses optionVars for persistence.
+
+// ---------------------------------------------------------------------------
+// Option variable helpers
+// ---------------------------------------------------------------------------
+global proc MayaGltfImport_setOptionVars(int $forceFactorySettings)
+{
+    if ($forceFactorySettings)
+    {
+        optionVar -intValue "MayaGltfImport_importMesh" 1;
+        optionVar -intValue "MayaGltfImport_importAnimation" 1;
+        optionVar -intValue "MayaGltfImport_importSkin" 1;
+        optionVar -intValue "MayaGltfImport_importCamera" 1;
+        optionVar -intValue "MayaGltfImport_importMaterial" 1;
+        optionVar -intValue "MayaGltfImport_importVertexColors" 1;
+        optionVar -intValue "MayaGltfImport_importNormals" 1;
+        optionVar -intValue "MayaGltfImport_importUVs" 1;
+        optionVar -intValue "MayaGltfImport_useSceneRoot" 1;
+        optionVar -intValue "MayaGltfImport_restoreDefaultPoseAfterSkin" 1;
+        optionVar -intValue "MayaGltfImport_enableColorManagement" 1;
+        optionVar -floatValue "MayaGltfImport_translateX" 0.0;
+        optionVar -floatValue "MayaGltfImport_translateY" 0.0;
+        optionVar -floatValue "MayaGltfImport_translateZ" 0.0;
+        optionVar -floatValue "MayaGltfImport_rotateX" 0.0;
+        optionVar -floatValue "MayaGltfImport_rotateY" 0.0;
+        optionVar -floatValue "MayaGltfImport_rotateZ" 0.0;
+        optionVar -floatValue "MayaGltfImport_scaleX" 1.0;
+        optionVar -floatValue "MayaGltfImport_scaleY" 1.0;
+        optionVar -floatValue "MayaGltfImport_scaleZ" 1.0;
+        optionVar -intValue "MayaGltfImport_detectFrameRate" 1;
+        optionVar -floatValue "MayaGltfImport_frameRate" 30.0;
+    }
+    else
+    {
+        if (!`optionVar -exists "MayaGltfImport_importMesh"`)
+            optionVar -intValue "MayaGltfImport_importMesh" 1;
+        if (!`optionVar -exists "MayaGltfImport_importAnimation"`)
+            optionVar -intValue "MayaGltfImport_importAnimation" 1;
+        if (!`optionVar -exists "MayaGltfImport_importSkin"`)
+            optionVar -intValue "MayaGltfImport_importSkin" 1;
+        if (!`optionVar -exists "MayaGltfImport_importCamera"`)
+            optionVar -intValue "MayaGltfImport_importCamera" 1;
+        if (!`optionVar -exists "MayaGltfImport_importMaterial"`)
+            optionVar -intValue "MayaGltfImport_importMaterial" 1;
+        if (!`optionVar -exists "MayaGltfImport_importVertexColors"`)
+            optionVar -intValue "MayaGltfImport_importVertexColors" 1;
+        if (!`optionVar -exists "MayaGltfImport_importNormals"`)
+            optionVar -intValue "MayaGltfImport_importNormals" 1;
+        if (!`optionVar -exists "MayaGltfImport_importUVs"`)
+            optionVar -intValue "MayaGltfImport_importUVs" 1;
+        if (!`optionVar -exists "MayaGltfImport_useSceneRoot"`)
+            optionVar -intValue "MayaGltfImport_useSceneRoot" 1;
+        if (!`optionVar -exists "MayaGltfImport_restoreDefaultPoseAfterSkin"`)
+            optionVar -intValue "MayaGltfImport_restoreDefaultPoseAfterSkin" 1;
+        if (!`optionVar -exists "MayaGltfImport_enableColorManagement"`)
+            optionVar -intValue "MayaGltfImport_enableColorManagement" 1;
+        if (!`optionVar -exists "MayaGltfImport_translateX"`)
+            optionVar -floatValue "MayaGltfImport_translateX" 0.0;
+        if (!`optionVar -exists "MayaGltfImport_translateY"`)
+            optionVar -floatValue "MayaGltfImport_translateY" 0.0;
+        if (!`optionVar -exists "MayaGltfImport_translateZ"`)
+            optionVar -floatValue "MayaGltfImport_translateZ" 0.0;
+        if (!`optionVar -exists "MayaGltfImport_rotateX"`)
+            optionVar -floatValue "MayaGltfImport_rotateX" 0.0;
+        if (!`optionVar -exists "MayaGltfImport_rotateY"`)
+            optionVar -floatValue "MayaGltfImport_rotateY" 0.0;
+        if (!`optionVar -exists "MayaGltfImport_rotateZ"`)
+            optionVar -floatValue "MayaGltfImport_rotateZ" 0.0;
+        if (!`optionVar -exists "MayaGltfImport_scaleX"`)
+            optionVar -floatValue "MayaGltfImport_scaleX" 1.0;
+        if (!`optionVar -exists "MayaGltfImport_scaleY"`)
+            optionVar -floatValue "MayaGltfImport_scaleY" 1.0;
+        if (!`optionVar -exists "MayaGltfImport_scaleZ"`)
+            optionVar -floatValue "MayaGltfImport_scaleZ" 1.0;
+        if (!`optionVar -exists "MayaGltfImport_detectFrameRate"`)
+            optionVar -intValue "MayaGltfImport_detectFrameRate" 1;
+        if (!`optionVar -exists "MayaGltfImport_frameRate"`)
+            optionVar -floatValue "MayaGltfImport_frameRate" 30.0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Default options string (factory settings)
+// ---------------------------------------------------------------------------
+global proc string MayaGltfImport_defaultOptionsString()
+{
+    return "importMesh=1;importAnimation=1;importSkin=1;importCamera=1;"
+        + "importMaterial=1;importVertexColors=1;importNormals=1;importUVs=1;"
+        + "useSceneRoot=0;restoreDefaultPoseAfterSkin=1;enableColorManagement=1;"
+        + "translateX=0;translateY=0;translateZ=0;"
+        + "rotateX=0;rotateY=0;rotateZ=0;"
+        + "scaleX=1.0;scaleY=1.0;scaleZ=1.0;"
+        + "detectFrameRate=1;frameRate=30";
+}
+
+// ---------------------------------------------------------------------------
+// Read optionVars into a key=value options string (without prefix)
+// ---------------------------------------------------------------------------
+global proc string MayaGltfImport_collectOptionVarString()
+{
+    string $result = "";
+    $result = $result + "importMesh="
+        + `optionVar -query "MayaGltfImport_importMesh"` + ";";
+    $result = $result + "importAnimation="
+        + `optionVar -query "MayaGltfImport_importAnimation"` + ";";
+    $result = $result + "importSkin="
+        + `optionVar -query "MayaGltfImport_importSkin"` + ";";
+    $result = $result + "importCamera="
+        + `optionVar -query "MayaGltfImport_importCamera"` + ";";
+    $result = $result + "importMaterial="
+        + `optionVar -query "MayaGltfImport_importMaterial"` + ";";
+    $result = $result + "importVertexColors="
+        + `optionVar -query "MayaGltfImport_importVertexColors"` + ";";
+    $result = $result + "importNormals="
+        + `optionVar -query "MayaGltfImport_importNormals"` + ";";
+    $result = $result + "importUVs="
+        + `optionVar -query "MayaGltfImport_importUVs"` + ";";
+    $result = $result + "useSceneRoot="
+        + `optionVar -query "MayaGltfImport_useSceneRoot"` + ";";
+    $result = $result + "restoreDefaultPoseAfterSkin="
+        + `optionVar -query "MayaGltfImport_restoreDefaultPoseAfterSkin"` + ";";
+    $result = $result + "enableColorManagement="
+        + `optionVar -query "MayaGltfImport_enableColorManagement"` + ";";
+    $result = $result + "translateX="
+        + `optionVar -query "MayaGltfImport_translateX"` + ";";
+    $result = $result + "translateY="
+        + `optionVar -query "MayaGltfImport_translateY"` + ";";
+    $result = $result + "translateZ="
+        + `optionVar -query "MayaGltfImport_translateZ"` + ";";
+    $result = $result + "rotateX="
+        + `optionVar -query "MayaGltfImport_rotateX"` + ";";
+    $result = $result + "rotateY="
+        + `optionVar -query "MayaGltfImport_rotateY"` + ";";
+    $result = $result + "rotateZ="
+        + `optionVar -query "MayaGltfImport_rotateZ"` + ";";
+    $result = $result + "scaleX="
+        + `optionVar -query "MayaGltfImport_scaleX"` + ";";
+    $result = $result + "scaleY="
+        + `optionVar -query "MayaGltfImport_scaleY"` + ";";
+    $result = $result + "scaleZ="
+        + `optionVar -query "MayaGltfImport_scaleZ"` + ";";
+    $result = $result + "detectFrameRate="
+        + `optionVar -query "MayaGltfImport_detectFrameRate"` + ";";
+    $result = $result + "frameRate="
+        + `optionVar -query "MayaGltfImport_frameRate"`;
+    return $result;
+}
+
+// ---------------------------------------------------------------------------
+// Parse an options string and apply to optionVars and UI controls
+// (SMD-compatible pattern: parse to locals, then write to optionVars + UI)
+// ---------------------------------------------------------------------------
+global proc MayaGltfImport_applyOptionsString(string $options)
+{
+    string $effectiveOptions = $options;
+    if (size($effectiveOptions) == 0) {
+        $effectiveOptions = MayaGltfImport_defaultOptionsString();
+    }
+
+    // Declare defaults for all options
+    int $importMesh = 1;
+    int $importAnimation = 1;
+    int $importSkin = 1;
+    int $importCamera = 1;
+    int $importMaterial = 1;
+    int $importVertexColors = 1;
+    int $importNormals = 1;
+    int $importUVs = 1;
+    int $useSceneRoot = 0;
+    int $restoreDefaultPoseAfterSkin = 1;
+    int $enableColorManagement = 1;
+    float $translateX = 0; float $translateY = 0; float $translateZ = 0;
+    float $rotateX = 0; float $rotateY = 0; float $rotateZ = 0;
+    float $scaleX = 1.0; float $scaleY = 1.0; float $scaleZ = 1.0;
+    int $detectFrameRate = 1;
+    float $frameRate = 30.0;
+
+    // Parse options string into local variables
+    string $optionList[];
+    tokenize($effectiveOptions, ";", $optionList);
+    for ($option in $optionList)
+    {
+        string $parts[];
+        tokenize($option, "=", $parts);
+        if (size($parts) < 2) continue;
+
+        if ($parts[0] == "importMesh") { $importMesh = $parts[1]; }
+        else if ($parts[0] == "importAnimation") { $importAnimation = $parts[1]; }
+        else if ($parts[0] == "importSkin") { $importSkin = $parts[1]; }
+        else if ($parts[0] == "importCamera") { $importCamera = $parts[1]; }
+        else if ($parts[0] == "importMaterial") { $importMaterial = $parts[1]; }
+        else if ($parts[0] == "importVertexColors") { $importVertexColors = $parts[1]; }
+        else if ($parts[0] == "importNormals") { $importNormals = $parts[1]; }
+        else if ($parts[0] == "importUVs") { $importUVs = $parts[1]; }
+        else if ($parts[0] == "useSceneRoot") { $useSceneRoot = $parts[1]; }
+        else if ($parts[0] == "restoreDefaultPoseAfterSkin") { $restoreDefaultPoseAfterSkin = $parts[1]; }
+        else if ($parts[0] == "enableColorManagement") { $enableColorManagement = $parts[1]; }
+        else if ($parts[0] == "translateX") { $translateX = $parts[1]; }
+        else if ($parts[0] == "translateY") { $translateY = $parts[1]; }
+        else if ($parts[0] == "translateZ") { $translateZ = $parts[1]; }
+        else if ($parts[0] == "rotateX") { $rotateX = $parts[1]; }
+        else if ($parts[0] == "rotateY") { $rotateY = $parts[1]; }
+        else if ($parts[0] == "rotateZ") { $rotateZ = $parts[1]; }
+        else if ($parts[0] == "scaleX") { $scaleX = $parts[1]; }
+        else if ($parts[0] == "scaleY") { $scaleY = $parts[1]; }
+        else if ($parts[0] == "scaleZ") { $scaleZ = $parts[1]; }
+        else if ($parts[0] == "detectFrameRate") { $detectFrameRate = $parts[1]; }
+        else if ($parts[0] == "frameRate") { $frameRate = $parts[1]; }
+    }
+
+    // Write to optionVars
+    optionVar -intValue "MayaGltfImport_importMesh" $importMesh;
+    optionVar -intValue "MayaGltfImport_importAnimation" $importAnimation;
+    optionVar -intValue "MayaGltfImport_importSkin" $importSkin;
+    optionVar -intValue "MayaGltfImport_importCamera" $importCamera;
+    optionVar -intValue "MayaGltfImport_importMaterial" $importMaterial;
+    optionVar -intValue "MayaGltfImport_importVertexColors" $importVertexColors;
+    optionVar -intValue "MayaGltfImport_importNormals" $importNormals;
+    optionVar -intValue "MayaGltfImport_importUVs" $importUVs;
+    optionVar -intValue "MayaGltfImport_useSceneRoot" $useSceneRoot;
+    optionVar -intValue "MayaGltfImport_restoreDefaultPoseAfterSkin" $restoreDefaultPoseAfterSkin;
+    optionVar -intValue "MayaGltfImport_enableColorManagement" $enableColorManagement;
+    optionVar -floatValue "MayaGltfImport_translateX" $translateX;
+    optionVar -floatValue "MayaGltfImport_translateY" $translateY;
+    optionVar -floatValue "MayaGltfImport_translateZ" $translateZ;
+    optionVar -floatValue "MayaGltfImport_rotateX" $rotateX;
+    optionVar -floatValue "MayaGltfImport_rotateY" $rotateY;
+    optionVar -floatValue "MayaGltfImport_rotateZ" $rotateZ;
+    optionVar -floatValue "MayaGltfImport_scaleX" $scaleX;
+    optionVar -floatValue "MayaGltfImport_scaleY" $scaleY;
+    optionVar -floatValue "MayaGltfImport_scaleZ" $scaleZ;
+    optionVar -intValue "MayaGltfImport_detectFrameRate" $detectFrameRate;
+    optionVar -floatValue "MayaGltfImport_frameRate" $frameRate;
+
+    // Update UI controls (with existence checks, SMD-compatible pattern)
+    if (`checkBoxGrp -exists "MayaGltfImport_importMesh_cb"`)
+        checkBoxGrp -edit -value1 $importMesh "MayaGltfImport_importMesh_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importAnimation_cb"`)
+        checkBoxGrp -edit -value1 $importAnimation "MayaGltfImport_importAnimation_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importSkin_cb"`)
+        checkBoxGrp -edit -value1 $importSkin "MayaGltfImport_importSkin_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importCamera_cb"`)
+        checkBoxGrp -edit -value1 $importCamera "MayaGltfImport_importCamera_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importMaterial_cb"`)
+        checkBoxGrp -edit -value1 $importMaterial "MayaGltfImport_importMaterial_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importVertexColors_cb"`)
+        checkBoxGrp -edit -value1 $importVertexColors "MayaGltfImport_importVertexColors_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importNormals_cb"`)
+        checkBoxGrp -edit -value1 $importNormals "MayaGltfImport_importNormals_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importUVs_cb"`)
+        checkBoxGrp -edit -value1 $importUVs "MayaGltfImport_importUVs_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_useSceneRoot_cb"`)
+        checkBoxGrp -edit -value1 $useSceneRoot "MayaGltfImport_useSceneRoot_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_restoreDefaultPoseAfterSkin_cb"`)
+        checkBoxGrp -edit -value1 $restoreDefaultPoseAfterSkin "MayaGltfImport_restoreDefaultPoseAfterSkin_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_enableColorManagement_cb"`)
+        checkBoxGrp -edit -value1 $enableColorManagement "MayaGltfImport_enableColorManagement_cb";
+    if (`floatFieldGrp -exists "MayaGltfImport_translate_ffg"`)
+        floatFieldGrp -edit -value1 $translateX -value2 $translateY -value3 $translateZ "MayaGltfImport_translate_ffg";
+    if (`floatFieldGrp -exists "MayaGltfImport_rotate_ffg"`)
+        floatFieldGrp -edit -value1 $rotateX -value2 $rotateY -value3 $rotateZ "MayaGltfImport_rotate_ffg";
+    if (`floatFieldGrp -exists "MayaGltfImport_scale_ffg"`)
+        floatFieldGrp -edit -value1 $scaleX -value2 $scaleY -value3 $scaleZ "MayaGltfImport_scale_ffg";
+    if (`checkBoxGrp -exists "MayaGltfImport_detectFrameRate_cb"`)
+        checkBoxGrp -edit -value1 $detectFrameRate "MayaGltfImport_detectFrameRate_cb";
+    if (`floatFieldGrp -exists "MayaGltfImport_frameRate_ffg"`)
+        floatFieldGrp -edit -value1 $frameRate "MayaGltfImport_frameRate_ffg";
+
+    // Sync frame rate field enable state
+    if (`checkBoxGrp -exists "MayaGltfImport_detectFrameRate_cb"`)
+        MayaGltfImport_toggleFrameRateField();
+}
+
+// ---------------------------------------------------------------------------
+// Sync optionVars → UI controls
+// ---------------------------------------------------------------------------
+global proc MayaGltfImport_syncUIFromOptionVars()
+{
+    if (`checkBoxGrp -exists "MayaGltfImport_importMesh_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importMesh"` "MayaGltfImport_importMesh_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importAnimation_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importAnimation"` "MayaGltfImport_importAnimation_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importSkin_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importSkin"` "MayaGltfImport_importSkin_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importCamera_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importCamera"` "MayaGltfImport_importCamera_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importMaterial_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importMaterial"` "MayaGltfImport_importMaterial_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importVertexColors_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importVertexColors"` "MayaGltfImport_importVertexColors_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importNormals_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importNormals"` "MayaGltfImport_importNormals_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_importUVs_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importUVs"` "MayaGltfImport_importUVs_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_useSceneRoot_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_useSceneRoot"` "MayaGltfImport_useSceneRoot_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_restoreDefaultPoseAfterSkin_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_restoreDefaultPoseAfterSkin"` "MayaGltfImport_restoreDefaultPoseAfterSkin_cb";
+    if (`checkBoxGrp -exists "MayaGltfImport_enableColorManagement_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_enableColorManagement"` "MayaGltfImport_enableColorManagement_cb";
+
+    if (`floatFieldGrp -exists "MayaGltfImport_translate_ffg"`) {
+        floatFieldGrp -edit
+            -value1 `optionVar -query "MayaGltfImport_translateX"`
+            -value2 `optionVar -query "MayaGltfImport_translateY"`
+            -value3 `optionVar -query "MayaGltfImport_translateZ"`
+            "MayaGltfImport_translate_ffg";
+    }
+    if (`floatFieldGrp -exists "MayaGltfImport_rotate_ffg"`) {
+        floatFieldGrp -edit
+            -value1 `optionVar -query "MayaGltfImport_rotateX"`
+            -value2 `optionVar -query "MayaGltfImport_rotateY"`
+            -value3 `optionVar -query "MayaGltfImport_rotateZ"`
+            "MayaGltfImport_rotate_ffg";
+    }
+    if (`floatFieldGrp -exists "MayaGltfImport_scale_ffg"`) {
+        floatFieldGrp -edit
+            -value1 `optionVar -query "MayaGltfImport_scaleX"`
+            -value2 `optionVar -query "MayaGltfImport_scaleY"`
+            -value3 `optionVar -query "MayaGltfImport_scaleZ"`
+            "MayaGltfImport_scale_ffg";
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_detectFrameRate_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_detectFrameRate"` "MayaGltfImport_detectFrameRate_cb";
+    if (`floatFieldGrp -exists "MayaGltfImport_frameRate_ffg"`)
+        floatFieldGrp -edit -value1 `optionVar -query "MayaGltfImport_frameRate"` "MayaGltfImport_frameRate_ffg";
+    if (`checkBoxGrp -exists "MayaGltfImport_detectFrameRate_cb"`)
+        MayaGltfImport_toggleFrameRateField();
+}
+
+// ---------------------------------------------------------------------------
+// Sync UI controls → optionVars (without building string)
+// ---------------------------------------------------------------------------
+global proc MayaGltfImport_syncOptionVarsFromUI()
+{
+    if (`checkBoxGrp -exists "MayaGltfImport_importMesh_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_importMesh_cb"`;
+        optionVar -intValue "MayaGltfImport_importMesh" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_importAnimation_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_importAnimation_cb"`;
+        optionVar -intValue "MayaGltfImport_importAnimation" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_importSkin_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_importSkin_cb"`;
+        optionVar -intValue "MayaGltfImport_importSkin" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_importCamera_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_importCamera_cb"`;
+        optionVar -intValue "MayaGltfImport_importCamera" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_importMaterial_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_importMaterial_cb"`;
+        optionVar -intValue "MayaGltfImport_importMaterial" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_importVertexColors_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_importVertexColors_cb"`;
+        optionVar -intValue "MayaGltfImport_importVertexColors" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_importNormals_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_importNormals_cb"`;
+        optionVar -intValue "MayaGltfImport_importNormals" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_importUVs_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_importUVs_cb"`;
+        optionVar -intValue "MayaGltfImport_importUVs" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_useSceneRoot_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_useSceneRoot_cb"`;
+        optionVar -intValue "MayaGltfImport_useSceneRoot" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_restoreDefaultPoseAfterSkin_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_restoreDefaultPoseAfterSkin_cb"`;
+        optionVar -intValue "MayaGltfImport_restoreDefaultPoseAfterSkin" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_enableColorManagement_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfImport_enableColorManagement_cb"`;
+        optionVar -intValue "MayaGltfImport_enableColorManagement" $val;
+    }
+
+    if (`floatFieldGrp -exists "MayaGltfImport_translate_ffg"`) {
+        optionVar -floatValue "MayaGltfImport_translateX" `floatFieldGrp -query -value1 "MayaGltfImport_translate_ffg"`;
+        optionVar -floatValue "MayaGltfImport_translateY" `floatFieldGrp -query -value2 "MayaGltfImport_translate_ffg"`;
+        optionVar -floatValue "MayaGltfImport_translateZ" `floatFieldGrp -query -value3 "MayaGltfImport_translate_ffg"`;
+    }
+    if (`floatFieldGrp -exists "MayaGltfImport_rotate_ffg"`) {
+        optionVar -floatValue "MayaGltfImport_rotateX" `floatFieldGrp -query -value1 "MayaGltfImport_rotate_ffg"`;
+        optionVar -floatValue "MayaGltfImport_rotateY" `floatFieldGrp -query -value2 "MayaGltfImport_rotate_ffg"`;
+        optionVar -floatValue "MayaGltfImport_rotateZ" `floatFieldGrp -query -value3 "MayaGltfImport_rotate_ffg"`;
+    }
+    if (`floatFieldGrp -exists "MayaGltfImport_scale_ffg"`) {
+        optionVar -floatValue "MayaGltfImport_scaleX" `floatFieldGrp -query -value1 "MayaGltfImport_scale_ffg"`;
+        optionVar -floatValue "MayaGltfImport_scaleY" `floatFieldGrp -query -value2 "MayaGltfImport_scale_ffg"`;
+        optionVar -floatValue "MayaGltfImport_scaleZ" `floatFieldGrp -query -value3 "MayaGltfImport_scale_ffg"`;
+    }
+    if (`checkBoxGrp -exists "MayaGltfImport_detectFrameRate_cb"`)
+        optionVar -intValue "MayaGltfImport_detectFrameRate" `checkBoxGrp -query -value1 "MayaGltfImport_detectFrameRate_cb"`;
+    if (`floatFieldGrp -exists "MayaGltfImport_frameRate_ffg"`)
+        optionVar -floatValue "MayaGltfImport_frameRate" `floatFieldGrp -query -value1 "MayaGltfImport_frameRate_ffg"`;
+}
+
+// ---------------------------------------------------------------------------
+// Collect options from the UI and return as option string
+// ---------------------------------------------------------------------------
+global proc string MayaGltfImport_collectOptionsString()
+{
+    // Read values from UI controls
+    int $importMesh = `checkBoxGrp -query -value1 "MayaGltfImport_importMesh_cb"`;
+    int $importAnimation = `checkBoxGrp -query -value1 "MayaGltfImport_importAnimation_cb"`;
+    int $importSkin = `checkBoxGrp -query -value1 "MayaGltfImport_importSkin_cb"`;
+    int $importCamera = `checkBoxGrp -query -value1 "MayaGltfImport_importCamera_cb"`;
+    int $importMaterial = `checkBoxGrp -query -value1 "MayaGltfImport_importMaterial_cb"`;
+    int $importVertexColors = `checkBoxGrp -query -value1 "MayaGltfImport_importVertexColors_cb"`;
+    int $importNormals = `checkBoxGrp -query -value1 "MayaGltfImport_importNormals_cb"`;
+    int $importUVs = `checkBoxGrp -query -value1 "MayaGltfImport_importUVs_cb"`;
+    int $useSceneRoot = `checkBoxGrp -query -value1 "MayaGltfImport_useSceneRoot_cb"`;
+    int $restoreDefaultPoseAfterSkin = `checkBoxGrp -query -value1 "MayaGltfImport_restoreDefaultPoseAfterSkin_cb"`;
+    int $enableColorManagement = `checkBoxGrp -query -value1 "MayaGltfImport_enableColorManagement_cb"`;
+
+    optionVar -intValue "MayaGltfImport_importMesh" $importMesh;
+    optionVar -intValue "MayaGltfImport_importAnimation" $importAnimation;
+    optionVar -intValue "MayaGltfImport_importSkin" $importSkin;
+    optionVar -intValue "MayaGltfImport_importCamera" $importCamera;
+    optionVar -intValue "MayaGltfImport_importMaterial" $importMaterial;
+    optionVar -intValue "MayaGltfImport_importVertexColors" $importVertexColors;
+    optionVar -intValue "MayaGltfImport_importNormals" $importNormals;
+    optionVar -intValue "MayaGltfImport_importUVs" $importUVs;
+    optionVar -intValue "MayaGltfImport_useSceneRoot" $useSceneRoot;
+    optionVar -intValue "MayaGltfImport_restoreDefaultPoseAfterSkin" $restoreDefaultPoseAfterSkin;
+    optionVar -intValue "MayaGltfImport_enableColorManagement" $enableColorManagement;
+
+    float $tx = `floatFieldGrp -query -value1 "MayaGltfImport_translate_ffg"`;
+    float $ty = `floatFieldGrp -query -value2 "MayaGltfImport_translate_ffg"`;
+    float $tz = `floatFieldGrp -query -value3 "MayaGltfImport_translate_ffg"`;
+    float $rx = `floatFieldGrp -query -value1 "MayaGltfImport_rotate_ffg"`;
+    float $ry = `floatFieldGrp -query -value2 "MayaGltfImport_rotate_ffg"`;
+    float $rz = `floatFieldGrp -query -value3 "MayaGltfImport_rotate_ffg"`;
+    float $sx = `floatFieldGrp -query -value1 "MayaGltfImport_scale_ffg"`;
+    float $sy = `floatFieldGrp -query -value2 "MayaGltfImport_scale_ffg"`;
+    float $sz = `floatFieldGrp -query -value3 "MayaGltfImport_scale_ffg"`;
+
+    optionVar -floatValue "MayaGltfImport_translateX" $tx;
+    optionVar -floatValue "MayaGltfImport_translateY" $ty;
+    optionVar -floatValue "MayaGltfImport_translateZ" $tz;
+    optionVar -floatValue "MayaGltfImport_rotateX" $rx;
+    optionVar -floatValue "MayaGltfImport_rotateY" $ry;
+    optionVar -floatValue "MayaGltfImport_rotateZ" $rz;
+    optionVar -floatValue "MayaGltfImport_scaleX" $sx;
+    optionVar -floatValue "MayaGltfImport_scaleY" $sy;
+    optionVar -floatValue "MayaGltfImport_scaleZ" $sz;
+
+    int $detectFrameRate = `checkBoxGrp -query -value1 "MayaGltfImport_detectFrameRate_cb"`;
+    float $frameRate = `floatFieldGrp -query -value1 "MayaGltfImport_frameRate_ffg"`;
+    optionVar -intValue "MayaGltfImport_detectFrameRate" $detectFrameRate;
+    optionVar -floatValue "MayaGltfImport_frameRate" $frameRate;
+
+    return MayaGltfImport_collectOptionVarString();
+}
+
+// ---------------------------------------------------------------------------
+// UI callbacks (called by Maya automatically)
+// ---------------------------------------------------------------------------
+global proc MayaGltf_importFileOptionsUICreate(string $parent)
+{
+    if (!`exists MayaGltfImport_applyOptionsString`)
+    {
+        source "performGltfImport.mel";
+    }
+    MayaGltfImport_setOptionVars(0);
+}
+
+global proc MayaGltf_importFileOptionsUIInit(string $parent, string $filter)
+{
+    // Read optionVars into UI widgets
+    string $optStr = MayaGltfImport_collectOptionVarString();
+    MayaGltfImport_applyOptionsString($optStr);
+
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importMesh"` "MayaGltfImport_importMesh_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importAnimation"` "MayaGltfImport_importAnimation_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importSkin"` "MayaGltfImport_importSkin_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importCamera"` "MayaGltfImport_importCamera_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importMaterial"` "MayaGltfImport_importMaterial_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importVertexColors"` "MayaGltfImport_importVertexColors_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importNormals"` "MayaGltfImport_importNormals_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_importUVs"` "MayaGltfImport_importUVs_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_useSceneRoot"` "MayaGltfImport_useSceneRoot_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_restoreDefaultPoseAfterSkin"` "MayaGltfImport_restoreDefaultPoseAfterSkin_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_enableColorManagement"` "MayaGltfImport_enableColorManagement_cb";
+
+    floatFieldGrp -edit -value1 `optionVar -query "MayaGltfImport_translateX"` "MayaGltfImport_translate_ffg";
+    floatFieldGrp -edit -value2 `optionVar -query "MayaGltfImport_translateY"` "MayaGltfImport_translate_ffg";
+    floatFieldGrp -edit -value3 `optionVar -query "MayaGltfImport_translateZ"` "MayaGltfImport_translate_ffg";
+    floatFieldGrp -edit -value1 `optionVar -query "MayaGltfImport_rotateX"` "MayaGltfImport_rotate_ffg";
+    floatFieldGrp -edit -value2 `optionVar -query "MayaGltfImport_rotateY"` "MayaGltfImport_rotate_ffg";
+    floatFieldGrp -edit -value3 `optionVar -query "MayaGltfImport_rotateZ"` "MayaGltfImport_rotate_ffg";
+    floatFieldGrp -edit -value1 `optionVar -query "MayaGltfImport_scaleX"` "MayaGltfImport_scale_ffg";
+    floatFieldGrp -edit -value2 `optionVar -query "MayaGltfImport_scaleY"` "MayaGltfImport_scale_ffg";
+    floatFieldGrp -edit -value3 `optionVar -query "MayaGltfImport_scaleZ"` "MayaGltfImport_scale_ffg";
+
+    if (`checkBoxGrp -exists "MayaGltfImport_detectFrameRate_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfImport_detectFrameRate"` "MayaGltfImport_detectFrameRate_cb";
+    if (`floatFieldGrp -exists "MayaGltfImport_frameRate_ffg"`)
+        floatFieldGrp -edit -value1 `optionVar -query "MayaGltfImport_frameRate"` "MayaGltfImport_frameRate_ffg";
+    if (`checkBoxGrp -exists "MayaGltfImport_detectFrameRate_cb"`)
+        MayaGltfImport_toggleFrameRateField();
+}
+
+global proc MayaGltf_importFileOptionsUICommit(string $parent)
+{
+    // Collect UI values into optionVars
+    MayaGltfImport_collectOptionsString();
+}
+
+// ---------------------------------------------------------------------------
+// Toggle custom frame rate field enable state
+// ---------------------------------------------------------------------------
+global proc MayaGltfImport_toggleFrameRateField()
+{
+    if (!`checkBoxGrp -exists "MayaGltfImport_detectFrameRate_cb"`)
+        return;
+    if (!`floatFieldGrp -exists "MayaGltfImport_frameRate_ffg"`)
+        return;
+    int $detect = `checkBoxGrp -query -value1 "MayaGltfImport_detectFrameRate_cb"`;
+    floatFieldGrp -edit -enable (!$detect) "MayaGltfImport_frameRate_ffg";
+}
+
+// ---------------------------------------------------------------------------
+// Import options UI
+// ---------------------------------------------------------------------------
+global proc string GltfImportOptionsUI(string $parent)
+{
+    setParent $parent;
+    setUITemplate -pushTemplate DefaultTemplate;
+    waitCursor -state 1;
+    string $optionLayout = `scrollLayout`;
+    columnLayout -adjustableColumn true;
+
+    // --- Import Data Section ---
+    frameLayout -label "Data to Import" -collapsable true -collapse false;
+    columnLayout -adjustableColumn true;
+
+    checkBoxGrp
+        -label "Mesh"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Import mesh geometry (vertices, triangles)"
+        "MayaGltfImport_importMesh_cb";
+
+    checkBoxGrp
+        -label "Animation"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Import animation curves from glTF animation channels"
+        "MayaGltfImport_importAnimation_cb";
+
+    separator -style "none" -height 5;
+    text -align "left" -label "Animation Timing";
+    checkBoxGrp
+        -label "Detect Frame Rate"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Auto-detect frame rate from keyframe spacing. Disable to specify a custom frame rate."
+        -changeCommand "MayaGltfImport_toggleFrameRateField"
+        "MayaGltfImport_detectFrameRate_cb";
+    floatFieldGrp
+        -numberOfFields 1
+        -label "Frame Rate (FPS)"
+        -value1 30.0
+        -enable false
+        "MayaGltfImport_frameRate_ffg";
+
+    checkBoxGrp
+        -label "Skin"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Import skinning data (joints, weights)"
+        "MayaGltfImport_importSkin_cb";
+
+    checkBoxGrp
+        -label "Restore Default Pose"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "After binding skin, restore joints to the glTF node default pose before animation curves are imported"
+        "MayaGltfImport_restoreDefaultPoseAfterSkin_cb";
+
+    checkBoxGrp
+        -label "Camera"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Import cameras"
+        "MayaGltfImport_importCamera_cb";
+
+    checkBoxGrp
+        -label "Material"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Import PBR materials"
+        "MayaGltfImport_importMaterial_cb";
+
+    checkBoxGrp
+        -label "Enable Color Management"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Enable Maya color management on import so per-texture color space (sRGB/Raw) settings take effect"
+        "MayaGltfImport_enableColorManagement_cb";
+
+    checkBoxGrp
+        -label "Vertex Colors"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Import vertex colors from COLOR_0 attribute"
+        "MayaGltfImport_importVertexColors_cb";
+
+    checkBoxGrp
+        -label "Normals"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Import vertex normals"
+        "MayaGltfImport_importNormals_cb";
+
+    checkBoxGrp
+        -label "UV Sets"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Import UV coordinates from TEXCOORD attributes"
+        "MayaGltfImport_importUVs_cb";
+
+    setParent ..;
+    setParent ..;
+
+    separator -style "in" -height 10;
+
+    // --- Scene Setup Section ---
+    frameLayout -label "Scene Setup" -collapsable true -collapse false;
+
+    checkBoxGrp
+        -label "Use Scene Root"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Place directly in scene (skip wrapper root)"
+        "MayaGltfImport_useSceneRoot_cb";
+
+    separator -style "none" -height 5;
+
+    // --- Translate ---
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Translate Offset"
+        -value1 0.0 -value2 0.0 -value3 0.0
+        "MayaGltfImport_translate_ffg";
+
+    // --- Rotate ---
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Rotate Offset"
+        -value1 0.0 -value2 0.0 -value3 0.0
+        "MayaGltfImport_rotate_ffg";
+
+    // --- Scale ---
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Scale"
+        -value1 1.0 -value2 1.0 -value3 1.0
+        "MayaGltfImport_scale_ffg";
+
+    setParent ..;
+    setParent ..;
+
+    waitCursor -state 0;
+    setUITemplate -popTemplate;
+    return $optionLayout;
+}

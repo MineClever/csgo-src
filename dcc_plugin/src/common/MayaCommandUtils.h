@@ -21,6 +21,9 @@ MStatus SetNodePlugAlias(const MObject &nodeObject, const MPlug &plug, const MSt
 MStatus CreateNamedDependencyNode(const MString &typeName, const MString &nodeName, MObject &nodeObject);
 MStatus EnsureRenderableShadingGroup(const MString &nodeName, MObject &setObject);
 MStatus EnsureShaderRegisteredInDefaultShaderList(const MObject &shaderObject);
+MStatus EnsureNodeRegisteredInDefaultRenderUtilityList(const MObject &nodeObject);
+MStatus EnsureTextureRemovedFromDefaultTextureList(const MObject &textureObject);
+MStatus EnsureColorManagementEnabled();
 MStatus ConnectPlugsForce(const MPlug &sourcePlug, const MPlug &destinationPlug);
 MStatus AddDagPathToSet(const MDagPath &dagPath, const MObject &setObject);
 MStatus AddComponentToSet(const MDagPath &dagPath, const MObject &componentObject, const MObject &setObject);

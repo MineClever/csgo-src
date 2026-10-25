@@ -12,6 +12,21 @@
 namespace dcc_material
 {
 
+enum class TextureChannel
+{
+    Color,
+    Alpha,
+    Red,
+    Green,
+    Blue
+};
+
+enum class TextureColorSpace
+{
+    Color,
+    Raw
+};
+
 struct MaterialNodeNames
 {
     MString shaderName;
@@ -47,11 +62,34 @@ MStatus AssignFileTextureToPlug(
     const MString &fileNodeName,
     const MString &texturePath,
     const MPlug &destinationPlug,
-    bool useAlphaOutput);
+    bool useAlphaOutput,
+    TextureColorSpace colorSpace = TextureColorSpace::Color);
+
+MStatus AssignTextureChannelToPlug(
+    const MString &fileNodeName,
+    const MString &texturePath,
+    const MPlug &destinationPlug,
+    TextureChannel channel,
+    TextureColorSpace colorSpace = TextureColorSpace::Color);
 
 MStatus AssignNormalTextureToShader(
     const MString &shaderBaseName,
     const MString &texturePath,
     const MPlug &normalCameraPlug);
+
+MStatus EnsureStringAttribute(
+    const MObject &nodeObject,
+    const char *attributeName,
+    const MString &value);
+
+MStatus EnsureFloatAttribute(
+    const MObject &nodeObject,
+    const char *attributeName,
+    float value);
+
+MStatus EnsureBoolAttribute(
+    const MObject &nodeObject,
+    const char *attributeName,
+    bool value);
 
 } // namespace dcc_material

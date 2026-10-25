@@ -1,0 +1,513 @@
+// Export options UI procedures for glTF/GLB Export.
+// Uses optionVars for persistence.
+
+// ---------------------------------------------------------------------------
+// Option variable helpers
+// ---------------------------------------------------------------------------
+global proc MayaGltfExport_setOptionVars(int $forceFactorySettings)
+{
+    if ($forceFactorySettings)
+    {
+        optionVar -intValue "MayaGltfExport_exportMesh" 1;
+        optionVar -intValue "MayaGltfExport_exportAnimation" 1;
+        optionVar -intValue "MayaGltfExport_exportCamera" 0;
+        optionVar -intValue "MayaGltfExport_exportSkin" 1;
+        optionVar -intValue "MayaGltfExport_exportMaterial" 1;
+        optionVar -intValue "MayaGltfExport_exportVertexColors" 1;
+        optionVar -intValue "MayaGltfExport_exportNormals" 1;
+        optionVar -intValue "MayaGltfExport_exportUVs" 1;
+        optionVar -intValue "MayaGltfExport_flipUvV" 1;
+        optionVar -floatValue "MayaGltfExport_translateX" 0.0;
+        optionVar -floatValue "MayaGltfExport_translateY" 0.0;
+        optionVar -floatValue "MayaGltfExport_translateZ" 0.0;
+        optionVar -floatValue "MayaGltfExport_rotateX" 0.0;
+        optionVar -floatValue "MayaGltfExport_rotateY" 0.0;
+        optionVar -floatValue "MayaGltfExport_rotateZ" 0.0;
+        optionVar -floatValue "MayaGltfExport_scaleX" 1.0;
+        optionVar -floatValue "MayaGltfExport_scaleY" 1.0;
+        optionVar -floatValue "MayaGltfExport_scaleZ" 1.0;
+    }
+    else
+    {
+        if (!`optionVar -exists "MayaGltfExport_exportMesh"`)
+            optionVar -intValue "MayaGltfExport_exportMesh" 1;
+        if (!`optionVar -exists "MayaGltfExport_exportAnimation"`)
+            optionVar -intValue "MayaGltfExport_exportAnimation" 1;
+        if (!`optionVar -exists "MayaGltfExport_exportCamera"`)
+            optionVar -intValue "MayaGltfExport_exportCamera" 0;
+        if (!`optionVar -exists "MayaGltfExport_exportSkin"`)
+            optionVar -intValue "MayaGltfExport_exportSkin" 1;
+        if (!`optionVar -exists "MayaGltfExport_exportMaterial"`)
+            optionVar -intValue "MayaGltfExport_exportMaterial" 1;
+        if (!`optionVar -exists "MayaGltfExport_exportVertexColors"`)
+            optionVar -intValue "MayaGltfExport_exportVertexColors" 1;
+        if (!`optionVar -exists "MayaGltfExport_exportNormals"`)
+            optionVar -intValue "MayaGltfExport_exportNormals" 1;
+        if (!`optionVar -exists "MayaGltfExport_exportUVs"`)
+            optionVar -intValue "MayaGltfExport_exportUVs" 1;
+        if (!`optionVar -exists "MayaGltfExport_flipUvV"`)
+            optionVar -intValue "MayaGltfExport_flipUvV" 1;
+        if (!`optionVar -exists "MayaGltfExport_translateX"`)
+            optionVar -floatValue "MayaGltfExport_translateX" 0.0;
+        if (!`optionVar -exists "MayaGltfExport_translateY"`)
+            optionVar -floatValue "MayaGltfExport_translateY" 0.0;
+        if (!`optionVar -exists "MayaGltfExport_translateZ"`)
+            optionVar -floatValue "MayaGltfExport_translateZ" 0.0;
+        if (!`optionVar -exists "MayaGltfExport_rotateX"`)
+            optionVar -floatValue "MayaGltfExport_rotateX" 0.0;
+        if (!`optionVar -exists "MayaGltfExport_rotateY"`)
+            optionVar -floatValue "MayaGltfExport_rotateY" 0.0;
+        if (!`optionVar -exists "MayaGltfExport_rotateZ"`)
+            optionVar -floatValue "MayaGltfExport_rotateZ" 0.0;
+        if (!`optionVar -exists "MayaGltfExport_scaleX"`)
+            optionVar -floatValue "MayaGltfExport_scaleX" 1.0;
+        if (!`optionVar -exists "MayaGltfExport_scaleY"`)
+            optionVar -floatValue "MayaGltfExport_scaleY" 1.0;
+        if (!`optionVar -exists "MayaGltfExport_scaleZ"`)
+            optionVar -floatValue "MayaGltfExport_scaleZ" 1.0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Default options string (factory settings)
+// ---------------------------------------------------------------------------
+global proc string MayaGltfExport_defaultOptionsString()
+{
+    return "exportMesh=1;exportAnimation=1;exportCamera=0;exportSkin=1;"
+        + "exportMaterial=1;exportVertexColors=1;exportNormals=1;exportUVs=1;"
+        + "flipUvV=1;"
+        + "translateX=0;translateY=0;translateZ=0;"
+        + "rotateX=0;rotateY=0;rotateZ=0;"
+        + "scaleX=1.0;scaleY=1.0;scaleZ=1.0";
+}
+
+// ---------------------------------------------------------------------------
+// Read optionVars into a key=value options string
+// ---------------------------------------------------------------------------
+global proc string MayaGltfExport_collectOptionVarString()
+{
+    string $result = "";
+    $result = $result + "exportMesh="
+        + `optionVar -query "MayaGltfExport_exportMesh"` + ";";
+    $result = $result + "exportAnimation="
+        + `optionVar -query "MayaGltfExport_exportAnimation"` + ";";
+    $result = $result + "exportCamera="
+        + `optionVar -query "MayaGltfExport_exportCamera"` + ";";
+    $result = $result + "exportSkin="
+        + `optionVar -query "MayaGltfExport_exportSkin"` + ";";
+    $result = $result + "exportMaterial="
+        + `optionVar -query "MayaGltfExport_exportMaterial"` + ";";
+    $result = $result + "exportVertexColors="
+        + `optionVar -query "MayaGltfExport_exportVertexColors"` + ";";
+    $result = $result + "exportNormals="
+        + `optionVar -query "MayaGltfExport_exportNormals"` + ";";
+    $result = $result + "exportUVs="
+        + `optionVar -query "MayaGltfExport_exportUVs"` + ";";
+    $result = $result + "flipUvV="
+        + `optionVar -query "MayaGltfExport_flipUvV"` + ";";
+    $result = $result + "translateX="
+        + `optionVar -query "MayaGltfExport_translateX"` + ";";
+    $result = $result + "translateY="
+        + `optionVar -query "MayaGltfExport_translateY"` + ";";
+    $result = $result + "translateZ="
+        + `optionVar -query "MayaGltfExport_translateZ"` + ";";
+    $result = $result + "rotateX="
+        + `optionVar -query "MayaGltfExport_rotateX"` + ";";
+    $result = $result + "rotateY="
+        + `optionVar -query "MayaGltfExport_rotateY"` + ";";
+    $result = $result + "rotateZ="
+        + `optionVar -query "MayaGltfExport_rotateZ"` + ";";
+    $result = $result + "scaleX="
+        + `optionVar -query "MayaGltfExport_scaleX"` + ";";
+    $result = $result + "scaleY="
+        + `optionVar -query "MayaGltfExport_scaleY"` + ";";
+    $result = $result + "scaleZ="
+        + `optionVar -query "MayaGltfExport_scaleZ"`;
+    return $result;
+}
+
+// ---------------------------------------------------------------------------
+// Parse an options string and apply to optionVars
+// ---------------------------------------------------------------------------
+global proc MayaGltfExport_applyOptionsString(string $options)
+{
+    MayaGltfExport_setOptionVars(0);
+    if (size($options) == 0) {
+        $options = MayaGltfExport_defaultOptionsString();
+    }
+
+    string $tokens[];
+    tokenize($options, ";", $tokens);
+    for ($token in $tokens)
+    {
+        string $pair[];
+        tokenize($token, "=", $pair);
+        if (size($pair) != 2) continue;
+
+        string $key = $pair[0];
+        string $value = $pair[1];
+
+        if ($key == "exportMesh") {
+            optionVar -intValue "MayaGltfExport_exportMesh" ((int)$value);
+        }
+        if ($key == "exportAnimation") {
+            optionVar -intValue "MayaGltfExport_exportAnimation" ((int)$value);
+        }
+        if ($key == "exportCamera") {
+            optionVar -intValue "MayaGltfExport_exportCamera" ((int)$value);
+        }
+        if ($key == "exportSkin") {
+            optionVar -intValue "MayaGltfExport_exportSkin" ((int)$value);
+        }
+        if ($key == "exportMaterial") {
+            optionVar -intValue "MayaGltfExport_exportMaterial" ((int)$value);
+        }
+        if ($key == "exportVertexColors") {
+            optionVar -intValue "MayaGltfExport_exportVertexColors" ((int)$value);
+        }
+        if ($key == "exportNormals") {
+            optionVar -intValue "MayaGltfExport_exportNormals" ((int)$value);
+        }
+        if ($key == "exportUVs") {
+            optionVar -intValue "MayaGltfExport_exportUVs" ((int)$value);
+        }
+        if ($key == "flipUvV") {
+            optionVar -intValue "MayaGltfExport_flipUvV" ((int)$value);
+        }
+        if ($key == "translateX") {
+            optionVar -floatValue "MayaGltfExport_translateX" ((float)$value);
+        }
+        if ($key == "translateY") {
+            optionVar -floatValue "MayaGltfExport_translateY" ((float)$value);
+        }
+        if ($key == "translateZ") {
+            optionVar -floatValue "MayaGltfExport_translateZ" ((float)$value);
+        }
+        if ($key == "rotateX") {
+            optionVar -floatValue "MayaGltfExport_rotateX" ((float)$value);
+        }
+        if ($key == "rotateY") {
+            optionVar -floatValue "MayaGltfExport_rotateY" ((float)$value);
+        }
+        if ($key == "rotateZ") {
+            optionVar -floatValue "MayaGltfExport_rotateZ" ((float)$value);
+        }
+        if ($key == "scaleX") {
+            optionVar -floatValue "MayaGltfExport_scaleX" ((float)$value);
+        }
+        if ($key == "scaleY") {
+            optionVar -floatValue "MayaGltfExport_scaleY" ((float)$value);
+        }
+        if ($key == "scaleZ") {
+            optionVar -floatValue "MayaGltfExport_scaleZ" ((float)$value);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sync optionVars → UI controls
+// ---------------------------------------------------------------------------
+global proc MayaGltfExport_syncUIFromOptionVars()
+{
+    if (`checkBoxGrp -exists "MayaGltfExport_exportMesh_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportMesh"` "MayaGltfExport_exportMesh_cb";
+    if (`checkBoxGrp -exists "MayaGltfExport_exportAnimation_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportAnimation"` "MayaGltfExport_exportAnimation_cb";
+    if (`checkBoxGrp -exists "MayaGltfExport_exportCamera_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportCamera"` "MayaGltfExport_exportCamera_cb";
+    if (`checkBoxGrp -exists "MayaGltfExport_exportSkin_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportSkin"` "MayaGltfExport_exportSkin_cb";
+    if (`checkBoxGrp -exists "MayaGltfExport_exportMaterial_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportMaterial"` "MayaGltfExport_exportMaterial_cb";
+    if (`checkBoxGrp -exists "MayaGltfExport_exportVertexColors_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportVertexColors"` "MayaGltfExport_exportVertexColors_cb";
+    if (`checkBoxGrp -exists "MayaGltfExport_exportNormals_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportNormals"` "MayaGltfExport_exportNormals_cb";
+    if (`checkBoxGrp -exists "MayaGltfExport_exportUVs_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportUVs"` "MayaGltfExport_exportUVs_cb";
+    if (`checkBoxGrp -exists "MayaGltfExport_flipUvV_cb"`)
+        checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_flipUvV"` "MayaGltfExport_flipUvV_cb";
+
+    if (`floatFieldGrp -exists "MayaGltfExport_translate_ffg"`) {
+        floatFieldGrp -edit
+            -value1 `optionVar -query "MayaGltfExport_translateX"`
+            -value2 `optionVar -query "MayaGltfExport_translateY"`
+            -value3 `optionVar -query "MayaGltfExport_translateZ"`
+            "MayaGltfExport_translate_ffg";
+    }
+    if (`floatFieldGrp -exists "MayaGltfExport_rotate_ffg"`) {
+        floatFieldGrp -edit
+            -value1 `optionVar -query "MayaGltfExport_rotateX"`
+            -value2 `optionVar -query "MayaGltfExport_rotateY"`
+            -value3 `optionVar -query "MayaGltfExport_rotateZ"`
+            "MayaGltfExport_rotate_ffg";
+    }
+    if (`floatFieldGrp -exists "MayaGltfExport_scale_ffg"`) {
+        floatFieldGrp -edit
+            -value1 `optionVar -query "MayaGltfExport_scaleX"`
+            -value2 `optionVar -query "MayaGltfExport_scaleY"`
+            -value3 `optionVar -query "MayaGltfExport_scaleZ"`
+            "MayaGltfExport_scale_ffg";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sync UI controls → optionVars (without building string)
+// ---------------------------------------------------------------------------
+global proc MayaGltfExport_syncOptionVarsFromUI()
+{
+    if (`checkBoxGrp -exists "MayaGltfExport_exportMesh_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfExport_exportMesh_cb"`;
+        optionVar -intValue "MayaGltfExport_exportMesh" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfExport_exportAnimation_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfExport_exportAnimation_cb"`;
+        optionVar -intValue "MayaGltfExport_exportAnimation" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfExport_exportCamera_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfExport_exportCamera_cb"`;
+        optionVar -intValue "MayaGltfExport_exportCamera" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfExport_exportSkin_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfExport_exportSkin_cb"`;
+        optionVar -intValue "MayaGltfExport_exportSkin" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfExport_exportMaterial_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfExport_exportMaterial_cb"`;
+        optionVar -intValue "MayaGltfExport_exportMaterial" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfExport_exportVertexColors_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfExport_exportVertexColors_cb"`;
+        optionVar -intValue "MayaGltfExport_exportVertexColors" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfExport_exportNormals_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfExport_exportNormals_cb"`;
+        optionVar -intValue "MayaGltfExport_exportNormals" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfExport_exportUVs_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfExport_exportUVs_cb"`;
+        optionVar -intValue "MayaGltfExport_exportUVs" $val;
+    }
+    if (`checkBoxGrp -exists "MayaGltfExport_flipUvV_cb"`) {
+        int $val = `checkBoxGrp -query -value1 "MayaGltfExport_flipUvV_cb"`;
+        optionVar -intValue "MayaGltfExport_flipUvV" $val;
+    }
+
+    if (`floatFieldGrp -exists "MayaGltfExport_translate_ffg"`) {
+        optionVar -floatValue "MayaGltfExport_translateX" `floatFieldGrp -query -value1 "MayaGltfExport_translate_ffg"`;
+        optionVar -floatValue "MayaGltfExport_translateY" `floatFieldGrp -query -value2 "MayaGltfExport_translate_ffg"`;
+        optionVar -floatValue "MayaGltfExport_translateZ" `floatFieldGrp -query -value3 "MayaGltfExport_translate_ffg"`;
+    }
+    if (`floatFieldGrp -exists "MayaGltfExport_rotate_ffg"`) {
+        optionVar -floatValue "MayaGltfExport_rotateX" `floatFieldGrp -query -value1 "MayaGltfExport_rotate_ffg"`;
+        optionVar -floatValue "MayaGltfExport_rotateY" `floatFieldGrp -query -value2 "MayaGltfExport_rotate_ffg"`;
+        optionVar -floatValue "MayaGltfExport_rotateZ" `floatFieldGrp -query -value3 "MayaGltfExport_rotate_ffg"`;
+    }
+    if (`floatFieldGrp -exists "MayaGltfExport_scale_ffg"`) {
+        optionVar -floatValue "MayaGltfExport_scaleX" `floatFieldGrp -query -value1 "MayaGltfExport_scale_ffg"`;
+        optionVar -floatValue "MayaGltfExport_scaleY" `floatFieldGrp -query -value2 "MayaGltfExport_scale_ffg"`;
+        optionVar -floatValue "MayaGltfExport_scaleZ" `floatFieldGrp -query -value3 "MayaGltfExport_scale_ffg"`;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Collect options from the UI and return as option string
+// ---------------------------------------------------------------------------
+global proc string MayaGltfExport_collectOptionsString()
+{
+    int $exportMesh = `checkBoxGrp -query -value1 "MayaGltfExport_exportMesh_cb"`;
+    int $exportAnimation = `checkBoxGrp -query -value1 "MayaGltfExport_exportAnimation_cb"`;
+    int $exportCamera = `checkBoxGrp -query -value1 "MayaGltfExport_exportCamera_cb"`;
+    int $exportSkin = `checkBoxGrp -query -value1 "MayaGltfExport_exportSkin_cb"`;
+    int $exportMaterial = `checkBoxGrp -query -value1 "MayaGltfExport_exportMaterial_cb"`;
+    int $exportVertexColors = `checkBoxGrp -query -value1 "MayaGltfExport_exportVertexColors_cb"`;
+    int $exportNormals = `checkBoxGrp -query -value1 "MayaGltfExport_exportNormals_cb"`;
+    int $exportUVs = `checkBoxGrp -query -value1 "MayaGltfExport_exportUVs_cb"`;
+    int $flipUvV = `checkBoxGrp -query -value1 "MayaGltfExport_flipUvV_cb"`;
+
+    optionVar -intValue "MayaGltfExport_exportMesh" $exportMesh;
+    optionVar -intValue "MayaGltfExport_exportAnimation" $exportAnimation;
+    optionVar -intValue "MayaGltfExport_exportCamera" $exportCamera;
+    optionVar -intValue "MayaGltfExport_exportSkin" $exportSkin;
+    optionVar -intValue "MayaGltfExport_exportMaterial" $exportMaterial;
+    optionVar -intValue "MayaGltfExport_exportVertexColors" $exportVertexColors;
+    optionVar -intValue "MayaGltfExport_exportNormals" $exportNormals;
+    optionVar -intValue "MayaGltfExport_exportUVs" $exportUVs;
+    optionVar -intValue "MayaGltfExport_flipUvV" $flipUvV;
+
+    float $tx = `floatFieldGrp -query -value1 "MayaGltfExport_translate_ffg"`;
+    float $ty = `floatFieldGrp -query -value2 "MayaGltfExport_translate_ffg"`;
+    float $tz = `floatFieldGrp -query -value3 "MayaGltfExport_translate_ffg"`;
+    float $rx = `floatFieldGrp -query -value1 "MayaGltfExport_rotate_ffg"`;
+    float $ry = `floatFieldGrp -query -value2 "MayaGltfExport_rotate_ffg"`;
+    float $rz = `floatFieldGrp -query -value3 "MayaGltfExport_rotate_ffg"`;
+    float $sx = `floatFieldGrp -query -value1 "MayaGltfExport_scale_ffg"`;
+    float $sy = `floatFieldGrp -query -value2 "MayaGltfExport_scale_ffg"`;
+    float $sz = `floatFieldGrp -query -value3 "MayaGltfExport_scale_ffg"`;
+
+    optionVar -floatValue "MayaGltfExport_translateX" $tx;
+    optionVar -floatValue "MayaGltfExport_translateY" $ty;
+    optionVar -floatValue "MayaGltfExport_translateZ" $tz;
+    optionVar -floatValue "MayaGltfExport_rotateX" $rx;
+    optionVar -floatValue "MayaGltfExport_rotateY" $ry;
+    optionVar -floatValue "MayaGltfExport_rotateZ" $rz;
+    optionVar -floatValue "MayaGltfExport_scaleX" $sx;
+    optionVar -floatValue "MayaGltfExport_scaleY" $sy;
+    optionVar -floatValue "MayaGltfExport_scaleZ" $sz;
+
+    return MayaGltfExport_collectOptionVarString();
+}
+
+// ---------------------------------------------------------------------------
+// UI callbacks (called by Maya automatically)
+// ---------------------------------------------------------------------------
+global proc MayaGltf_exportFileOptionsUICreate(string $parent)
+{
+    if (!`exists MayaGltfExport_applyOptionsString`)
+    {
+        source "performGltfExport.mel";
+    }
+    MayaGltfExport_setOptionVars(0);
+}
+
+global proc MayaGltf_exportFileOptionsUIInit(string $parent, string $filter)
+{
+    // Read optionVars into UI widgets
+    string $optStr = MayaGltfExport_collectOptionVarString();
+    MayaGltfExport_applyOptionsString($optStr);
+
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportMesh"` "MayaGltfExport_exportMesh_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportAnimation"` "MayaGltfExport_exportAnimation_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportCamera"` "MayaGltfExport_exportCamera_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportSkin"` "MayaGltfExport_exportSkin_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportMaterial"` "MayaGltfExport_exportMaterial_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportVertexColors"` "MayaGltfExport_exportVertexColors_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportNormals"` "MayaGltfExport_exportNormals_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_exportUVs"` "MayaGltfExport_exportUVs_cb";
+    checkBoxGrp -edit -value1 `optionVar -query "MayaGltfExport_flipUvV"` "MayaGltfExport_flipUvV_cb";
+
+    floatFieldGrp -edit -value1 `optionVar -query "MayaGltfExport_translateX"` "MayaGltfExport_translate_ffg";
+    floatFieldGrp -edit -value2 `optionVar -query "MayaGltfExport_translateY"` "MayaGltfExport_translate_ffg";
+    floatFieldGrp -edit -value3 `optionVar -query "MayaGltfExport_translateZ"` "MayaGltfExport_translate_ffg";
+    floatFieldGrp -edit -value1 `optionVar -query "MayaGltfExport_rotateX"` "MayaGltfExport_rotate_ffg";
+    floatFieldGrp -edit -value2 `optionVar -query "MayaGltfExport_rotateY"` "MayaGltfExport_rotate_ffg";
+    floatFieldGrp -edit -value3 `optionVar -query "MayaGltfExport_rotateZ"` "MayaGltfExport_rotate_ffg";
+    floatFieldGrp -edit -value1 `optionVar -query "MayaGltfExport_scaleX"` "MayaGltfExport_scale_ffg";
+    floatFieldGrp -edit -value2 `optionVar -query "MayaGltfExport_scaleY"` "MayaGltfExport_scale_ffg";
+    floatFieldGrp -edit -value3 `optionVar -query "MayaGltfExport_scaleZ"` "MayaGltfExport_scale_ffg";
+}
+
+global proc MayaGltf_exportFileOptionsUICommit(string $parent)
+{
+    // Collect UI values into optionVars
+    MayaGltfExport_collectOptionsString();
+}
+
+// ---------------------------------------------------------------------------
+// Export options UI
+// ---------------------------------------------------------------------------
+global proc string GltfExportOptionsUI(string $parent)
+{
+    setParent $parent;
+    setUITemplate -pushTemplate DefaultTemplate;
+    waitCursor -state 1;
+    string $optionLayout = `scrollLayout`;
+    columnLayout -adjustableColumn true;
+
+    // --- Export Data Section ---
+    frameLayout -label "Data to Export" -collapsable true -collapse false;
+    columnLayout -adjustableColumn true;
+
+    checkBoxGrp
+        -label "Mesh"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Export mesh geometry (vertices, triangles)"
+        "MayaGltfExport_exportMesh_cb";
+
+    checkBoxGrp
+        -label "Animation"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Export animation curves as glTF animation channels"
+        "MayaGltfExport_exportAnimation_cb";
+
+    checkBoxGrp
+        -label "Camera"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Export cameras (ignores Maya default cameras)"
+        "MayaGltfExport_exportCamera_cb";
+
+    checkBoxGrp
+        -label "Skin"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Export skinning data (joints, weights)"
+        "MayaGltfExport_exportSkin_cb";
+
+    checkBoxGrp
+        -label "Material"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Export PBR material properties"
+        "MayaGltfExport_exportMaterial_cb";
+
+    checkBoxGrp
+        -label "Vertex Colors"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Export vertex colors as COLOR_0 attribute"
+        "MayaGltfExport_exportVertexColors_cb";
+
+    checkBoxGrp
+        -label "Normals"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Export vertex normals"
+        "MayaGltfExport_exportNormals_cb";
+
+    checkBoxGrp
+        -label "UV Sets"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Export UV coordinates as TEXCOORD attributes"
+        "MayaGltfExport_exportUVs_cb";
+
+    setParent ..;
+    setParent ..;
+
+    separator -style "in" -height 10;
+
+    // --- Transform Section ---
+    frameLayout -label "Transform" -collapsable true -collapse false;
+
+    // Flip UV V
+    checkBoxGrp
+        -label "Flip UV V"
+        -numberOfCheckBoxes 1 -label1 ""
+        -annotation "Flip V coordinate (for glTF → Maya convention)"
+        "MayaGltfExport_flipUvV_cb";
+
+    separator -style "none" -height 5;
+
+    // --- Translate ---
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Translate Offset"
+        -value1 0.0 -value2 0.0 -value3 0.0
+        "MayaGltfExport_translate_ffg";
+
+    // --- Rotate ---
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Rotate Offset"
+        -value1 0.0 -value2 0.0 -value3 0.0
+        "MayaGltfExport_rotate_ffg";
+
+    // --- Scale ---
+    floatFieldGrp
+        -numberOfFields 3
+        -label "Scale"
+        -value1 1.0 -value2 1.0 -value3 1.0
+        "MayaGltfExport_scale_ffg";
+
+    setParent ..;
+    setParent ..;
+
+    waitCursor -state 0;
+    setUITemplate -popTemplate;
+    return $optionLayout;
+}

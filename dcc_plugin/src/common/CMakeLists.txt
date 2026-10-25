@@ -1,10 +1,12 @@
-add_library(maya_common STATIC
+﻿add_library(maya_common STATIC
     AnimationCurveUtils.cpp
     AnimationCurveUtils.h
     AnimationSampleUtils.cpp
     AnimationSampleUtils.h
     ExportAnimationUtils.cpp
     ExportAnimationUtils.h
+    MayaCommon.cpp
+    MayaCommon.h
     TransformCorrection.cpp
     TransformCorrection.h
     MaterialExportUtils.cpp

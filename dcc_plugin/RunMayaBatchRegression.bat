@@ -13,6 +13,7 @@ if not "%MAYA_PYTHON_EXE_OVERRIDE%"=="" set MAYA_PYTHON_EXE=%MAYA_PYTHON_EXE_OVE
 
 set PLUGIN_BINARY=%PLUGIN_ROOT%\bin\%CONFIG%\maya_dmx.mll
 set SMD_PLUGIN_BINARY=%PLUGIN_ROOT%\bin\%CONFIG%\maya_smd.mll
+set GLTF_PLUGIN_BINARY=%PLUGIN_ROOT%\bin\%CONFIG%\maya_gltf.mll
 set SAMPLE_DIR=%PLUGIN_ROOT%\samples
 set OUTPUT_DIR=%PLUGIN_ROOT%\build\maya_batch_regression\%CONFIG%
 set SCRIPT_PATH=%PLUGIN_ROOT%\tools\MayaBatchRegression.py
@@ -51,6 +52,14 @@ if not exist "%SMD_PLUGIN_BINARY%" (
     exit /b 1
 )
 
+if not exist "%GLTF_PLUGIN_BINARY%" (
+    echo ERROR: Built glTF plugin was not found:
+    echo   "%GLTF_PLUGIN_BINARY%"
+    echo Build the plugin first with BuildPlugin.bat.
+    pause
+    exit /b 1
+)
+
 if not exist "%SCRIPT_PATH%" (
     echo ERROR: Regression script was not found:
     echo   "%SCRIPT_PATH%"
@@ -65,6 +74,7 @@ set MAYA_SKIP_USERSETUP_PY=1
 "%MAYA_PYTHON_EXE%" "%SCRIPT_PATH%" ^
     --plugin "%PLUGIN_BINARY%" ^
     --plugin-smd "%SMD_PLUGIN_BINARY%" ^
+    --plugin-gltf "%GLTF_PLUGIN_BINARY%" ^
     --samples "%SAMPLE_DIR%" ^
     --output "%OUTPUT_DIR%"
 if errorlevel 1 (

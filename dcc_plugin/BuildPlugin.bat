@@ -129,4 +129,4 @@ if /I "%BUILD_PDB%"=="ON" (
     )
 )
 echo Log: "%BUILD_LOG%"
-pause
+timeout /t 3 >nul

@@ -1,0 +1,68 @@
+@startuml
+title Source Engine 武器拾取、挂载与显示流程
+
+actor Player
+participant "CBaseCombatWeapon\n/CWeaponCSBase" as Weapon
+participant "CBasePlayer\n/CCSPlayer" as PlayerEnt
+participant "CBaseCombatCharacter" as Character
+participant "CBaseViewModel\n/CPredictedViewModel" as ViewModel
+participant "CBaseWeaponWorldModel" as WorldModel
+
+== 拾取 ==
+Player -> Weapon: Touch()
+Weapon -> Weapon: DefaultTouch()
+Weapon -> PlayerEnt: BumpWeapon(weapon)
+PlayerEnt -> PlayerEnt: 检查 owner、规则、槽位、特殊模式
+PlayerEnt -> Character: Weapon_Equip(weapon)
+Character -> Character: 写入 m_hMyWeapons[]
+Character -> Weapon: Equip(owner)
+Weapon -> Weapon: FollowEntity(owner)
+Weapon -> Weapon: SetOwner(owner)
+Weapon -> Weapon: SetOwnerEntity(owner)
+
+== 自动切换 / 主动切换 ==
+PlayerEnt -> Character: Weapon_Switch(weapon)
+Character -> Character: Weapon_CanSwitchTo(weapon)
+alt 已有 active weapon
+  Character -> Weapon: oldWeapon.Holster(newWeapon)
+end
+Character -> Character: m_hActiveWeapon = weapon
+Character -> Weapon: Deploy()
+
+== 第一人称挂载 ==
+Weapon -> Weapon: DefaultDeploy()
+Weapon -> Weapon: SetViewModel()
+Weapon -> PlayerEnt: GetViewModel(m_nViewModelIndex)
+PlayerEnt --> Weapon: viewmodel
+Weapon -> ViewModel: SetWeaponModel(GetViewModel(), weapon)
+ViewModel -> ViewModel: m_hWeapon = weapon
+ViewModel -> ViewModel: SetModel(viewmodel path)
+Weapon -> Weapon: SendWeaponAnim(ACT_VM_DRAW)
+Weapon -> Weapon: SetWeaponVisible(true)
+
+== 第三人称挂载 ==
+Weapon -> WorldModel: CreateWeaponWorldModel()
+Weapon -> WorldModel: SetOwningWeapon(weapon)
+WorldModel -> WorldModel: SetModel(GetWorldModel())
+WorldModel -> WorldModel: m_hCombatWeaponParent = weapon
+WorldModel -> WorldModel: ValidateParent()
+alt weapon 有玩家 owner
+  WorldModel -> PlayerEnt: FollowEntity(owner, bonemerge)
+else weapon 无 owner
+  WorldModel -> Weapon: FollowEntity(weapon)
+end
+WorldModel -> WorldModel: ShouldDraw() 检查 active weapon/owner/观察模式
+
+== 掉落 / 解除挂载 ==
+PlayerEnt -> Character: Weapon_Drop(weapon)
+Character -> Weapon: Drop(velocity)
+Weapon -> Weapon: StopFollowingEntity()
+Weapon -> Weapon: SetOwnerEntity(NULL)
+Weapon -> Weapon: SetOwner(NULL)
+Weapon -> Weapon: 恢复重力、碰撞、touch
+Character -> Character: Weapon_Detach(weapon)
+alt dropped weapon 是 active weapon
+  Character -> Character: ClearActiveWeapon()
+end
+
+@enduml

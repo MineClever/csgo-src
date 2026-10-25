@@ -1,0 +1,35 @@
+// Entry point for the glTF/GLB Export options dialog.
+// Called by Maya when the user opens File > Export for glTF files.
+global proc int mayaGltfTranslatorExport(
+    string $parent,
+    string $action,
+    string $initialSettings,
+    string $resultCallback)
+{
+    if (!`exists MayaGltfExport_applyOptionsString`)
+    {
+        source "performGltfExport.mel";
+    }
+
+    if ($action == "post")
+    {
+        GltfExportOptionsUI($parent);
+        MayaGltfExport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "fill")
+    {
+        MayaGltfExport_applyOptionsString($initialSettings);
+        return 1;
+    }
+
+    if ($action == "query")
+    {
+        string $optionsString = MayaGltfExport_collectOptionsString();
+        eval($resultCallback + " \"" + $optionsString + "\"");
+        return 1;
+    }
+
+    return 0;
+}

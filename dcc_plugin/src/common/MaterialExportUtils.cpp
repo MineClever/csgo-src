@@ -4,6 +4,7 @@
 #include <maya/MFnMesh.h>
 #include <maya/MFnSingleIndexedComponent.h>
 #include <maya/MFn.h>
+#include <maya/MItDependencyGraph.h>
 #include <maya/MPlug.h>
 #include <maya/MPlugArray.h>
 #include <maya/MStatus.h>
@@ -13,22 +14,61 @@ namespace dcc_material_export
 {
 MObject FindConnectedSourceNode(const MPlug &destinationPlug)
 {
+    const MPlug sourcePlug = FindConnectedSourcePlug(destinationPlug);
+    return sourcePlug.isNull() ? MObject::kNullObj : sourcePlug.node();
+}
+
+MPlug FindConnectedSourcePlug(const MPlug &destinationPlug)
+{
     MPlugArray connectedPlugs;
-    if (destinationPlug.connectedTo(connectedPlugs, true, false) != MS::kSuccess || connectedPlugs.length() == 0)
+    const auto tryReturnFirstConnectedPlug = [](const MPlug &plug, MPlug &outPlug) -> bool
     {
-        return MObject::kNullObj;
+        MPlugArray directConnections;
+        if (plug.connectedTo(directConnections, true, false) != MS::kSuccess)
+        {
+            return false;
+        }
+
+        for (unsigned int i = 0; i < directConnections.length(); ++i)
+        {
+            if (!directConnections[i].isNull())
+            {
+                outPlug = directConnections[i];
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    MPlug connectedPlug;
+    if (tryReturnFirstConnectedPlug(destinationPlug, connectedPlug))
+    {
+        return connectedPlug;
     }
 
-    for (unsigned int i = 0; i < connectedPlugs.length(); ++i)
+    if (destinationPlug.isCompound())
     {
-        const MObject node = connectedPlugs[i].node();
-        if (!node.isNull())
+        for (unsigned int childIndex = 0; childIndex < destinationPlug.numChildren(); ++childIndex)
         {
-            return node;
+            const MPlug childSourcePlug = FindConnectedSourcePlug(destinationPlug.child(childIndex));
+            if (!childSourcePlug.isNull())
+            {
+                return childSourcePlug;
+            }
         }
     }
 
-    return MObject::kNullObj;
+    if (destinationPlug.isChild())
+    {
+        const MPlug parentPlug = destinationPlug.parent();
+        if (tryReturnFirstConnectedPlug(parentPlug, connectedPlug))
+        {
+            return connectedPlug;
+        }
+    }
+
+    return MPlug();
 }
 
 MObject FindSurfaceShaderNode(const MObject &shadingGroupObject)
@@ -40,13 +80,56 @@ MObject FindSurfaceShaderNode(const MObject &shadingGroupObject)
         return MObject::kNullObj;
     }
 
-    MPlug surfaceShaderPlug = shadingGroupFn.findPlug("surfaceShader", true, &status);
+    for (const char *plugName : {"surfaceShader", "aiSurfaceShader", "miMaterialShader"})
+    {
+        MPlug shaderPlug = shadingGroupFn.findPlug(plugName, true, &status);
+        if (!status || shaderPlug.isNull())
+        {
+            continue;
+        }
+
+        const MPlug sourcePlug = FindConnectedSourcePlug(shaderPlug);
+        const MObject shaderNode = sourcePlug.isNull() ? MObject::kNullObj : sourcePlug.node();
+        if (!shaderNode.isNull())
+        {
+            return shaderNode;
+        }
+
+        if (shaderPlug.isDestination())
+        {
+            const MObject shaderPlugNode = shaderPlug.source().node();
+            if (!shaderPlugNode.isNull())
+            {
+                return shaderPlugNode;
+            }
+        }
+    }
+
+    MObject mutableShadingGroupObject(shadingGroupObject);
+    MItDependencyGraph iterator(
+        mutableShadingGroupObject,
+        MFn::kDependencyNode,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel,
+        &status);
     if (!status)
     {
         return MObject::kNullObj;
     }
 
-    return FindConnectedSourceNode(surfaceShaderPlug);
+    for (; !iterator.isDone(); iterator.next())
+    {
+        const MObject nodeObject = iterator.thisNode(&status);
+        if (!status || nodeObject.isNull() || nodeObject == shadingGroupObject)
+        {
+            continue;
+        }
+
+        return nodeObject;
+    }
+
+    return MObject::kNullObj;
 }
 
 bool ReadStringAttribute(const MObject &nodeObject, const char *attributeName, std::string &value)
@@ -73,6 +156,44 @@ bool ReadStringAttribute(const MObject &nodeObject, const char *attributeName, s
 
     value = mayaValue.asChar();
     return true;
+}
+
+bool ReadFloatAttribute(const MObject &nodeObject, const char *attributeName, float &value)
+{
+    MStatus status;
+    MFnDependencyNode nodeFn(nodeObject, &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    MPlug attributePlug = nodeFn.findPlug(attributeName, true, &status);
+    if (!status || attributePlug.isNull())
+    {
+        return false;
+    }
+
+    value = attributePlug.asFloat(&status);
+    return status;
+}
+
+bool ReadBoolAttribute(const MObject &nodeObject, const char *attributeName, bool &value)
+{
+    MStatus status;
+    MFnDependencyNode nodeFn(nodeObject, &status);
+    if (!status)
+    {
+        return false;
+    }
+
+    MPlug attributePlug = nodeFn.findPlug(attributeName, true, &status);
+    if (!status || attributePlug.isNull())
+    {
+        return false;
+    }
+
+    value = attributePlug.asBool(&status);
+    return status;
 }
 
 std::vector<int> ExtractPolygonIndices(const MObject &componentObject)

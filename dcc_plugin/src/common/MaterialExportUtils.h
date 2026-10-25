@@ -26,8 +26,11 @@ struct MeshShadingAssignments
 };
 
 MObject FindConnectedSourceNode(const MPlug &destinationPlug);
+MPlug FindConnectedSourcePlug(const MPlug &destinationPlug);
 MObject FindSurfaceShaderNode(const MObject &shadingGroupObject);
 bool ReadStringAttribute(const MObject &nodeObject, const char *attributeName, std::string &value);
+bool ReadFloatAttribute(const MObject &nodeObject, const char *attributeName, float &value);
+bool ReadBoolAttribute(const MObject &nodeObject, const char *attributeName, bool &value);
 std::vector<int> ExtractPolygonIndices(const MObject &componentObject);
 bool GetMeshShadingAssignments(const MFnMesh &meshFn, unsigned int instanceNumber, MeshShadingAssignments &assignments);
 bool TryGetAssignedShadingGroup(const MeshShadingAssignments &assignments, int polygonIndex, MObject &shadingGroupObject);

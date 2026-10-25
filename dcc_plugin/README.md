@@ -178,6 +178,28 @@ Current limitations:
 - no advanced combination operators, tangents, extra UV sets, or full Valve binary DMX coverage yet
 - skin export currently writes basic vertex weights only and does not export bind pose extras or advanced deformer metadata
 
+## glTF Skin Import
+
+The glTF importer binds skin clusters **without reposeing the skeleton**. The `restoreDefaultPoseAfterSkin` option controls which pose becomes the Maya bind pose:
+
+- `restoreDefaultPoseAfterSkin=1` (default): the **default pose** (joint node-TRS, before animation) is the bind pose. `setupSkins` runs before `importAnimations`, so the skeleton is still at its default pose when the bind pose is recorded. Maya's *Go to Bind Pose* returns the skeleton to this default pose.
+- `restoreDefaultPoseAfterSkin=0`: the **first animation frame** is the bind pose. `importAnimations` runs first; then the current time is set to the first frame (time 0) so the skeleton is at that pose when `setupSkins` records the bind pose, after which the user's current time is restored. *Go to Bind Pose* returns the skeleton to the first animation frame. If no animation is imported, this falls back to the default pose (same as `=1`).
+
+In both cases the skeleton is never reposeed to the glTF `inverseBindMatrices` and never restored afterwards.
+
+The correct execution order in `GltfSceneImporter::setupSkins` is:
+
+1. **Resolve joint DAG paths** from `skin->joints` (joints already created by `createNodeHierarchy`).
+2. **Create the skinCluster** via `CreateSkinClusterWithApi` while the joints are at the chosen bind pose (default pose for `=1`, first frame for `=0`). The skinCluster seeds each influence's `bindPreMatrix` from the joint's current world inverse (`inclusiveMatrixInverse()`), and `geomMatrix` from the mesh parent's current world.
+3. **Record the Maya bind pose** via `maya_cmd::EnsureSkinClusterBindPose` (runs `dagPose -save -selection -bindPose`) so *Go to Bind Pose* works.
+4. **Read JOINTS_0 / WEIGHTS_0** and apply weights.
+
+Because the joints remain at the pose used to seed `bindPreMatrix`, `matrix[i] == bindPreMatrix[i].inverse()` at rest, so the mesh shows no deformation with the skinCluster envelope on (envelope on == envelope off).
+
+This deliberately uses the **default/first-frame pose as the bind pose** rather than the glTF `inverseBindMatrices`. Many glTF assets ship `inverseBindMatrices` that differ from the joint default TRS; binding at the glTF bind pose while leaving joints at the default pose would deform the mesh at rest. Binding at the pose the joints actually hold keeps the rest pose undeformed. Re-exporting such an asset will produce `inverseBindMatrices` derived from that pose, which may differ from the original.
+
+What **not** to do (regressed in commit `576f19a` and reverted): repose joints to the glTF bind pose before creating the skinCluster (via `applyBindPoseForSkin`) and restore them afterwards (via `restoreDefaultPoseForSkin`). When `inverseBindMatrices` differ from the default TRS, this leaves the skinCluster bound at the glTF bind pose while the joints sit at the default pose, so the mesh deforms at rest. Feeding `inverseBindMatrices` directly into `bindPreMatrix` has the same problem. Keep the skeleton at the chosen bind pose and let `bindPreMatrix` be seeded from that same pose.
+
 Sample file for manual Maya import:
 
 - `dcc_plugin/samples/simple_hierarchy.dmx`
