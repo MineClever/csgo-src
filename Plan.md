@@ -10,8 +10,19 @@
 
 ## 文档整理记录
 
-### Source Engine 武器挂载说明
+### 第三人称角色与武器动画协作独立实现规范
 - 状态：已完成
+- 2026-10-28：根据现有源码整理引擎无关规范，明确局部姿势反向写回与最终世界矩阵 BoneMerge 的阶段区别，并补充武器独有骨骼求值、层权重和顺序、骨架兼容、IK 依赖、事件、缓存、生命周期及数值验收。
+- 产物：
+  - [docs/weapon_character_animation_portable_design.md](docs/weapon_character_animation_portable_design.md)
+  - [docs/weapon_character_animation_flow.puml](docs/weapon_character_animation_flow.puml)
+- 复核说明：客户端 `RegenerateDispatchedLayers` 的普通调用目前被注释；文档区分该源码现状与推荐的独立重放实现方案。本次未据此确认新的运行时故障，也未修改运行时代码。
+- 后续：其他引擎实现应依次完成文档中的合成数值验收和真实资产验证；原 Source Engine 武器挂载说明缺失事项仍保留。
+
+### Source Engine 武器挂载说明
+- 状态：待恢复文档
+- 优先级：低
+- 2026-10-28：复核武器与角色动画实现时，确认下列两个计划中记录的产物文件均不在 `docs/` 目录；需恢复文档及流程图，或移除失效的产物记录。本次仅核对源码并回答机制问题。
 - 产物：
   - [docs/source_engine_weapon_mounting.md](docs/source_engine_weapon_mounting.md)
   - [docs/source_engine_weapon_mounting_flow.puml](docs/source_engine_weapon_mounting_flow.puml)
@@ -25,7 +36,7 @@
   - [docs/bone_merge_attachment_portable_design.md](docs/bone_merge_attachment_portable_design.md)
   - [docs/bone_merge_attachment_flow.puml](docs/bone_merge_attachment_flow.puml)
 - 内容：整理了 BoneMerge 和 Attachment 的数据模型、运行时求值顺序、缓存失效、父子 attachment transform、culling、网络同步、伪代码和跨引擎测试清单，目标是让 Agent 能在非 Source 引擎中复刻同类功能。
-- 后续：若后续继续深入 viewmodel attachment override、reverse bonemerge 或动画 IK 与武器模型互驱，应在该文档补充高级章节。
+- 后续：reverse merge 与角色/武器动画协作已补充独立规范并交叉链接；viewmodel attachment override 或更复杂的双向 IK 仍可按实际需求继续补充。
 
 ## 当前构建问题
 

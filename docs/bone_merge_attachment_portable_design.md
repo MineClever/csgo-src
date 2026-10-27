@@ -337,3 +337,5 @@ Viewmodel 常有独立 FOV、相机相对变换或 attachment 投影修正。必
 `MergeMatchingPoseParams` 按名称同步姿态参数；跨引擎实现还需校验参数范围和单位。`CopyFromFollow/CopyToFollow` 交换局部位置/四元数以服务动画协作，不等同于基础 BoneMerge 的世界矩阵复制。Reverse merge 需要单独的分阶段数据流与所有权设计。
 
 配套流程图：[bone_merge_attachment_flow.puml](bone_merge_attachment_flow.puml)。
+
+角色与武器序列协作的完整实现契约见 [第三人称角色与武器动画协作：独立实现规范](weapon_character_animation_portable_design.md)，包括局部姿势反向写回、武器自身动画、最终矩阵合并、无环调度及验收样例。

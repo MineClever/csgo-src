@@ -1,0 +1,46 @@
+@startuml
+title 第三人称角色与武器动画协作：局部姿势写回与最终矩阵合并
+start
+:校验骨架兼容性、绑定版本与依赖;
+:动作状态推进一次，固定 cycle、weight、动作实例;
+:解析分发序列并稳定排序动画层;
+fork
+  partition "角色局部姿势协作" {
+    :求值角色基础局部姿势;
+    while (还有动画层?) is (有)
+      if (该层有可用武器分发序列?) then (有)
+        :初始化本层武器临时局部姿势;
+        :CopyFromCharacter\n复制匹配骨骼的角色当前局部姿势;
+        :按该层 cycle、有效骨骼权重和混合模式\n叠加武器序列;
+        :CopyToCharacter\n将匹配骨骼局部姿势写回角色;
+        :按映射收集 IK 依赖;
+      else (无)
+        :在角色上叠加原动画序列;
+      endif
+    endwhile (无)
+  }
+fork again
+  partition "武器自身局部动画" {
+    :求值武器基础局部姿势;
+    :按相同层序、cycle、weight\n重放分发序列，包含独有机械骨骼;
+    note right
+      不推进动作时间，不派发事件。
+      基础序列不能重复包含重放的动作。
+      与角色协作临时缓冲独立。
+    end note
+  }
+end fork
+:从局部数据准备必要的预约束 IK 目标;
+:完成角色最终约束与角色世界矩阵;
+:按父先于子顺序遍历武器所需骨骼;
+while (还有武器骨骼?) is (有)
+  if (骨骼参与最终 BoneMerge?) then (是)
+    :复制角色对应骨骼的最终世界矩阵;
+  else (否)
+    :最终父矩阵 × 自身局部动画矩阵\n独有根骨骼使用武器实体世界矩阵作锚;
+  endif
+endwhile (无)
+:发布同一 EvaluationKey 的最终姿势对;
+:计算挂点、各自网格蒙皮矩阵、bounds 和渲染;
+stop
+@enduml
